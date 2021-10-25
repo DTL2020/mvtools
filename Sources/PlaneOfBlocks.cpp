@@ -3119,11 +3119,46 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
       }
     }
 
+#pragma omp parallel for num_threads(1)
     for (int iblkx = 0; iblkx < nBlkX; iblkx++)
     {
+      WorkingArea &	workarea_omp1 = *(_workarea_pool.take_obj());
+      // copy values from global workarea
+      workarea_omp1.x[0] = workarea.x[0] + iblkx * nBlkSizeX_Ovr[0] * workarea.blkScanDir;
+      if (chroma)
+      {
+        workarea_omp1.x[1] = workarea.x[1] + iblkx * nBlkSizeX_Ovr[1] * workarea.blkScanDir;
+        workarea_omp1.x[2] = workarea.x[2] + iblkx * nBlkSizeX_Ovr[2] * workarea.blkScanDir;
+      }
+
+      workarea_omp1.blkScanDir = workarea.blkScanDir;
+      workarea_omp1.planeSAD = 0; // for debug, plus fixme outer planeSAD is not used
+      workarea_omp1.sumLumaChange = 0;
+
+      workarea_omp1.y[0] = workarea.y[0];
+      if (chroma)
+      {
+        workarea_omp1.y[1] = workarea.y[1]; workarea_omp1.y[2] = workarea.y[2];
+      }
+
+      workarea_omp1.blky_beg = td._y_beg;
+      workarea_omp1.blky_end = td._y_end;
+
+      workarea_omp1.blky = workarea.blky;
+
+      workarea.DCT = 0;
+
+      workarea_omp1.DCT = 0;
+
       workarea.blkx = blkxStart + iblkx*workarea.blkScanDir;
       workarea.blkIdx = workarea.blky*nBlkX + workarea.blkx;
       workarea.iter = 0;
+
+      workarea_omp1.blkx = blkxStart + iblkx * workarea.blkScanDir;
+      workarea_omp1.blkIdx = workarea_omp1.blky*nBlkX + workarea_omp1.blkx;
+      workarea_omp1.iter = 0;
+
+
       //			DebugPrintf("BlkIdx = %d \n", workarea.blkIdx);
       PROFILE_START(MOTION_PROFILE_ME);
 
@@ -3133,21 +3168,33 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
       // fixme: why recalc is resetting only outside, why, maybe recalc is not using that at all?
       workarea.globalMVPredictor = _glob_mv_pred_def;
 
+      workarea_omp1.globalMVPredictor = _glob_mv_pred_def;
+
 #if (ALIGN_SOURCEBLOCK > 1)
       //store the pitch
-      const BYTE *pY = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
+//      const BYTE *pY = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
+
+      const BYTE *pY = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea_omp1.x[0], workarea_omp1.y[0]);
       //create aligned copy
-      BLITLUMA(workarea.pSrc_temp[0], nSrcPitch[0], pY, nSrcPitch_plane[0]);
+//      BLITLUMA(workarea.pSrc_temp[0], nSrcPitch[0], pY, nSrcPitch_plane[0]);
+      BLITLUMA(workarea_omp1.pSrc_temp[0], nSrcPitch[0], pY, nSrcPitch_plane[0]);
       //set the to the aligned copy
-      workarea.pSrc[0] = workarea.pSrc_temp[0];
+//      workarea.pSrc[0] = workarea.pSrc_temp[0];
+      workarea_omp1.pSrc[0] = workarea_omp1.pSrc_temp[0];
       if (chroma)
       {
-        workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
-        BLITCHROMA(workarea.pSrc_temp[1], nSrcPitch[1], workarea.pSrc[1], nSrcPitch_plane[1]);
-        workarea.pSrc[1] = workarea.pSrc_temp[1];
-        workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
-        BLITCHROMA(workarea.pSrc_temp[2], nSrcPitch[2], workarea.pSrc[2], nSrcPitch_plane[2]);
-        workarea.pSrc[2] = workarea.pSrc_temp[2];
+//        workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
+        workarea_omp1.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea_omp1.x[1], workarea_omp1.y[1]);
+//        BLITCHROMA(workarea.pSrc_temp[1], nSrcPitch[1], workarea.pSrc[1], nSrcPitch_plane[1]);
+        BLITCHROMA(workarea_omp1.pSrc_temp[1], nSrcPitch[1], workarea_omp1.pSrc[1], nSrcPitch_plane[1]);
+//        workarea.pSrc[1] = workarea.pSrc_temp[1];
+        workarea_omp1.pSrc[1] = workarea_omp1.pSrc_temp[1];
+//        workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
+        workarea_omp1.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea_omp1.x[2], workarea_omp1.y[2]);
+//        BLITCHROMA(workarea.pSrc_temp[2], nSrcPitch[2], workarea.pSrc[2], nSrcPitch_plane[2]);
+        BLITCHROMA(workarea_omp1.pSrc_temp[2], nSrcPitch[2], workarea_omp1.pSrc[2], nSrcPitch_plane[2]);
+//        workarea.pSrc[2] = workarea.pSrc_temp[2];
+        workarea_omp1.pSrc[2] = workarea_omp1.pSrc_temp[2];
       }
 #else	// ALIGN_SOURCEBLOCK
       workarea.pSrc[0] = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
@@ -3165,7 +3212,7 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
       // In vertically sliced multithreaded case it happens an _each_ top of the sliced block
       // In non-mt: only for the most top blocks
 
-      if (workarea.blky == workarea.blky_beg)
+/*      if (workarea.blky == workarea.blky_beg)
       {
         workarea.nLambda = 0;
       }
@@ -3173,7 +3220,15 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
       {
         workarea.nLambda = _lambda_level;
       }
-
+      */
+      if (workarea_omp1.blky == workarea_omp1.blky_beg)
+      {
+        workarea_omp1.nLambda = 0;
+      }
+      else
+      {
+        workarea_omp1.nLambda = _lambda_level;
+      }
       // fixme:
       // not exacly nice, but works
       // different threads are writing, but the are the same always and come from parameters _pnew, _lsad
@@ -3185,10 +3240,15 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
       int nHPaddingScaled = pSrcFrame->GetPlane(YPLANE)->GetHPadding() >> nLogScale;
       int nVPaddingScaled = pSrcFrame->GetPlane(YPLANE)->GetVPadding() >> nLogScale;
       /* computes search boundaries */
-      workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
+/*      workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
       workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
       workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
-      workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
+      workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled); */
+
+      workarea_omp1.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea_omp1.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
+      workarea_omp1.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea_omp1.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
+      workarea_omp1.nDxMin = -nPel * (workarea_omp1.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
+      workarea_omp1.nDyMin = -nPel * (workarea_omp1.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled); 
 
       // try to early prefetch ?
      /* const uint8_t* pucRef = GetRefBlock(workarea, zeroMVfieldShifted.x - 2, zeroMVfieldShifted.y - 2); // upper left corner
@@ -3198,7 +3258,7 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
       }*/
 
       /* search the mv */
-      workarea.predictor = ClipMV(workarea, vectors[workarea.blkIdx]);
+/*      workarea.predictor = ClipMV(workarea, vectors[workarea.blkIdx]);
       if (temporal)
       {
         workarea.predictors[4] = ClipMV(workarea, *reinterpret_cast<VECTOR*>(&_vecPrev[workarea.blkIdx*N_PER_BLOCK])); // temporal predictor
@@ -3206,18 +3266,35 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
       else
       {
         workarea.predictors[4] = ClipMV(workarea, zeroMV);
+      }*/
+
+      workarea_omp1.predictor = ClipMV(workarea_omp1, vectors[workarea_omp1.blkIdx]);
+      if (temporal)
+      {
+        workarea_omp1.predictors[4] = ClipMV(workarea_omp1, *reinterpret_cast<VECTOR*>(&_vecPrev[workarea_omp1.blkIdx*N_PER_BLOCK])); // temporal predictor
+      }
+      else
+      {
+        workarea_omp1.predictors[4] = ClipMV(workarea_omp1, zeroMV);
       }
 
       // Possible point of placement selection of 'predictors control'
-      if (_predictorType == 0)
+/*      if (_predictorType == 0)
         PseudoEPZSearch<pixel_t>(workarea); // all predictors (original)
       else if (_predictorType == 1) // DTL: partial predictors
         PseudoEPZSearch_glob_med_pred<pixel_t>(workarea);
       else // if (_predictorType == 2) // DTL: no predictiors
         PseudoEPZSearch_no_pred<pixel_t>(workarea);
+        */
+      if (_predictorType == 0)
+        PseudoEPZSearch<pixel_t>(workarea_omp1); // all predictors (original)
+      else if (_predictorType == 1) // DTL: partial predictors
+        PseudoEPZSearch_glob_med_pred<pixel_t>(workarea_omp1);
+      else // if (_predictorType == 2) // DTL: no predictiors
+        PseudoEPZSearch_no_pred<pixel_t>(workarea_omp1);
 
       // workarea.bestMV = zeroMV; // debug
-
+/*
       if (outfilebuf != NULL) // write vector to outfile
       {
         outfilebuf[workarea.blkx * 4 + 0] = workarea.bestMV.x;
@@ -3225,11 +3302,23 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
         outfilebuf[workarea.blkx * 4 + 2] = (*(uint32_t *)(&workarea.bestMV.sad) & 0x0000ffff); // low word
         outfilebuf[workarea.blkx * 4 + 3] = (*(uint32_t *)(&workarea.bestMV.sad) >> 16);     // high word, usually null
       }
+      */
+      if (outfilebuf != NULL) // write vector to outfile
+      {
+        outfilebuf[workarea_omp1.blkx * 4 + 0] = workarea_omp1.bestMV.x;
+        outfilebuf[workarea_omp1.blkx * 4 + 1] = workarea_omp1.bestMV.y;
+        outfilebuf[workarea_omp1.blkx * 4 + 2] = (*(uint32_t *)(&workarea_omp1.bestMV.sad) & 0x0000ffff); // low word
+        outfilebuf[workarea_omp1.blkx * 4 + 3] = (*(uint32_t *)(&workarea_omp1.bestMV.sad) >> 16);     // high word, usually null
+      }
 
       /* write the results */
-      pBlkData[workarea.blkx*N_PER_BLOCK + 0] = workarea.bestMV.x;
+/*    pBlkData[workarea.blkx*N_PER_BLOCK + 0] = workarea.bestMV.x;
       pBlkData[workarea.blkx*N_PER_BLOCK + 1] = workarea.bestMV.y;
       pBlkData[workarea.blkx*N_PER_BLOCK + 2] = *(uint32_t *)(&workarea.bestMV.sad);
+  */
+      pBlkData[workarea_omp1.blkx*N_PER_BLOCK + 0] = workarea_omp1.bestMV.x;
+      pBlkData[workarea_omp1.blkx*N_PER_BLOCK + 1] = workarea_omp1.bestMV.y;
+      pBlkData[workarea_omp1.blkx*N_PER_BLOCK + 2] = *(uint32_t *)(&workarea_omp1.bestMV.sad);
 
       PROFILE_STOP(MOTION_PROFILE_ME);
 
@@ -3255,16 +3344,20 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
 
         // 161204 todo check: why is it not abs(lumadiff)?
         typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
-        workarea.sumLumaChange += (safe_sad_t)LUMA(GetRefBlock(workarea, 0, 0), nRefPitch[0]) - (safe_sad_t)LUMA(workarea.pSrc[0], nSrcPitch[0]);
+//        workarea.sumLumaChange += (safe_sad_t)LUMA(GetRefBlock(workarea, 0, 0), nRefPitch[0]) - (safe_sad_t)LUMA(workarea.pSrc[0], nSrcPitch[0]);
+        workarea_omp1.sumLumaChange += (safe_sad_t)LUMA(GetRefBlock(workarea_omp1, 0, 0), nRefPitch[0]) - (safe_sad_t)LUMA(workarea_omp1.pSrc[0], nSrcPitch[0]);
       }
 
       /* increment indexes & pointers */
-      if (iblkx < nBlkX - 1)
+/*      if (iblkx < nBlkX - 1)
       {
         workarea.x[0] += nBlkSizeX_Ovr[0]*workarea.blkScanDir;
         workarea.x[1] += nBlkSizeX_Ovr[1]*workarea.blkScanDir;
         workarea.x[2] += nBlkSizeX_Ovr[2]*workarea.blkScanDir;
-      }
+      } */
+      
+      _workarea_pool.return_obj(workarea_omp1); // better to keep array of workareas per omp thread
+    
     }	// for iblkx
 
     pBlkData += nBlkX*N_PER_BLOCK;
