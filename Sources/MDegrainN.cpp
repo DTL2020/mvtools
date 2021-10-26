@@ -214,15 +214,6 @@ void DegrainN_sse2(
         for (int k = 0; k < trad; ++k)
         {
           __m128i src1, src2;
-          if constexpr (is_mod8) // load 8-8 pixels
-          {
-            src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2] + x));
-            src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1] + x));
-          }
-          else { // 4-4 pixels
-            src1 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2] + x));
-            src2 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2 + 1] + x));
-          }
           if (Wall[k * 2 + 1] != 0)
           {
             if constexpr (is_mod8) // load 8-8 pixels
