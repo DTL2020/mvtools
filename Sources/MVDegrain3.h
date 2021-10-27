@@ -884,10 +884,21 @@ MV_FORCEINLINE int DegrainWeight(int thSAD, double thSAD_sq, int blockSAD)
   if (thSAD <= blockSAD)
     return 0;
 
+  int iPow = 4; // old/classic = 2
+  
+  double thSAD_pow = thSAD;
+  double blockSAD_pow = blockSAD;
+
+  for (int i = 0; i < iPow - 1; i++)
+  {
+    thSAD_pow *= thSAD;
+    blockSAD_pow *= blockSAD;
+  }
+
   // float is approximately only 24 bit precise, use double
-  const double blockSAD_sq = double(blockSAD) * (blockSAD);
-  return (int)((double)(1 << DEGRAIN_WEIGHT_BITS)*(thSAD_sq - blockSAD_sq) / (thSAD_sq + blockSAD_sq));
-//  return (int)((1 << DEGRAIN_WEIGHT_BITS)); // !!! test equal weights !!!
+//  const double blockSAD_sq = double(blockSAD) * (blockSAD);
+//  return (int)((double)(1 << DEGRAIN_WEIGHT_BITS)*(thSAD_sq - blockSAD_sq) / (thSAD_sq + blockSAD_sq));
+  return (int)((double)(1 << DEGRAIN_WEIGHT_BITS)*(thSAD_pow - blockSAD_pow) / (thSAD_pow + blockSAD_pow));
 }
 
 template<int level>
