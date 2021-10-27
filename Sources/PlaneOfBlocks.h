@@ -33,6 +33,7 @@
 #include "SADFunctions.h"
 #include "SearchType.h"
 #include "Variance.h"
+#include "omp.h"
 
 #if (ALIGN_SOURCEBLOCK > 1)
 #include "AllocAlign.h"
@@ -374,6 +375,10 @@ private:
   // 8x8 esa search radius 2
   void ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
+  
+  // 8x8 esa search radius 3
+  void ExhaustiveSearch8x8_uint8_sp3_c(WorkingArea& workarea, int mvx, int mvy);
+  void ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea, int mvx, int mvy);
   // END OF DTL test function
 
   template<typename pixel_t>

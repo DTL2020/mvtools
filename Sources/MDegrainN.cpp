@@ -150,19 +150,30 @@ void DegrainN_sse2(
         for (int k = 0; k < trad; ++k)
         {
           __m128i src1, src2;
-          if constexpr(is_mod8) // load 8-8 pixels
+          if (Wall[k * 2 + 1] != 0)
           {
-            src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2] + x));
-            src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1] + x));
+            if constexpr (is_mod8) // load 8-8 pixels
+            {
+              src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2] + x));
+            }
+            else { // 4-4 pixels
+              src1 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2] + x));
+            }
+            const __m128i	s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1]));
+            val = _mm_add_epi16(val, s1);
           }
-          else { // 4-4 pixels
-            src1 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2] + x));
-            src2 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2 + 1] + x));
+          if (Wall[k * 2 + 2] != 0)
+          {
+            if constexpr (is_mod8) // load 8-8 pixels
+            {
+              src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1] + x));
+            }
+            else { // 4-4 pixels
+              src2 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2 + 1] + x));
+            }
+            const __m128i	s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2]));
+            val = _mm_add_epi16(val, s2);
           }
-          const __m128i	s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1]));
-          const __m128i	s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2]));
-          val = _mm_add_epi16(val, s1);
-          val = _mm_add_epi16(val, s2);
         }
         if constexpr(is_mod8) {
           if constexpr(lsb_flag) {
@@ -205,7 +216,7 @@ void DegrainN_sse2(
       for (int x = 0; x < blockWidth; x += pixels_at_a_time)
       {
         __m128i src;
-        if constexpr(is_mod8) // load 8 pixels
+        if constexpr (is_mod8) // load 8 pixels
           src = _mm_loadl_epi64((__m128i*) (pSrc + x));
         else // load 4 pixels
           src = _mm_cvtsi32_si128(*(uint32_t *)(pSrc + x));
@@ -214,19 +225,33 @@ void DegrainN_sse2(
         for (int k = 0; k < trad; ++k)
         {
           __m128i src1, src2;
-          if constexpr(is_mod8) // load 8-8 pixels
+          if (Wall[k * 2 + 1] != 0)
           {
-            src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2] + x));
-            src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1] + x));
+            if constexpr (is_mod8) // load 8-8 pixels
+            {
+              src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2] + x));
+            }
+            else { // 4-4 pixels
+              src1 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2] + x));
+            }
+
+            const __m128i s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1]));
+            val = _mm_add_epi16(val, s1);
           }
-          else { // 4-4 pixels
-            src1 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2] + x));
-            src2 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2 + 1] + x));
+          if (Wall[k * 2 + 2] != 0)
+          {
+            if constexpr (is_mod8) // load 8-8 pixels
+            {
+              src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1] + x));
+            }
+            else { // 4-4 pixels
+              src2 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2 + 1] + x));
+            }
+
+            const __m128i s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2]));
+            val = _mm_add_epi16(val, s2);
           }
-          const __m128i s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1]));
-          const __m128i s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2]));
-          val = _mm_add_epi16(val, s1);
-          val = _mm_add_epi16(val, s2);
+
         }
         auto res = _mm_packus_epi16(_mm_srli_epi16(val, 8), z);
         if constexpr(is_mod8) {

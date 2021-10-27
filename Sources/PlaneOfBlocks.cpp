@@ -3055,7 +3055,18 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
 
   WorkingArea &	workarea = *(_workarea_pool.take_obj());
   assert(&workarea != 0);
+/*
+  int iOMP_NumThreads = omp_get_num_threads();
+  int iNumOMP_WA;
 
+  WorkingArea *workareas_omp_arr = (WorkingArea *)malloc(iOMP_NumThreads * sizeof(WorkingArea*));
+//  WorkingArea *workareas_omp_arr[64]; // !!! max threads ?
+  for (iNumOMP_WA = 0; iNumOMP_WA < iOMP_NumThreads; iNumOMP_WA++)
+  {
+    WorkingArea	workarea_tmp = (WorkingArea)_workarea_pool.take_obj();
+    workareas_omp_arr[iNumOMP_WA] = * workarea_tmp; // *(_workarea_pool.take_obj());
+  }
+  */
   workarea.blky_beg = td._y_beg;
   workarea.blky_end = td._y_end;
 
@@ -3119,10 +3130,15 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
       }
     }
 
-#pragma omp parallel for num_threads(1)
+    // prepare const elements of omp workareas
+
+
+#pragma omp parallel for 
     for (int iblkx = 0; iblkx < nBlkX; iblkx++)
     {
       WorkingArea &	workarea_omp1 = *(_workarea_pool.take_obj());
+//      WorkingArea & workarea_omp1 = workareas_omp_arr[omp_get_thread_num()];
+
       // copy values from global workarea
       workarea_omp1.x[0] = workarea.x[0] + iblkx * nBlkSizeX_Ovr[0] * workarea.blkScanDir;
       if (chroma)
@@ -3390,6 +3406,13 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
 #endif
 
   _workarea_pool.return_obj(workarea);
+
+/*  for (iNumOMP_WA = 0; iNumOMP_WA < iOMP_NumThreads; iNumOMP_WA++)
+  {
+    _workarea_pool.return_obj(workareas_omp_arr[iNumOMP_WA]);
+  }
+  free(workareas_omp_arr);
+  */
 } // search_mv_slice
 
 
@@ -3904,8 +3927,11 @@ PlaneOfBlocks::ExhaustiveSearchFunction_t PlaneOfBlocks::get_ExhaustiveSearchFun
 
   // SearchParam 1 or 2 or 4 is supported at the moment
   func_fn[std::make_tuple(8, 8, 1, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp1_avx2;
+  func_fn[std::make_tuple(8, 8, 1, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp1_c;
   func_fn[std::make_tuple(8, 8, 2, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp2_avx2;
   func_fn[std::make_tuple(8, 8, 2, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp2_c;
+  func_fn[std::make_tuple(8, 8, 3, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp3_avx2;
+  func_fn[std::make_tuple(8, 8, 3, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp3_c;
   func_fn[std::make_tuple(8, 8, 4, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp4_avx2;
   func_fn[std::make_tuple(8, 8, 4, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c;
 
@@ -3926,8 +3952,6 @@ PlaneOfBlocks::ExhaustiveSearchFunction_t PlaneOfBlocks::get_ExhaustiveSearchFun
 }
 
 
-
-
 void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int mvx, int mvy) // 8x8 esa search radius 4
 {
   // debug check !
@@ -3936,7 +3960,7 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int m
   {
     return;
   }
-  if (!workarea.IsVectorOK(mvx + 3, mvy + 4))
+  if (!workarea.IsVectorOK(mvx + 3, mvy + 4)) // 8 positions only so -4..+3.
   {
     return;
   }
@@ -3952,9 +3976,9 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int m
   unsigned short minsad = 65535;
   int x_minsad = 0;
   int y_minsad = 0;
-  for (int x = -4; x < 4; x++)
+  for (int y = 3; y > -5; y--) // reversed scan to match _mm_minpos() logic ?
   {
-    for (int y = -4; y < 5; y++)
+    for (int x = 4; x > -5; x--)
     {
       int sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlock(workarea, mvx + x, mvy + y), nRefPitch[0]);
       if (sad < minsad)
@@ -3977,6 +4001,47 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int m
 }
 
 // Dispatcher for DTL tests
+void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp3_c(WorkingArea& workarea, int mvx, int mvy) // 8x8 esa search radius 3,  works for any nPel !.
+{
+  // debug check !
+  // idea - may be not 4 checks are required - only upper left corner (starting addresses of buffer) and lower right (to not over-run atfer end of buffer - need check/test)
+  if (!workarea.IsVectorOK(mvx - 3, mvy - 3))
+  {
+    return;
+  }
+  if (!workarea.IsVectorOK(mvx + 3, mvy + 3))
+  {
+    return;
+  }
+
+  unsigned short minsad = 65535;
+  int x_minsad = 0;
+  int y_minsad = 0;
+  for (int y = 3; y > -4; y--)
+  {
+    for (int x = 3; x > -4; x--)
+    {
+      int sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlock(workarea, mvx + x, mvy + y), nRefPitch[0]);
+      if (sad < minsad)
+      {
+        minsad = sad;
+        x_minsad = x;
+        y_minsad = y;
+      }
+    }
+  }
+
+  sad_t cost = minsad + ((penaltyNew * minsad) >> 8);
+  if (cost >= workarea.nMinCost) return;
+
+  workarea.bestMV.x = mvx + x_minsad;
+  workarea.bestMV.y = mvy + y_minsad;
+  workarea.nMinCost = cost;
+  workarea.bestMV.sad = minsad;
+
+}
+
+
 void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy) // 8x8 esa search radius 2,  works for any nPel !.
 {
   // debug check !
@@ -3993,9 +4058,9 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int m
   unsigned short minsad = 65535;
   int x_minsad = 0;
   int y_minsad = 0;
-  for (int y = -2; y < 3; y++)
+  for (int y = 2; y > -3; y--)
   {
-    for (int x = -2; x < 3; x++)
+    for (int x = 2; x > -3; x--)
     {
       int sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlock(workarea, mvx + x, mvy + y), nRefPitch[0]);
       if (sad < minsad)
@@ -4033,9 +4098,9 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp1_c(WorkingArea& workarea, int m
   unsigned short minsad = 65535;
   int x_minsad = 0;
   int y_minsad = 0;
-  for (int y = -1; y < 2; y++)
+  for (int y = 1; y > -2; y--)
   {
-    for (int x = -1; x < 2; x++)
+    for (int x = 1; x > -2; x--)
     {
       int sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlock(workarea, mvx + x, mvy + y), nRefPitch[0]);
       if (sad < minsad)
