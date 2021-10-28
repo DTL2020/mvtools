@@ -235,7 +235,7 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp4_avx2(WorkingArea& workarea
   for (int y = 0; y < 9; y++)
   {
     unsigned int uiSADRes = _mm_cvtsi128_si32(_mm_minpos_epu16(_mm_load_si128(&Arr128iSADs[y])));
-    if ((unsigned int)uiSADRes < minsad)
+    if ((unsigned short)uiSADRes < minsad)
     {
       minsad = uiSADRes;
       idx_min_sad = 7 - (uiSADRes >> 16) + y*8;
@@ -243,20 +243,20 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp4_avx2(WorkingArea& workarea
   }
 
   //  x_minsad = (idx_min_sad % 8) - 4; - just comment where from x,y minsad come from
-  //  y_minsad = (idx_min_sad / 9) - 4;
+  //  y_minsad = (idx_min_sad / 8) - 4;
   
   sad_t cost = minsad + ((penaltyNew * minsad) >> 8);
   if (cost >= workarea.nMinCost) return;
 
   workarea.bestMV.x = mvx + (idx_min_sad % 8) - 4; // 8 and 9 need check
-  workarea.bestMV.y = mvy + (idx_min_sad / 9) - 4;
+  workarea.bestMV.y = mvy + (idx_min_sad / 8) - 4;
   workarea.nMinCost = cost;
   workarea.bestMV.sad = minsad;
 
   _mm256_zeroupper();
 }
 
-void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea, int mvx, int mvy) 
+void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea, int mvx, int mvy) // debugged 28.10.21 (?)
 {
   // debug check !
     // idea - may be not 4 checks are required - only upper left corner (starting addresses of buffer) and lower right (to not over-run atfer end of buffer - need check/test)
@@ -282,14 +282,13 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea
   const uint8_t* pucRef = GetRefBlock(workarea, mvx - 3, mvy - 3); // upper left corner
   const uint8_t* pucCurr = workarea.pSrc[0];
 
-
   __m256i ymm0_Ref_01, ymm1_Ref_23, ymm2_Ref_45, ymm3_Ref_67; // 2x12bytes store, require buf padding to allow 16bytes reads to xmm
   __m256i ymm4_tmp, ymm5_tmp;
 
   __m256i ymm10_Src_2031, ymm11_Src_6475;
   __m128i xmm10_Src_20, xmm11_Src_31, xmm12_Src_64, xmm13_Src_75;
 
-  __m256i ymm6_part_sads = _mm256_setzero_si256();
+  __m256i ymm6_part_sads = _mm256_cmpeq_epi64(_mm256_setzero_si256(), _mm256_setzero_si256()); // set to all 65535;
 
   __m256i ymm7_minsad7; // vectors of minsads for SSE4.1 _mm_minpos_epu16() minsad and pos search, need FF-set 
 
@@ -368,6 +367,8 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea
     ymm6_part_sads = _mm256_adds_epu16(_mm256_srli_si256(ymm6_part_sads, 8), ymm6_part_sads);
     ymm7_minsad7 = _mm256_blend_epi16(ymm7_minsad7, ymm6_part_sads, 15);
 
+    ymm6_part_sads = _mm256_cmpeq_epi64(_mm256_setzero_si256(), _mm256_setzero_si256()); // set max
+
     ymm0_Ref_01 = _mm256_srli_si256(ymm0_Ref_01, 1);
     ymm1_Ref_23 = _mm256_srli_si256(ymm1_Ref_23, 1);
     ymm2_Ref_45 = _mm256_srli_si256(ymm2_Ref_45, 1);
@@ -411,6 +412,11 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea
     ymm6_part_sads = _mm256_blend_epi16(ymm6_part_sads, ymm4_tmp, 17); //  partial sums 7 of 8 in hi and low 128bits
 
     ymm6_part_sads = _mm256_adds_epu16(_mm256_srli_si256(ymm6_part_sads, 8), ymm6_part_sads);
+
+    __m256i ymm8_tmpFFFF = _mm256_cmpeq_epi64(_mm256_setzero_si256(), _mm256_setzero_si256()); // set to all 65535;
+    ymm6_part_sads = _mm256_slli_si256(ymm6_part_sads, 2);
+    ymm6_part_sads = _mm256_blend_epi16(ymm6_part_sads, ymm8_tmpFFFF, 17);
+
     ymm7_minsad7 = _mm256_slli_si256(ymm7_minsad7, 8);
     ymm7_minsad7 = _mm256_blend_epi16(ymm7_minsad7, ymm6_part_sads, 15);
 
@@ -420,6 +426,7 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea
     _mm_store_si128(&Arr128iSADs[i], _mm256_castsi256_si128(ymm7_minsad7));
 
     ymm7_minsad7 = _mm256_cmpeq_epi64(ymm7_minsad7, ymm7_minsad7); // set to all 65535
+
   }
 
   unsigned short minsad = 65535;
@@ -427,7 +434,7 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea
   for (int y = 0; y < 7; y++)
   {
     unsigned int uiSADRes = _mm_cvtsi128_si32(_mm_minpos_epu16(_mm_load_si128(&Arr128iSADs[y])));
-    if ((unsigned int)uiSADRes < minsad)
+    if ((unsigned short)uiSADRes < minsad)
     {
       minsad = uiSADRes;
       idx_min_sad = 7 - (uiSADRes >> 16) + y * 7;
@@ -440,8 +447,8 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea
   sad_t cost = minsad + ((penaltyNew * minsad) >> 8);
   if (cost >= workarea.nMinCost) return;
 
-  workarea.bestMV.x = mvx + (idx_min_sad % 7) - 4; // 8 and 9 need check
-  workarea.bestMV.y = mvy + (idx_min_sad / 7) - 4;
+  workarea.bestMV.x = mvx + (idx_min_sad % 7) - 3; 
+  workarea.bestMV.y = mvy + (idx_min_sad / 7) - 3;
   workarea.nMinCost = cost;
   workarea.bestMV.sad = minsad;
 
