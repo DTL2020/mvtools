@@ -33,7 +33,7 @@ public:
     ::PClip child, ::PClip super, ::PClip mvmulti, int trad,
     sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
     sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
-    sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, ::IScriptEnvironment* env_ptr
+    sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
 
@@ -141,6 +141,9 @@ private:
 
   int _nsupermodeyuv;
 
+  // 2.7.46
+  int _wpow;
+
 
   std::unique_ptr <YUY2Planes> _dst_planes;
   std::unique_ptr <YUY2Planes> _src_planes;
@@ -188,6 +191,8 @@ private:
   // processed safely.
   std::vector <conc::AtomicInt <int> > _boundary_cnt_arr;
 };
+
+MV_FORCEINLINE int DegrainWeightN(int thSAD, double thSAD_pow, int blockSAD, int wpow);
 
 
 #endif
