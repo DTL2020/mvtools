@@ -1505,6 +1505,84 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       int pitch_arr[MAX_TEMP_RAD * 2];
       int weight_arr[1 + MAX_TEMP_RAD * 2];
 
+      /// !!!! calculate vector of included in averaging blocks using statistics in between blockSADs in tr-scope
+      int VectMinSumSADs[1 + MAX_TEMP_RAD * 2];
+
+      for (int l = 0; l < _trad * 2; ++l) // TODO: make scan triangle instead of square and copy to other triangle
+      {
+        for (int m = 0; m < _trad * 2; ++m)
+        {
+          if (m == l)
+          {
+            ArrSADs[l][m] = 0;
+            continue;
+          }
+
+          if (_usable_flag_arr[l] == false || _usable_flag_arr[m] == false)
+          {
+            ArrSADs[l][m] = -1; // no first or second for SAD available, 0 or max ??
+            continue;
+          }
+
+          // l-block
+          const FakeBlockData &	block_l = _mv_clip_arr[l]._clip_sptr->GetBlock(0, i);
+          const int blx_l = block_l.GetX() * nPel + block_l.GetMV().x;
+          const int bly_l = block_l.GetY() * nPel + block_l.GetMV().y;
+          const BYTE *pl = _planes_ptr[l][0]->GetPointer(blx_l, bly_l);
+          int npl = _planes_ptr[l][0]->GetPitch();
+
+          // m-block
+          const FakeBlockData & block_m = _mv_clip_arr[m]._clip_sptr->GetBlock(0, i);
+          const int blx_m = block_m.GetX() * nPel + block_m.GetMV().x;
+          const int bly_m = block_m.GetY() * nPel + block_m.GetMV().y;
+          const BYTE *pm = _planes_ptr[m][0]->GetPointer(blx_m, bly_m);
+          int npm = _planes_ptr[m][0]->GetPitch();
+
+
+          ArrSADs[l][m] = Sad_C(pl,npl,pm,npm);
+        }
+      }
+
+      //calc vect min sums sads
+      for (int l = 0; l < _trad * 2; ++l)
+      {
+        int sumsads = 0;
+
+        if (_usable_flag_arr[l] == false)
+        {
+          VectMinSumSADs[l] = 10e10; // big value ?
+          continue;
+        }
+
+        for (int m = 0; m < _trad * 2; ++m)
+        {
+          if (_usable_flag_arr[m] == false) continue;
+          sumsads += ArrSADs[l][m];
+        }
+
+        VectMinSumSADs[l] = sumsads;
+      }
+
+      int idx_minsad = 0;
+      int minsumsads = 10e10; // big value ??
+      for (int i = 0; i < _trad * 2; ++i)
+      {
+        if (VectMinSumSADs[i] < minsumsads)
+        {
+          minsumsads = VectMinSumSADs[i];
+          idx_minsad = i;
+        }
+      }
+
+      for (int i = 0; i < _trad * 2; ++i)
+      {
+        if (ArrSADs[idx_minsad][i] < _mv_clip_arr[i]._thsad && _usable_flag_arr[i])
+          bVectIncludedBlocks[i] = true;
+        else
+          bVectIncludedBlocks[i] = false;
+      }
+
+
       for (int k = 0; k < _trad * 2; ++k)
       {
         use_block_y(
@@ -1519,6 +1597,12 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
           xx << pixelsize_super_shift,
           _src_pitch_arr[0]
         );
+
+        // add block to proc if even it not pass current sad check:
+        if (weight_arr[k + 1] == 0 && bVectIncludedBlocks[k]) // or k+1 ?
+        {
+          weight_arr[k + 1] = 50; // apply weight weighting ?
+        }
       }
 
       norm_weights(weight_arr, _trad);

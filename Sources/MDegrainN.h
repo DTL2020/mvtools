@@ -17,6 +17,24 @@
 #include	<vector>
 
 
+// poor attempt to include sadfunctions
+MV_FORCEINLINE unsigned int SADABS(int x) { return (x < 0) ? -x : x; }
+
+template<int nBlkWidth=8, int nBlkHeight=8, typename pixel_t=uint8_t>
+static unsigned int Sad_C(const uint8_t *pSrc, int nSrcPitch, const uint8_t *pRef,
+  int nRefPitch)
+{
+  unsigned int sum = 0; // int is probably enough for 32x32
+  for (int y = 0; y < nBlkHeight; y++)
+  {
+    for (int x = 0; x < nBlkWidth; x++)
+      sum += SADABS(reinterpret_cast<const pixel_t *>(pSrc)[x] - reinterpret_cast<const pixel_t *>(pRef)[x]);
+    pSrc += nSrcPitch;
+    pRef += nRefPitch;
+  }
+  return sum;
+}
+
 
 class MVPlane;
 
@@ -143,6 +161,8 @@ private:
 
   // 2.7.46
   int _wpow;
+  bool bVectIncludedBlocks[1 + MAX_TEMP_RAD * 2];
+  int ArrSADs[1 + MAX_TEMP_RAD * 2][1 + MAX_TEMP_RAD * 2];
 
 
   std::unique_ptr <YUY2Planes> _dst_planes;
