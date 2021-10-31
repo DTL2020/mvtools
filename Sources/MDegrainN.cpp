@@ -1520,7 +1520,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
 
           if (_usable_flag_arr[l] == false || _usable_flag_arr[m] == false)
           {
-            ArrSADs[l][m] = -1; // no first or second for SAD available, 0 or max ??
+            ArrSADs[l][m] = 65535; // no first or second for SAD available, 0 or max ??
             continue;
           }
 
@@ -1550,7 +1550,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
 
         if (_usable_flag_arr[l] == false)
         {
-          VectMinSumSADs[l] = 10e10; // big value ?
+          VectMinSumSADs[l] = _trad*65535; // big value ?
           continue;
         }
 
@@ -1567,7 +1567,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       int minsumsads = 10e10; // big value ??
       for (int i = 0; i < _trad * 2; ++i)
       {
-        if (VectMinSumSADs[i] < minsumsads)
+        if (_usable_flag_arr[i] && (VectMinSumSADs[i] < minsumsads))
         {
           minsumsads = VectMinSumSADs[i];
           idx_minsad = i;
@@ -1598,11 +1598,32 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
           _src_pitch_arr[0]
         );
 
+        //debug block sad view
+        const FakeBlockData & block_dbg = _mv_clip_arr[k]._clip_sptr->GetBlock(0, i);
+        const sad_t block_sad_dbg = block_dbg.GetSAD();
+        int thsad_dbg = _mv_clip_arr[k]._thsad;
+
         // add block to proc if even it not pass current sad check:
-        if (weight_arr[k + 1] == 0 && bVectIncludedBlocks[k]) // or k+1 ?
+//        if (weight_arr[k + 1] == 0 && bVectIncludedBlocks[k]) // or k+1 ?
+        if (bVectIncludedBlocks[k] == true) // or k+1 ?
         {
-          weight_arr[k + 1] = 50; // apply weight weighting ?
+          if (block_sad_dbg > (thsad_dbg * 2))
+          {
+           // int idbr = 0;
+            continue; // do not add ?
+          }
+
+          if (block_sad_dbg > thsad_dbg)
+          {
+            int idbr = 0;
+          }
+
+
+//          weight_arr[k + 1] = 255; // apply weight weighting ?
         }
+
+//        if (bVectIncludedBlocks[k] == false)
+//          weight_arr[k + 1] = 0; // skip proc
       }
 
       norm_weights(weight_arr, _trad);
