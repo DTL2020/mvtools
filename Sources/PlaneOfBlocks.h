@@ -53,6 +53,38 @@ class DCTClass;
 class MVClip;
 class MVFrame;
 
+/////////////////////
+// test MVVector
+template <class T>
+class  MVVector
+{
+public:
+
+  typedef T * iterator;
+
+  MVVector();
+  MVVector(size_t size, BYTE *pVectBuf);
+//  MVVector(size_t size, const T & initial);
+//  MVVector(const Vector<T> & v);
+  ~MVVector();
+
+//  unsigned int capacity() const;
+  unsigned int size() const;
+//  bool empty() const;
+//  iterator begin();
+//  iterator end();
+
+  T & operator[](size_t index);
+
+//  MVVector<T> & operator=(const Vector<T> &);
+//  void clear();
+private:
+  size_t my_size;
+  size_t my_capacity;
+  T * buffer;
+};
+
+
 
 
 // v2.5.13.1: This class is currently a bit messy,
@@ -71,7 +103,7 @@ public:
   PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int _nFlags, int _nOverlapX, int _nOverlapY,
     int _xRatioUV, int _yRatioUV, int _pixelsize, int _bits_per_pixel,
     conc::ObjPool <DCTClass> *dct_pool_ptr,
-    bool mt_flag, int _chromaSADscale, int _optSearchOption,
+    bool mt_flag, int _chromaSADscale, int _optSearchOption, BYTE * pVectBuf,
   IScriptEnvironment* env);
 
   ~PlaneOfBlocks();
@@ -89,7 +121,8 @@ public:
 
     /* compute the predictors from the upper plane */
   template<typename safe_sad_t, typename smallOverlapSafeSad_t>
-  void InterpolatePrediction(const PlaneOfBlocks &pob);
+//  void InterpolatePrediction(const PlaneOfBlocks &pob);
+  void InterpolatePrediction(PlaneOfBlocks &pob); // need to found why MVVector fails with 'const' - may be add some const operator[] ??? still do not know how
 
 
   void WriteHeaderToArray(int *array);
@@ -153,8 +186,9 @@ private:
   ExhaustiveSearchFunction_t get_ExhaustiveSearchFunction(int BlockX, int BlockY, int SearchParam, int bits_per_pixel, arch_t arch);
   ExhaustiveSearchFunction_t ExhaustiveSearchFunctions[MAX_SUPPORTED_EXH_SEARCHPARAM + 1]; // the function pointer
 
-  std::vector <VECTOR>              /* motion vectors of the blocks */
-    vectors;           /* before the search, contains the hierachal predictor */
+  // std::vector <VECTOR>              /* motion vectors of the blocks */   
+  //  vectors;           /* before the search, contains the hierachal predictor */
+  MVVector <VECTOR> vectors;
                        /* after the search, contains the best motion vector */
 
   bool           smallestPlane;     /* say whether vectors can use predictors from a smaller plane */

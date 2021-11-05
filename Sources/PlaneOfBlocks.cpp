@@ -54,7 +54,7 @@ static unsigned int SadDummy(const uint8_t *, int , const uint8_t *, int )
 PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int _nFlags, int _nOverlapX, int _nOverlapY,
   int _xRatioUV, int _yRatioUV, int _pixelsize, int _bits_per_pixel,
   conc::ObjPool <DCTClass> *dct_pool_ptr,
-  bool mt_flag, int _chromaSADscale, int _optSearchOption,
+  bool mt_flag, int _chromaSADscale, int _optSearchOption, BYTE *pVectBuf,
   IScriptEnvironment* env)
   : nBlkX(_nBlkX)
   , nBlkY(_nBlkY)
@@ -86,7 +86,8 @@ PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSi
   , BLITCHROMA(0)
   , SADCHROMA(0)
   , SATD(0)
-  , vectors(nBlkCount)
+  , vectors(nBlkCount, pVectBuf)
+//  , vectors(nBlkCount)
   , smallestPlane((_nFlags & MOTION_SMALLEST_PLANE) != 0)
   , isse((_nFlags & MOTION_USE_ISSE) != 0)
   , chroma((_nFlags & MOTION_USE_CHROMA_MOTION) != 0)
@@ -506,7 +507,8 @@ void PlaneOfBlocks::RecalculateMVs(
 
 
 template<typename safe_sad_t, typename smallOverlapSafeSad_t>
-void PlaneOfBlocks::InterpolatePrediction(const PlaneOfBlocks &pob)
+//void PlaneOfBlocks::InterpolatePrediction(const PlaneOfBlocks &pob)
+void PlaneOfBlocks::InterpolatePrediction(PlaneOfBlocks &pob)
 {
   int normFactor = 3 - nLogPel + pob.nLogPel;
   int mulFactor = (normFactor < 0) ? -normFactor : 0;
@@ -632,9 +634,16 @@ void PlaneOfBlocks::InterpolatePrediction(const PlaneOfBlocks &pob)
 }
 
 // instantiate
+/*
 template void PlaneOfBlocks::InterpolatePrediction<sad_t, sad_t>(const PlaneOfBlocks &pob);
 template void PlaneOfBlocks::InterpolatePrediction<sad_t, bigsad_t>(const PlaneOfBlocks &pob);
 template void PlaneOfBlocks::InterpolatePrediction<bigsad_t, bigsad_t>(const PlaneOfBlocks &pob);
+*/
+
+template void PlaneOfBlocks::InterpolatePrediction<sad_t, sad_t>(PlaneOfBlocks &pob);
+template void PlaneOfBlocks::InterpolatePrediction<sad_t, bigsad_t>(PlaneOfBlocks &pob);
+template void PlaneOfBlocks::InterpolatePrediction<bigsad_t, bigsad_t>(PlaneOfBlocks &pob);
+
 
 void PlaneOfBlocks::WriteHeaderToArray(int *array)
 {
@@ -3964,3 +3973,231 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp1_c(WorkingArea& workarea, int m
 
 }
 
+
+/////////////////////////////////
+// test MV_Vector
+
+// Your code goes here ...
+template<class T>
+MVVector<T>::MVVector()
+{
+  my_capacity = 0;
+  my_size = 0;
+  buffer = 0;
+}
+/*
+template<class T>
+MVVector<T>::MVVector(const MVVector<T> & v)
+{
+  my_size = v.my_size;
+  my_capacity = v.my_capacity;
+  buffer = new T[my_size];
+  for (unsigned int i = 0; i < my_size; i++)
+    buffer[i] = v.buffer[i];
+}
+*/
+template<class T>
+MVVector<T>::MVVector(size_t size, BYTE* pVectBuf)
+{
+  my_capacity = size;
+  my_size = size;
+
+  buffer = (T*)pVectBuf; // from MVAnalyse once
+//  buffer = new T[size];
+/*
+  struct VECTOR_S
+  {
+        // int x;
+        //      int y;
+        short x;
+        short y;
+
+    sad_t sad;
+  };
+
+  size_t sizeVector = sizeof(VECTOR); // need to found why sizeof(VECTOR_S) 8 bytes and sizeof(VECTOR) = 12 if even x,y is short !!
+  size_t sizeVectorS = sizeof(VECTOR_S);
+
+  size_t sizeShort = sizeof(short);
+
+  size_t sizeSadt = sizeof(sad_t); // also try to use sad = 16bit not 32bit if blocksize = 8 !!!
+
+  size_t size_bytes = size * sizeof(T);
+/*
+  DWORD error;
+  HANDLE hToken = NULL;
+  TOKEN_PRIVILEGES tp;
+
+  // Enable this priveledge for the current process
+  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken))
+  {
+    env->ThrowError("LargePages: Can not open process token");
+    return;
+  }
+
+  tp.PrivilegeCount = 1;
+  tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+
+  if (!LookupPrivilegeValue(NULL, SE_LOCK_MEMORY_NAME, &tp.Privileges[0].Luid))
+  {
+    env->ThrowError("LargePages: LookupPrivilegeValue failed.");
+    return;
+  }
+
+  BOOL result = AdjustTokenPrivileges(hToken, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
+  error = GetLastError();
+
+  if (!result || (error != ERROR_SUCCESS))
+  {
+    env->ThrowError("LargePages: AdjustTokenPrivileges failed.");
+    return;
+  }
+
+  // Cleanup
+  CloseHandle(hToken);
+  hToken = NULL;
+
+  // large pages 
+  SIZE_T stLPGranularity = GetLargePageMinimum();
+  size_t iNumLPUnits = size_bytes / stLPGranularity;
+  SIZE_T stSizeToAlloc = (iNumLPUnits + 1) * stLPGranularity;
+
+#ifndef _DEBUG
+  buffer = (T*)VirtualAlloc(0, stSizeToAlloc, MEM_LARGE_PAGES | MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+#else
+  buffer = (T*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // debug !
+#endif
+  error = GetLastError();
+
+  if (error != ERROR_SUCCESS)
+    env->ThrowError("LargePages alloc error. While allocating %d pages of %d size, GetLastError returned: %d\n", iNumLPUnits+1, stLPGranularity, error);
+    
+  buffer = (T*)VirtualAlloc(0, size_bytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // debug ! */
+}
+/*
+template<class T>
+MVVector<T>::MVVector(size_t size, const T & initial)
+{
+  my_size = size;
+  my_capacity = size;
+  buffer = new T[size];
+  for (unsigned int i = 0; i < size; i++)
+    buffer[i] = initial;
+  //T();
+}
+
+template<class T>
+MVVector<T> & MVVector<T>::operator = (const MVVector<T> & v)
+{
+  delete[] buffer;
+  my_size = v.my_size;
+  my_capacity = v.my_capacity;
+  buffer = new T[my_size];
+  for (unsigned int i = 0; i < my_size; i++)
+    buffer[i] = v.buffer[i];
+  return *this;
+}
+
+template<class T>
+typename MVVector<T>::iterator MVVector<T>::begin()
+{
+  return buffer;
+}
+
+template<class T>
+typename MVVector<T>::iterator MVVector<T>::end()
+{
+  return buffer + size();
+}
+*/
+
+/*
+template<class T>
+T& MVVector<T>::front()
+{
+  return buffer[0];
+}
+
+template<class T>
+T& MVVector<T>::back()
+{
+  return buffer[my_size - 1];
+}
+
+template<class T>
+void MVVector<T>::push_back(const T & v)
+{
+  if (my_size >= my_capacity)
+    reserve(my_capacity + 5);
+  buffer[my_size++] = v;
+}
+
+template<class T>
+void MVVector<T>::pop_back()
+{
+  my_size--;
+}
+
+template<class T>
+void MVVector<T>::reserve(unsigned int capacity)
+{
+  if (buffer == 0)
+  {
+    my_size = 0;
+    my_capacity = 0;
+  }
+  T * Newbuffer = new T[capacity];
+  //assert(Newbuffer);
+  unsigned int l_Size = capacity < my_size ? capacity : my_size;
+  //copy (buffer, buffer + l_Size, Newbuffer);
+
+  for (unsigned int i = 0; i < l_Size; i++)
+    Newbuffer[i] = buffer[i];
+
+  my_capacity = capacity;
+  delete[] buffer;
+  buffer = Newbuffer;
+}
+*/
+template<class T>
+unsigned int MVVector<T>::size()const
+{
+  return my_size;
+}
+/*
+template<class T>
+void MVVector<T>::resize(unsigned int size)
+{
+  reserve(size);
+  my_size = size;
+}
+*/
+template<class T>
+T& MVVector<T>::operator[](size_t index)
+{
+  return buffer[index];
+}
+/*
+template<class T>
+unsigned int MVVector<T>::capacity()const
+{
+  return my_capacity;
+}
+*/
+
+template<class T>
+MVVector<T>::~MVVector()
+{
+//   delete[] buffer; - in MVanalyse
+    // large pages here
+//  VirtualFree(buffer, 0, MEM_RELEASE);
+}
+/*
+template <class T>
+void MVVector<T>::clear()
+{
+  my_capacity = 0;
+  my_size = 0;
+  buffer = 0;
+}
+*/

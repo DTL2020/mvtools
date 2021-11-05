@@ -96,6 +96,40 @@ MVAnalyse::MVAnalyse(
     env->ThrowError("MAnalyse: parameter 'optPredictorType' must be 0, 1 or 2");
   }
 
+  // large pages priv:
+  DWORD error;
+  HANDLE hToken = NULL;
+  TOKEN_PRIVILEGES tp;
+
+  // Enable this priveledge for the current process
+  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken))
+  {
+    env->ThrowError("LargePages: Can not open process token");
+    return;
+  }
+
+  tp.PrivilegeCount = 1;
+  tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+
+  if (!LookupPrivilegeValue(NULL, SE_LOCK_MEMORY_NAME, &tp.Privileges[0].Luid))
+  {
+    env->ThrowError("LargePages: LookupPrivilegeValue failed.");
+    return;
+  }
+
+  BOOL result = AdjustTokenPrivileges(hToken, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
+  error = GetLastError();
+
+  if (!result || (error != ERROR_SUCCESS))
+  {
+    env->ThrowError("LargePages: AdjustTokenPrivileges failed.");
+    return;
+  }
+
+  // Cleanup
+  CloseHandle(hToken);
+  hToken = NULL;
+
   if (vi.IsY())
     chroma = false; // silent fallback
 
@@ -247,6 +281,17 @@ MVAnalyse::MVAnalyse(
   analysisData.nBlkX = nBlkX;
   analysisData.nBlkY = nBlkY;
 
+  // large pages 
+  SIZE_T stLPGranularity = GetLargePageMinimum();
+  size_t iNumLPUnits = ((nBlkX * nBlkY * sizeof(VECTOR)) / stLPGranularity) + 1; 
+  SIZE_T stSizeToAlloc = iNumLPUnits * stLPGranularity;
+  pVectBuf = (BYTE*)VirtualAlloc(0, stSizeToAlloc, MEM_LARGE_PAGES | MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+//  pVectBuf = (BYTE*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+  error = GetLastError();
+
+  if (error != ERROR_SUCCESS)
+    env->ThrowError("LargePages alloc error. While allocating %d pages of %d size, GetLastError returned: %d\n", iNumLPUnits, stLPGranularity, error);
+
   const int		nWidth_B =
     (analysisData.nBlkSizeX - analysisData.nOverlapX) * nBlkX
     + analysisData.nOverlapX; // covered by blocks
@@ -264,8 +309,6 @@ MVAnalyse::MVAnalyse(
   {
     ++nLevelsMax;
   }
-
-  nLevelsMax = 2;
 
   analysisData.nLvCount = (lv > 0) ? lv : nLevelsMax + lv;
   if (analysisData.nLvCount > nSuperLevels)
@@ -391,6 +434,7 @@ MVAnalyse::MVAnalyse(
     _mt_flag,
     analysisData.chromaSADScale,
     optSearchOption,
+    pVectBuf,
     env
   ));
 
@@ -521,6 +565,8 @@ MVAnalyse::~MVAnalyse()
     delete[] outfilebuf;
     outfilebuf = 0;
   }
+
+  if (pVectBuf) VirtualFree(pVectBuf, 0, MEM_RELEASE);
 
   delete pSrcGOF;
   pSrcGOF = 0;
