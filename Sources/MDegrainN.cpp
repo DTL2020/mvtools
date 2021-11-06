@@ -1495,6 +1495,10 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
   BYTE *pDstCur = _dst_ptr_arr[0] + td._y_beg * rowsize * _dst_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
   const BYTE *pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
 
+#ifdef _DEBUG
+  int numofAddWeightedBlocks = 0;
+#endif
+
   for (int by = td._y_beg; by < td._y_end; ++by)
   {
     int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
@@ -1504,84 +1508,134 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       const BYTE *ref_data_ptr_arr[MAX_TEMP_RAD * 2];
       int pitch_arr[MAX_TEMP_RAD * 2];
       int weight_arr[1 + MAX_TEMP_RAD * 2];
-
+      
       /// !!!! calculate vector of included in averaging blocks using statistics in between blockSADs in tr-scope
       int VectMinSumSADs[1 + MAX_TEMP_RAD * 2];
-
-      for (int l = 0; l < _trad * 2; ++l) // TODO: make scan triangle instead of square and copy to other triangle
-      {
-        for (int m = 0; m < _trad * 2; ++m)
-        {
-          if (m == l)
-          {
-            ArrSADs[l][m] = 0;
-            continue;
-          }
-
-          if (_usable_flag_arr[l] == false || _usable_flag_arr[m] == false)
-          {
-            ArrSADs[l][m] = 65535; // no first or second for SAD available, 0 or max ??
-            continue;
-          }
-
-          // l-block
-          const FakeBlockData &	block_l = _mv_clip_arr[l]._clip_sptr->GetBlock(0, i);
-          const int blx_l = block_l.GetX() * nPel + block_l.GetMV().x;
-          const int bly_l = block_l.GetY() * nPel + block_l.GetMV().y;
-          const BYTE *pl = _planes_ptr[l][0]->GetPointer(blx_l, bly_l);
-          int npl = _planes_ptr[l][0]->GetPitch();
-
-          // m-block
-          const FakeBlockData & block_m = _mv_clip_arr[m]._clip_sptr->GetBlock(0, i);
-          const int blx_m = block_m.GetX() * nPel + block_m.GetMV().x;
-          const int bly_m = block_m.GetY() * nPel + block_m.GetMV().y;
-          const BYTE *pm = _planes_ptr[m][0]->GetPointer(blx_m, bly_m);
-          int npm = _planes_ptr[m][0]->GetPitch();
-
-
-          ArrSADs[l][m] = Sad_C(pl,npl,pm,npm);
-        }
-      }
-
-      //calc vect min sums sads
-      for (int l = 0; l < _trad * 2; ++l)
-      {
-        int sumsads = 0;
-
-        if (_usable_flag_arr[l] == false)
-        {
-          VectMinSumSADs[l] = _trad*65535; // big value ?
-          continue;
-        }
-
-        for (int m = 0; m < _trad * 2; ++m)
-        {
-          if (_usable_flag_arr[m] == false) continue;
-          sumsads += ArrSADs[l][m];
-        }
-
-        VectMinSumSADs[l] = sumsads;
-      }
-
+      int iMaxSecondSADcoeff = 2; 
+      float fMaxSecondMidSADcoeff = 1.0f; //1.5
+      bool bUseBlockInSecondarySearch = false;
       int idx_minsad = 0;
-      int minsumsads = 10e10; // big value ??
-      for (int i = 0; i < _trad * 2; ++i)
+
+      // check if current block have at least 1 sad < iMaxSecondSADcoeff * thSAD with blocks in tr-scope pool
+      for (int idx = 0; idx < _trad * 2; ++idx)
       {
-        if (_usable_flag_arr[i] && (VectMinSumSADs[i] < minsumsads))
+        if (_usable_flag_arr[idx])
         {
-          minsumsads = VectMinSumSADs[i];
-          idx_minsad = i;
+          const sad_t block_sad = _mv_clip_arr[idx]._clip_sptr->GetBlock(0, i).GetSAD();
+          if (block_sad < _mv_clip_arr[idx]._thsad * iMaxSecondSADcoeff)
+          {
+            bUseBlockInSecondarySearch = true;
+          }
+
+#ifdef _DEBUG  // check sad again debug
+          // t-block
+          const FakeBlockData& block_t = _mv_clip_arr[idx]._clip_sptr->GetBlock(0, i);
+          const int blx_t = block_t.GetX() * nPel + block_t.GetMV().x;
+          const int bly_t = block_t.GetY() * nPel + block_t.GetMV().y;
+          const BYTE* pl = _planes_ptr[idx][0]->GetPointer(blx_t, bly_t);
+          int npl = _planes_ptr[idx][0]->GetPitch();
+          sad_t curr_blocksad = Sad_C(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pl, npl);
+
+          if (curr_blocksad != block_sad)
+          {
+            int idbr = 0; // if lost sync... break and find why
+          }
+#endif
+
         }
       }
 
-      for (int i = 0; i < _trad * 2; ++i)
+      if (bUseBlockInSecondarySearch) // this block have at least 1 sad in the secondary thSAD range
       {
-        if (ArrSADs[idx_minsad][i] < _mv_clip_arr[i]._thsad && _usable_flag_arr[i])
-          bVectIncludedBlocks[i] = true;
-        else
-          bVectIncludedBlocks[i] = false;
-      }
 
+        for (int l = 0; l < _trad * 2; ++l) // TODO: make scan triangle instead of square and copy to other triangle
+        {
+          for (int m = 0; m < _trad * 2; ++m)
+          {
+            if (m == l)
+            {
+              ArrSADs[l][m] = 0;
+              continue;
+            }
+
+            if (_usable_flag_arr[l] == false || _usable_flag_arr[m] == false)
+            {
+              ArrSADs[l][m] = 65535; // no first or second for SAD available, 0 or max ??
+              continue;
+            }
+
+            // l-block
+            const FakeBlockData& block_l = _mv_clip_arr[l]._clip_sptr->GetBlock(0, i);
+            const int blx_l = block_l.GetX() * nPel + block_l.GetMV().x;
+            const int bly_l = block_l.GetY() * nPel + block_l.GetMV().y;
+            const BYTE* pl = _planes_ptr[l][0]->GetPointer(blx_l, bly_l);
+            int npl = _planes_ptr[l][0]->GetPitch();
+
+            // m-block
+            const FakeBlockData& block_m = _mv_clip_arr[m]._clip_sptr->GetBlock(0, i);
+            const int blx_m = block_m.GetX() * nPel + block_m.GetMV().x;
+            const int bly_m = block_m.GetY() * nPel + block_m.GetMV().y;
+            const BYTE* pm = _planes_ptr[m][0]->GetPointer(blx_m, bly_m);
+            int npm = _planes_ptr[m][0]->GetPitch();
+
+
+            ArrSADs[l][m] = Sad_C(pl, npl, pm, npm);
+          }
+        }
+
+        //calc vect min sums sads
+        for (int l = 0; l < _trad * 2; ++l)
+        {
+          int sumsads = 0;
+
+          if (_usable_flag_arr[l] == false)
+          {
+            VectMinSumSADs[l] = _trad * 65535; // big value ?
+            continue;
+          }
+
+          for (int m = 0; m < _trad * 2; ++m)
+          {
+            if (_usable_flag_arr[m] == false) continue;
+            sumsads += ArrSADs[l][m];
+          }
+
+          VectMinSumSADs[l] = sumsads;
+        }
+
+        int minsumsads = 10e10; // big value ??
+        for (int idx = 0; idx < _trad * 2; ++idx)
+        {
+          if (_usable_flag_arr[idx] && (VectMinSumSADs[idx] < minsumsads))
+          {
+            minsumsads = VectMinSumSADs[idx];
+            idx_minsad = idx;
+          }
+        }
+
+        for (int idx = 0; idx < _trad * 2; ++idx)
+          bVectIncludedBlocks[idx] = false; // first put out of additional weighting all blocks
+
+        // check if minsad-indexed block of the tr-scope pool within thSAD range of current block
+        const sad_t block_sad = _mv_clip_arr[idx_minsad]._clip_sptr->GetBlock(0, i).GetSAD();
+        if ((block_sad < ((float)(_mv_clip_arr[idx_minsad]._thsad) * fMaxSecondMidSADcoeff))) // may be better use 0-idx ?
+        {
+          for (int idx = 0; idx < _trad * 2; ++idx)
+          {
+            // check if current ref block within thSAD range of idx_minsad block 
+            if (ArrSADs[idx_minsad][idx] < ((float)(_mv_clip_arr[idx]._thsad)* fMaxSecondMidSADcoeff) && _usable_flag_arr[idx])
+            {
+              // check if current block excluded from primary weighting and fall into secondary weighting thSAD-range
+              const sad_t block_sad2 = _mv_clip_arr[idx]._clip_sptr->GetBlock(0, i).GetSAD();
+              int ithSAD = _mv_clip_arr[idx]._thsad;
+              if ((block_sad2 > ithSAD) && (block_sad2 < ithSAD * iMaxSecondSADcoeff))
+              {
+                bVectIncludedBlocks[idx] = true;
+              }
+            }
+          }
+        }
+      }
 
       for (int k = 0; k < _trad * 2; ++k)
       {
@@ -1598,18 +1652,18 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
           _src_pitch_arr[0]
         );
 
-        //debug block sad view
-        const FakeBlockData & block_dbg = _mv_clip_arr[k]._clip_sptr->GetBlock(0, i);
-        const sad_t block_sad_dbg = block_dbg.GetSAD();
-        int thsad_dbg = _mv_clip_arr[k]._thsad;
-
         // add block to proc if even it not pass current sad check:
-//        if (weight_arr[k + 1] == 0 && bVectIncludedBlocks[k]) // or k+1 ?
-        if (bVectIncludedBlocks[k] == true) // or k+1 ?
+        if (bVectIncludedBlocks[k] == true && bUseBlockInSecondarySearch) 
         {
-          if (block_sad_dbg > (thsad_dbg * 2))
+
+#ifdef _DEBUG
+          //debug block sad view
+          const sad_t block_sad_dbg = _mv_clip_arr[k]._clip_sptr->GetBlock(0, i).GetSAD();
+          int thsad_dbg = _mv_clip_arr[k]._thsad;
+
+          if (block_sad_dbg > (thsad_dbg * iMaxSecondSADcoeff))
           {
-           // int idbr = 0;
+            int idbr = 0;
             continue; // do not add ?
           }
 
@@ -1618,12 +1672,13 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
             int idbr = 0;
           }
 
+          numofAddWeightedBlocks++;
+#endif
 
-//          weight_arr[k + 1] = 255; // apply weight weighting ?
-        }
+            //weight_arr[k + 1] = 255; // apply weight weighting ? k+1 - correct
+            weight_arr[k + 1] = DegrainWeightN_Add(_mv_clip_arr[k]._thsad * iMaxSecondSADcoeff, _mv_clip_arr[k]._clip_sptr->GetBlock(0, i).GetSAD(), _wpow);
 
-//        if (bVectIncludedBlocks[k] == false)
-//          weight_arr[k + 1] = 0; // skip proc
+        } 
       }
 
       norm_weights(weight_arr, _trad);
@@ -1680,6 +1735,15 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       }
     }
   }	// for by
+
+#ifdef _DEBUG
+  int iTotalBlocks = nBlkX * nBlkY * _trad * 2;
+
+  float fPercAddW = (float)numofAddWeightedBlocks / (float)iTotalBlocks;
+  fPercAddW *= 100;
+  fPercAddW++;
+
+#endif
 }
 
 
@@ -2176,6 +2240,29 @@ MV_FORCEINLINE int DegrainWeightN(int thSAD, double thSAD_pow, int blockSAD, int
   for (int i = 0; i < wpow - 1; i++)
   {
     blockSAD_pow *= blockSAD;
+  }
+
+  // float is approximately only 24 bit precise, use double
+  return (int)((double)(1 << DEGRAIN_WEIGHT_BITS) * (thSAD_pow - blockSAD_pow) / (thSAD_pow + blockSAD_pow));
+
+}
+
+MV_FORCEINLINE int DegrainWeightN_Add(int thSAD, int blockSAD, int wpow)
+{
+  // Returning directly prevents a divide by 0 if thSAD == blockSAD == 0.
+  // keep integer comparison for speed
+  if (thSAD <= blockSAD)
+    return 0;
+
+  if (wpow > 6) return (int)(1 << DEGRAIN_WEIGHT_BITS); // if 7  - equal weights version - fast return, max speed
+
+  double blockSAD_pow = blockSAD;
+  double thSAD_pow = thSAD;
+
+  for (int i = 0; i < wpow - 1; i++)
+  {
+    blockSAD_pow *= blockSAD;
+    thSAD_pow *= thSAD_pow;
   }
 
   // float is approximately only 24 bit precise, use double

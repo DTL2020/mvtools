@@ -213,6 +213,7 @@ private:
 };
 
 MV_FORCEINLINE int DegrainWeightN(int thSAD, double thSAD_pow, int blockSAD, int wpow);
+MV_FORCEINLINE int DegrainWeightN_Add(int thSAD, int blockSAD, int wpow);
 
 
 #endif
