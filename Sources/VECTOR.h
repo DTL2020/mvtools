@@ -22,6 +22,8 @@
 
 #include "types.h"
 
+
+
 #pragma pack (push, 16)
 
 struct VECTOR
@@ -38,6 +40,21 @@ struct VECTOR
   sad_t sad;
 };
 
+/*
+struct VECTOR // for block size 8x8 better to use 16bit values - runs a bit faster, sizeof(VECTOR) is 6 bytes vs 12.
+{
+  union
+  {
+    struct
+    {
+      short x;
+      short y;
+    };
+  };
+  unsigned short sad;
+};
+
+*/
 #pragma pack (pop)
 
 

@@ -53,6 +53,27 @@ class DCTClass;
 class MVClip;
 class MVFrame;
 
+/////////////////////
+// test MVVector
+template <class T>
+class  MVVector
+{
+public:
+
+  typedef T * iterator;
+
+  MVVector();
+  MVVector(size_t size, BYTE *pVectBuf);
+  size_t size() const;
+
+  T & operator[](size_t index);
+
+private:
+  size_t my_size;
+  T * buffer;
+};
+
+
 
 
 // v2.5.13.1: This class is currently a bit messy,
@@ -71,7 +92,7 @@ public:
   PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int _nFlags, int _nOverlapX, int _nOverlapY,
     int _xRatioUV, int _yRatioUV, int _pixelsize, int _bits_per_pixel,
     conc::ObjPool <DCTClass> *dct_pool_ptr,
-    bool mt_flag, int _chromaSADscale, int _optSearchOption,
+    bool mt_flag, int _chromaSADscale, int _optSearchOption, BYTE * pVectBuf,
   IScriptEnvironment* env);
 
   ~PlaneOfBlocks();
@@ -89,7 +110,8 @@ public:
 
     /* compute the predictors from the upper plane */
   template<typename safe_sad_t, typename smallOverlapSafeSad_t>
-  void InterpolatePrediction(const PlaneOfBlocks &pob);
+//  void InterpolatePrediction(const PlaneOfBlocks &pob);
+  void InterpolatePrediction(PlaneOfBlocks &pob); // need to found why MVVector fails with 'const' - may be add some const operator[] ??? still do not know how
 
 
   void WriteHeaderToArray(int *array);
@@ -153,8 +175,9 @@ private:
   ExhaustiveSearchFunction_t get_ExhaustiveSearchFunction(int BlockX, int BlockY, int SearchParam, int bits_per_pixel, arch_t arch);
   ExhaustiveSearchFunction_t ExhaustiveSearchFunctions[MAX_SUPPORTED_EXH_SEARCHPARAM + 1]; // the function pointer
 
-  std::vector <VECTOR>              /* motion vectors of the blocks */
-    vectors;           /* before the search, contains the hierachal predictor */
+  // std::vector <VECTOR>              /* motion vectors of the blocks */   
+  //  vectors;           /* before the search, contains the hierachal predictor */
+  MVVector <VECTOR> vectors;
                        /* after the search, contains the best motion vector */
 
   bool           smallestPlane;     /* say whether vectors can use predictors from a smaller plane */
@@ -285,7 +308,8 @@ private:
     WorkingArea(int nBlkSizeX, int nBlkSizeY, int dctpitch, int nLogxRatioUV, int nLogyRatioUV, int pixelsize, int bits_per_pixel);
     virtual			~WorkingArea();
 
-    MV_FORCEINLINE bool IsVectorOK(int vx, int vy) const;
+//    MV_FORCEINLINE bool IsVectorOK(int vx, int vy) const;
+    bool IsVectorOK(int vx, int vy) const; // intel compiler ??
     template<typename pixel_t>
     sad_t MotionDistorsion(int vx, int vy) const; // this one is better not forceinlined
   };
@@ -384,7 +408,8 @@ private:
   void UMHSearch(WorkingArea &workarea, int i_me_range, int omx, int omy);
 
   /* inline functions */
-  MV_FORCEINLINE const uint8_t *GetRefBlock(WorkingArea &workarea, int nVx, int nVy);
+  //MV_FORCEINLINE const uint8_t *GetRefBlock(WorkingArea &workarea, int nVx, int nVy);
+  const uint8_t* GetRefBlock(WorkingArea& workarea, int nVx, int nVy); // intel compiler ??
   MV_FORCEINLINE const uint8_t *GetRefBlockU(WorkingArea &workarea, int nVx, int nVy);
   MV_FORCEINLINE const uint8_t *GetRefBlockV(WorkingArea &workarea, int nVx, int nVy);
   MV_FORCEINLINE const uint8_t *GetSrcBlock(int nX, int nY);
