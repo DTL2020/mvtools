@@ -335,6 +335,7 @@ MVRecalculate::MVRecalculate(
     _mt_flag,
     analysisData.chromaSADScale,
     _optSearchOption,
+    0,
     env
   ));
 
