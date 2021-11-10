@@ -96,39 +96,43 @@ MVAnalyse::MVAnalyse(
     env->ThrowError("MAnalyse: parameter 'optPredictorType' must be 0, 1 or 2");
   }
 
+#ifdef _WIN32
   // large pages priv:
   DWORD error;
   HANDLE hToken = NULL;
   TOKEN_PRIVILEGES tp;
+  BOOL result;
 
-  // Enable this priveledge for the current process
-  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken))
+  // Enable Lock pages in memory priveledge for the current process
+  if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken))
   {
-    env->ThrowError("LargePages: Can not open process token");
-    return;
+    tp.PrivilegeCount = 1;
+    tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+
+    if (LookupPrivilegeValue(NULL, SE_LOCK_MEMORY_NAME, &tp.Privileges[0].Luid))
+    {
+      result = AdjustTokenPrivileges(hToken, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
+      error = GetLastError();
+
+      if (!result || (error != ERROR_SUCCESS))
+      {
+//        env->ThrowError("LargePages: AdjustTokenPrivileges failed.");
+      }
+    }
+    else
+    {
+//      env->ThrowError("LargePages: LookupPrivilegeValue failed.");
+    }
   }
-
-  tp.PrivilegeCount = 1;
-  tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-
-  if (!LookupPrivilegeValue(NULL, SE_LOCK_MEMORY_NAME, &tp.Privileges[0].Luid))
+  else
   {
-    env->ThrowError("LargePages: LookupPrivilegeValue failed.");
-    return;
-  }
-
-  BOOL result = AdjustTokenPrivileges(hToken, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
-  error = GetLastError();
-
-  if (!result || (error != ERROR_SUCCESS))
-  {
-    env->ThrowError("LargePages: AdjustTokenPrivileges failed.");
-    return;
+    // env->ThrowError("LargePages: Can not open process token"); // do not bug user with stop processing errors ???
   }
 
   // Cleanup
-  CloseHandle(hToken);
+  if (hToken != 0) CloseHandle(hToken);
   hToken = NULL;
+#endif
 
   if (vi.IsY())
     chroma = false; // silent fallback
@@ -281,25 +285,6 @@ MVAnalyse::MVAnalyse(
   analysisData.nBlkX = nBlkX;
   analysisData.nBlkY = nBlkY;
 
-  // large pages - may be make user-option to try large page allocations
-  SIZE_T stLPGranularity = GetLargePageMinimum();
-  size_t iNumLPUnits = ((nBlkX * nBlkY * sizeof(VECTOR)) / stLPGranularity) + 1; 
-  SIZE_T stSizeToAlloc = iNumLPUnits * stLPGranularity;
-  pVectBuf = (BYTE*)VirtualAlloc(0, stSizeToAlloc, MEM_LARGE_PAGES | MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-  error = GetLastError();
-
-  if (error != ERROR_SUCCESS)
-    env->ThrowError("LargePages alloc error. While allocating %d pages of %d size, GetLastError returned: %d\n", iNumLPUnits, stLPGranularity, error);
-  
-
-  /*
-  // standart pages
-  pVectBuf = (BYTE*)VirtualAlloc(0, nBlkX * nBlkY * sizeof(VECTOR), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-  error = GetLastError();
-
-  if (error != ERROR_SUCCESS)
-    env->ThrowError("MVAnalyse VirtualAlloc error. While allocating pVectBuf, GetLastError returned: %d\n", error);
-    */
   const int		nWidth_B =
     (analysisData.nBlkSizeX - analysisData.nOverlapX) * nBlkX
     + analysisData.nOverlapX; // covered by blocks
@@ -317,6 +302,8 @@ MVAnalyse::MVAnalyse(
   {
     ++nLevelsMax;
   }
+
+  nLevelsMax = 2;
 
   analysisData.nLvCount = (lv > 0) ? lv : nLevelsMax + lv;
   if (analysisData.nLvCount > nSuperLevels)
@@ -442,7 +429,6 @@ MVAnalyse::MVAnalyse(
     _mt_flag,
     analysisData.chromaSADScale,
     optSearchOption,
-    pVectBuf,
     env
   ));
 
@@ -573,8 +559,6 @@ MVAnalyse::~MVAnalyse()
     delete[] outfilebuf;
     outfilebuf = 0;
   }
-
-  if (pVectBuf) VirtualFree(pVectBuf, 0, MEM_RELEASE);
 
   delete pSrcGOF;
   pSrcGOF = 0;

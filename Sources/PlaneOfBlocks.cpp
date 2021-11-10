@@ -54,7 +54,7 @@ static unsigned int SadDummy(const uint8_t *, int , const uint8_t *, int )
 PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int _nFlags, int _nOverlapX, int _nOverlapY,
   int _xRatioUV, int _yRatioUV, int _pixelsize, int _bits_per_pixel,
   conc::ObjPool <DCTClass> *dct_pool_ptr,
-  bool mt_flag, int _chromaSADscale, int _optSearchOption, BYTE *pVectBuf,
+  bool mt_flag, int _chromaSADscale, int _optSearchOption,
   IScriptEnvironment* env)
   : nBlkX(_nBlkX)
   , nBlkY(_nBlkY)
@@ -64,8 +64,8 @@ PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSi
   , nBlkCount(_nBlkX * _nBlkY)
   , nPel(_nPel)
   , nLogPel(ilog2(_nPel))	// nLogPel=0 for nPel=1, 1 for nPel=2, 2 for nPel=4, i.e. (x*nPel) = (x<<nLogPel)
-  , nLogScale(_nLevel)
   , nScale(iexp2(_nLevel))
+  , nLogScale(_nLevel)
   , nFlags(_nFlags)
   , nOverlapX(_nOverlapX)
   , nOverlapY(_nOverlapY)
@@ -86,15 +86,15 @@ PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSi
   , BLITCHROMA(0)
   , SADCHROMA(0)
   , SATD(0)
-  , vectors(nBlkCount, pVectBuf)
 //  , vectors(nBlkCount)
+, vectors(nBlkCount, env)
   , smallestPlane((_nFlags & MOTION_SMALLEST_PLANE) != 0)
   , isse((_nFlags & MOTION_USE_ISSE) != 0)
   , chroma((_nFlags & MOTION_USE_CHROMA_MOTION) != 0)
   , dctpitch(AlignNumber(_nBlkSizeX, 16) * _pixelsize)
   , _dct_pool_ptr(dct_pool_ptr)
-  , verybigSAD(3 * _nBlkSizeX * _nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
   , freqArray()
+  , verybigSAD(3 * _nBlkSizeX * _nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
   , dctmode(0)
   , _workarea_fact(nBlkSizeX, nBlkSizeY, dctpitch, nLogxRatioUV, nLogyRatioUV, pixelsize, bits_per_pixel)
   , _workarea_pool()
@@ -142,7 +142,7 @@ PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSi
   //	globalMVPredictor.y = zeroMV.y;
   //	globalMVPredictor.sad = zeroMV.sad;
 
-  memset(&vectors[0], 0, vectors.size() * sizeof(vectors[0]));
+//  memset(&vectors[0], 0, vectors.size() * sizeof(vectors[0])); - std::vector self-cleaning on init and VirtualAlloc in Win for MVVector return zeroed buffer ???
 
   // function's pointers 
   // Sad_C: SadFunction.cpp
@@ -508,7 +508,7 @@ void PlaneOfBlocks::RecalculateMVs(
 
 template<typename safe_sad_t, typename smallOverlapSafeSad_t>
 //void PlaneOfBlocks::InterpolatePrediction(const PlaneOfBlocks &pob)
-void PlaneOfBlocks::InterpolatePrediction(PlaneOfBlocks &pob)
+void PlaneOfBlocks::InterpolatePrediction(PlaneOfBlocks& pob)
 {
   int normFactor = 3 - nLogPel + pob.nLogPel;
   int mulFactor = (normFactor < 0) ? -normFactor : 0;
@@ -633,16 +633,17 @@ void PlaneOfBlocks::InterpolatePrediction(PlaneOfBlocks &pob)
   }	// for l < nBlkY
 }
 
-// instantiate
 /*
+// instantiate
 template void PlaneOfBlocks::InterpolatePrediction<sad_t, sad_t>(const PlaneOfBlocks &pob);
 template void PlaneOfBlocks::InterpolatePrediction<sad_t, bigsad_t>(const PlaneOfBlocks &pob);
 template void PlaneOfBlocks::InterpolatePrediction<bigsad_t, bigsad_t>(const PlaneOfBlocks &pob);
 */
+// instantiate
+template void PlaneOfBlocks::InterpolatePrediction<sad_t, sad_t>(PlaneOfBlocks& pob);
+template void PlaneOfBlocks::InterpolatePrediction<sad_t, bigsad_t>(PlaneOfBlocks& pob);
+template void PlaneOfBlocks::InterpolatePrediction<bigsad_t, bigsad_t>(PlaneOfBlocks& pob);
 
-template void PlaneOfBlocks::InterpolatePrediction<sad_t, sad_t>(PlaneOfBlocks &pob);
-template void PlaneOfBlocks::InterpolatePrediction<sad_t, bigsad_t>(PlaneOfBlocks &pob);
-template void PlaneOfBlocks::InterpolatePrediction<bigsad_t, bigsad_t>(PlaneOfBlocks &pob);
 
 
 void PlaneOfBlocks::WriteHeaderToArray(int *array)
@@ -2615,42 +2616,6 @@ void	PlaneOfBlocks::estimate_global_mv_doubled_slice(Slicer::TaskData &td)
 
 //----------------------------------------------------------------
 
-
-
-/* fetch the block in the reference frame, which is pointed by the vector (vx, vy) */
-//MV_FORCEINLINE const uint8_t *	PlaneOfBlocks::GetRefBlock(WorkingArea &workarea, int nVx, int nVy)
-const uint8_t* PlaneOfBlocks::GetRefBlock(WorkingArea& workarea, int nVx, int nVy) // intel compiler ??
-{
-  //	return pRefFrame->GetPlane(YPLANE)->GetAbsolutePointer((workarea.x[0]<<nLogPel) + nVx, (workarea.y[0]<<nLogPel) + nVy);
-  return (nPel == 2) ? pRefFrame->GetPlane(YPLANE)->GetAbsolutePointerPel <1>((workarea.x[0] << 1) + nVx, (workarea.y[0] << 1) + nVy) :
-    (nPel == 1) ? pRefFrame->GetPlane(YPLANE)->GetAbsolutePointerPel <0>((workarea.x[0]) + nVx, (workarea.y[0]) + nVy) :
-    pRefFrame->GetPlane(YPLANE)->GetAbsolutePointerPel <2>((workarea.x[0] << 2) + nVx, (workarea.y[0] << 2) + nVy);
-}
-
-MV_FORCEINLINE const uint8_t *	PlaneOfBlocks::GetRefBlockU(WorkingArea &workarea, int nVx, int nVy)
-{
-  //	return pRefFrame->GetPlane(UPLANE)->GetAbsolutePointer((workarea.x[1]<<nLogPel) + (nVx >> 1), (workarea.y[1]<<nLogPel) + (yRatioUV==1 ? nVy : nVy>>1) ); //v.1.2.1
-  // 161130 bitshifts instead of ternary operator
-  return (nPel == 2) ? pRefFrame->GetPlane(UPLANE)->GetAbsolutePointerPel <1>((workarea.x[1] << 1) + (nVx >> nLogxRatioUV), (workarea.y[1] << 1) + (nVy >> nLogyRatioUV)) :
-    (nPel == 1) ? pRefFrame->GetPlane(UPLANE)->GetAbsolutePointerPel <0>((workarea.x[1]) + (nVx >> nLogxRatioUV), (workarea.y[1]) + (nVy >> nLogyRatioUV)) :
-    pRefFrame->GetPlane(UPLANE)->GetAbsolutePointerPel <2>((workarea.x[1] << 2) + (nVx >> nLogxRatioUV), (workarea.y[1] << 2) + (nVy >> nLogyRatioUV));
-  // xRatioUV fix after 2.7.0.22c
-}
-
-MV_FORCEINLINE const uint8_t *	PlaneOfBlocks::GetRefBlockV(WorkingArea &workarea, int nVx, int nVy)
-{
-  //	return pRefFrame->GetPlane(VPLANE)->GetAbsolutePointer((workarea.x[2]<<nLogPel) + (nVx >> 1), (workarea.y[2]<<nLogPel) + (yRatioUV==1 ? nVy : nVy>>1) );
-  return (nPel == 2) ? pRefFrame->GetPlane(VPLANE)->GetAbsolutePointerPel <1>((workarea.x[2] << 1) + (nVx >> nLogxRatioUV), (workarea.y[2] << 1) + (nVy >> nLogyRatioUV)) :
-    (nPel == 1) ? pRefFrame->GetPlane(VPLANE)->GetAbsolutePointerPel <0>((workarea.x[2]) + (nVx >> nLogxRatioUV), (workarea.y[2]) + (nVy >> nLogyRatioUV)) :
-    pRefFrame->GetPlane(VPLANE)->GetAbsolutePointerPel <2>((workarea.x[2] << 2) + (nVx >> nLogxRatioUV), (workarea.y[2] << 2) + (nVy >> nLogyRatioUV));
-  // xRatioUV fix after 2.7.0.22c
-}
-
-MV_FORCEINLINE const uint8_t *	PlaneOfBlocks::GetSrcBlock(int nX, int nY)
-{
-  return pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(nX, nY);
-}
-
 template<typename pixel_t>
 sad_t PlaneOfBlocks::LumaSADx(WorkingArea &workarea, const unsigned char *pRef0)
 {
@@ -3733,20 +3698,6 @@ PlaneOfBlocks::WorkingArea::~WorkingArea()
 }
 
 
-
-
-/* check if a vector is inside search boundaries */
-//MV_FORCEINLINE bool	PlaneOfBlocks::WorkingArea::IsVectorOK(int vx, int vy) const
-bool	PlaneOfBlocks::WorkingArea::IsVectorOK(int vx, int vy) const // intel compiler ??
-{
-  return (
-    (vx >= nDxMin)
-    && (vy >= nDyMin)
-    && (vx < nDxMax)
-    && (vy < nDyMax)
-    );
-}
-
 /* computes the cost of a vector (vx, vy) */
 template<typename pixel_t>
 MV_FORCEINLINE sad_t PlaneOfBlocks::WorkingArea::MotionDistorsion(int vx, int vy) const
@@ -3822,8 +3773,11 @@ PlaneOfBlocks::ExhaustiveSearchFunction_t PlaneOfBlocks::get_ExhaustiveSearchFun
 
   // SearchParam 1 or 2 or 4 is supported at the moment
   func_fn[std::make_tuple(8, 8, 1, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp1_avx2;
+  func_fn[std::make_tuple(8, 8, 1, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp1_c;
   func_fn[std::make_tuple(8, 8, 2, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp2_avx2;
   func_fn[std::make_tuple(8, 8, 2, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp2_c;
+  func_fn[std::make_tuple(8, 8, 3, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp3_avx2;
+  func_fn[std::make_tuple(8, 8, 3, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp3_c;
   func_fn[std::make_tuple(8, 8, 4, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp4_avx2;
   func_fn[std::make_tuple(8, 8, 4, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c;
 
@@ -3844,8 +3798,6 @@ PlaneOfBlocks::ExhaustiveSearchFunction_t PlaneOfBlocks::get_ExhaustiveSearchFun
 }
 
 
-
-
 void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int mvx, int mvy) // 8x8 esa search radius 4
 {
   // debug check !
@@ -3854,7 +3806,7 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int m
   {
     return;
   }
-  if (!workarea.IsVectorOK(mvx + 3, mvy + 4))
+  if (!workarea.IsVectorOK(mvx + 3, mvy + 4)) // 8 positions only so -4..+3.
   {
     return;
   }
@@ -3870,9 +3822,9 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int m
   unsigned short minsad = 65535;
   int x_minsad = 0;
   int y_minsad = 0;
-  for (int x = -4; x < 4; x++)
+  for (int y = 3; y > -5; y--) // reversed scan to match _mm_minpos() logic ?
   {
-    for (int y = -4; y < 5; y++)
+    for (int x = 4; x > -5; x--)
     {
       int sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlock(workarea, mvx + x, mvy + y), nRefPitch[0]);
       if (sad < minsad)
@@ -3895,6 +3847,47 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int m
 }
 
 // Dispatcher for DTL tests
+void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp3_c(WorkingArea& workarea, int mvx, int mvy) // 8x8 esa search radius 3,  works for any nPel !.
+{
+  // debug check !
+  // idea - may be not 4 checks are required - only upper left corner (starting addresses of buffer) and lower right (to not over-run atfer end of buffer - need check/test)
+  if (!workarea.IsVectorOK(mvx - 3, mvy - 3))
+  {
+    return;
+  }
+  if (!workarea.IsVectorOK(mvx + 3, mvy + 3))
+  {
+    return;
+  }
+
+  unsigned short minsad = 65535;
+  int x_minsad = 0;
+  int y_minsad = 0;
+  for (int y = 3; y > -4; y--)
+  {
+    for (int x = 3; x > -4; x--)
+    {
+      int sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlock(workarea, mvx + x, mvy + y), nRefPitch[0]);
+      if (sad < minsad)
+      {
+        minsad = sad;
+        x_minsad = x;
+        y_minsad = y;
+      }
+    }
+  }
+
+  sad_t cost = minsad + ((penaltyNew * minsad) >> 8);
+  if (cost >= workarea.nMinCost) return;
+
+  workarea.bestMV.x = mvx + x_minsad;
+  workarea.bestMV.y = mvy + y_minsad;
+  workarea.nMinCost = cost;
+  workarea.bestMV.sad = minsad;
+
+}
+
+
 void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy) // 8x8 esa search radius 2,  works for any nPel !.
 {
   // debug check !
@@ -3911,9 +3904,9 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int m
   unsigned short minsad = 65535;
   int x_minsad = 0;
   int y_minsad = 0;
-  for (int y = -2; y < 3; y++)
+  for (int y = 2; y > -3; y--)
   {
-    for (int x = -2; x < 3; x++)
+    for (int x = 2; x > -3; x--)
     {
       int sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlock(workarea, mvx + x, mvy + y), nRefPitch[0]);
       if (sad < minsad)
@@ -3951,9 +3944,9 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp1_c(WorkingArea& workarea, int m
   unsigned short minsad = 65535;
   int x_minsad = 0;
   int y_minsad = 0;
-  for (int y = -1; y < 2; y++)
+  for (int y = 1; y > -2; y--)
   {
-    for (int x = -1; x < 2; x++)
+    for (int x = 1; x > -2; x--)
     {
       int sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlock(workarea, mvx + x, mvy + y), nRefPitch[0]);
       if (sad < minsad)
@@ -3975,8 +3968,6 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp1_c(WorkingArea& workarea, int m
 
 }
 
-
-/////////////////////////////////
 // MV_Vector
 template<class T>
 MVVector<T>::MVVector()
@@ -3986,11 +3977,49 @@ MVVector<T>::MVVector()
 }
 
 template<class T>
-MVVector<T>::MVVector(size_t size, BYTE* pVectBuf)
+MVVector<T>::~MVVector()
+{
+  my_size = 0;
+  buffer = 0;
+#ifdef _WIN32
+  VirtualFree(buffer, 0, MEM_RELEASE);
+#else
+  delete[]buffer;
+#endif
+}
+
+
+template<class T>
+MVVector<T>::MVVector(size_t size, IScriptEnvironment* env)
 {
   my_size = size;
+#ifdef _WIN32
+  DWORD error;
+  // large pages - allocate if possible, if error - silent fallback to standard 4kB pages
+  SIZE_T stLPGranularity = GetLargePageMinimum();
+  SIZE_T NumLPUnits = ((size * sizeof(VECTOR)) / stLPGranularity) + 1;
+  SIZE_T stSizeToAlloc = NumLPUnits * stLPGranularity; 
+  buffer = (T*)VirtualAlloc(0, stSizeToAlloc, MEM_LARGE_PAGES | MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+  error = GetLastError();
 
-  buffer = (T*)pVectBuf; // MVRecalculate need also allocate mem and provide valid pointer !!!
+  if (buffer == 0 && error != ERROR_SUCCESS)
+  {
+    // may be enable in debug ?
+//    env->ThrowError("MVVector LargePages alloc error. While allocating %d pages of %d size, GetLastError returned: %d\n", NumLPUnits, stLPGranularity, error);
+    // standart 4kB pages
+    buffer = (T*)VirtualAlloc(0, size * sizeof(VECTOR), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    error = GetLastError();
+
+    if (buffer == 0 && error != ERROR_SUCCESS)
+    {
+      // major error - need to break
+      env->ThrowError("MVVector VirtualAlloc 4 kB pages alloc error. GetLastError returned: %d\n", error);
+    }
+  }
+
+#else //Linux ?
+  buffer = new T[size];
+#endif
 }
 
 template<class T>
@@ -4000,7 +4029,8 @@ size_t MVVector<T>::size()const
 }
 
 template<class T>
-T& MVVector<T>::operator[](size_t index)
+T& MVVector<T>::operator[](size_t index) // need to add something for 'const' to make working 'const' version of InterpolatePredictors ?
 {
   return buffer[index];
 }
+

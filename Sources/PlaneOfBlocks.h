@@ -42,6 +42,9 @@
 #include "avisynth.h"
 #include <atomic>
 
+#include "MVFrame.h"
+#include "MVPlane.h"
+#include "MVPlaneSet.h"
 
 
 // right now 5 should be enough (TSchniede)
@@ -53,24 +56,25 @@ class DCTClass;
 class MVClip;
 class MVFrame;
 
-/////////////////////
-// test MVVector
+
+// MVVector
 template <class T>
 class  MVVector
 {
 public:
 
-  typedef T * iterator;
+  typedef T* iterator;
 
   MVVector();
-  MVVector(size_t size, BYTE *pVectBuf);
+  ~MVVector();
+  MVVector(size_t size, IScriptEnvironment* env);
   size_t size() const;
 
-  T & operator[](size_t index);
+  T& operator[](size_t index);
 
 private:
   size_t my_size;
-  T * buffer;
+  T* buffer;
 };
 
 
@@ -92,7 +96,7 @@ public:
   PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int _nFlags, int _nOverlapX, int _nOverlapY,
     int _xRatioUV, int _yRatioUV, int _pixelsize, int _bits_per_pixel,
     conc::ObjPool <DCTClass> *dct_pool_ptr,
-    bool mt_flag, int _chromaSADscale, int _optSearchOption, BYTE * pVectBuf,
+    bool mt_flag, int _chromaSADscale, int _optSearchOption,
   IScriptEnvironment* env);
 
   ~PlaneOfBlocks();
@@ -111,7 +115,7 @@ public:
     /* compute the predictors from the upper plane */
   template<typename safe_sad_t, typename smallOverlapSafeSad_t>
 //  void InterpolatePrediction(const PlaneOfBlocks &pob);
-  void InterpolatePrediction(PlaneOfBlocks &pob); // need to found why MVVector fails with 'const' - may be add some const operator[] ??? still do not know how
+  void InterpolatePrediction(PlaneOfBlocks& pob); // need to fix MVVector [] to able to work with 'const' version
 
 
   void WriteHeaderToArray(int *array);
@@ -175,10 +179,10 @@ private:
   ExhaustiveSearchFunction_t get_ExhaustiveSearchFunction(int BlockX, int BlockY, int SearchParam, int bits_per_pixel, arch_t arch);
   ExhaustiveSearchFunction_t ExhaustiveSearchFunctions[MAX_SUPPORTED_EXH_SEARCHPARAM + 1]; // the function pointer
 
-  // std::vector <VECTOR>              /* motion vectors of the blocks */   
-  //  vectors;           /* before the search, contains the hierachal predictor */
-  MVVector <VECTOR> vectors;
+//  std::vector <VECTOR>              /* motion vectors of the blocks */
+//    vectors;           /* before the search, contains the hierachal predictor */
                        /* after the search, contains the best motion vector */
+  MVVector <VECTOR> vectors;
 
   bool           smallestPlane;     /* say whether vectors can use predictors from a smaller plane */
   bool           isse;              /* can we use isse asm code */
@@ -194,8 +198,7 @@ private:
   conc::ObjPool <DCTClass> *		// Set to 0 if not used
     _dct_pool_ptr;
 
-  // fixme: probably no need fot conc::Array
-  conc::Array <std::vector <int>, 2>
+  std::array <std::vector <int>, 2>
     freqArray; // temporary array for global motion estimaton [x|y][value]
 
   sad_t verybigSAD;
@@ -308,8 +311,18 @@ private:
     WorkingArea(int nBlkSizeX, int nBlkSizeY, int dctpitch, int nLogxRatioUV, int nLogyRatioUV, int pixelsize, int bits_per_pixel);
     virtual			~WorkingArea();
 
-//    MV_FORCEINLINE bool IsVectorOK(int vx, int vy) const;
-    bool IsVectorOK(int vx, int vy) const; // intel compiler ??
+    /* check if a vector is inside search boundaries */
+    // Moved here from cpp in order to able to inlined from other modules (gcc error)
+    MV_FORCEINLINE bool IsVectorOK(int vx, int vy) const
+    {
+      return (
+        (vx >= nDxMin)
+        && (vy >= nDyMin)
+        && (vx < nDxMax)
+        && (vy < nDyMax)
+        );
+    }
+
     template<typename pixel_t>
     sad_t MotionDistorsion(int vx, int vy) const; // this one is better not forceinlined
   };
@@ -386,11 +399,6 @@ private:
   void ExpandingSearch(WorkingArea &workarea, int radius, int step, int mvx, int mvy); // diameter = 2*radius + 1
 
   // DTL test function, 8x8 block, 8 bit only
-  // 8x8 esa search radius 4
-  void ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int mvx, int mvy);
-  void ExhaustiveSearch8x8_uint8_np1_sp4_avx2(WorkingArea& workarea, int mvx, int mvy);
-  //void ExhaustiveSearch8x8_uint8_sp4_avx2_2(WorkingArea& workarea, int mvx, int mvy);
-
   // 8x8 esa search radius 1
   void ExhaustiveSearch8x8_uint8_sp1_c(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy);
@@ -398,6 +406,14 @@ private:
   // 8x8 esa search radius 2
   void ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
+
+  // 8x8 esa search radius 3
+  void ExhaustiveSearch8x8_uint8_sp3_c(WorkingArea& workarea, int mvx, int mvy);
+  void ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea, int mvx, int mvy);
+
+  // 8x8 esa search radius 4
+  void ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int mvx, int mvy);
+  void ExhaustiveSearch8x8_uint8_np1_sp4_avx2(WorkingArea& workarea, int mvx, int mvy);
   // END OF DTL test function
 
   template<typename pixel_t>
@@ -408,11 +424,37 @@ private:
   void UMHSearch(WorkingArea &workarea, int i_me_range, int omx, int omy);
 
   /* inline functions */
-  //MV_FORCEINLINE const uint8_t *GetRefBlock(WorkingArea &workarea, int nVx, int nVy);
-  const uint8_t* GetRefBlock(WorkingArea& workarea, int nVx, int nVy); // intel compiler ??
-  MV_FORCEINLINE const uint8_t *GetRefBlockU(WorkingArea &workarea, int nVx, int nVy);
-  MV_FORCEINLINE const uint8_t *GetRefBlockV(WorkingArea &workarea, int nVx, int nVy);
-  MV_FORCEINLINE const uint8_t *GetSrcBlock(int nX, int nY);
+
+  /* fetch the block in the reference frame, which is pointed by the vector (vx, vy) */
+  // moved here from cpp in order to able to inline from other (e.g. _avx2) cpps (gcc error)
+  MV_FORCEINLINE const uint8_t* GetRefBlock(WorkingArea& workarea, int nVx, int nVy) {
+    return
+      (nPel == 2) ? pRefFrame->GetPlane(YPLANE)->GetAbsolutePointerPel <1>((workarea.x[0] << 1) + nVx, (workarea.y[0] << 1) + nVy) :
+      (nPel == 1) ? pRefFrame->GetPlane(YPLANE)->GetAbsolutePointerPel <0>((workarea.x[0]) + nVx, (workarea.y[0]) + nVy) :
+      pRefFrame->GetPlane(YPLANE)->GetAbsolutePointerPel <2>((workarea.x[0] << 2) + nVx, (workarea.y[0] << 2) + nVy);
+  }
+
+  MV_FORCEINLINE const uint8_t* GetRefBlockU(WorkingArea& workarea, int nVx, int nVy)
+  {
+    return
+      (nPel == 2) ? pRefFrame->GetPlane(UPLANE)->GetAbsolutePointerPel <1>((workarea.x[1] << 1) + (nVx >> nLogxRatioUV), (workarea.y[1] << 1) + (nVy >> nLogyRatioUV)) :
+      (nPel == 1) ? pRefFrame->GetPlane(UPLANE)->GetAbsolutePointerPel <0>((workarea.x[1]) + (nVx >> nLogxRatioUV), (workarea.y[1]) + (nVy >> nLogyRatioUV)) :
+      pRefFrame->GetPlane(UPLANE)->GetAbsolutePointerPel <2>((workarea.x[1] << 2) + (nVx >> nLogxRatioUV), (workarea.y[1] << 2) + (nVy >> nLogyRatioUV));
+  }
+
+  MV_FORCEINLINE const uint8_t* GetRefBlockV(WorkingArea& workarea, int nVx, int nVy)
+  {
+    return
+      (nPel == 2) ? pRefFrame->GetPlane(VPLANE)->GetAbsolutePointerPel <1>((workarea.x[2] << 1) + (nVx >> nLogxRatioUV), (workarea.y[2] << 1) + (nVy >> nLogyRatioUV)) :
+      (nPel == 1) ? pRefFrame->GetPlane(VPLANE)->GetAbsolutePointerPel <0>((workarea.x[2]) + (nVx >> nLogxRatioUV), (workarea.y[2]) + (nVy >> nLogyRatioUV)) :
+      pRefFrame->GetPlane(VPLANE)->GetAbsolutePointerPel <2>((workarea.x[2] << 2) + (nVx >> nLogxRatioUV), (workarea.y[2] << 2) + (nVy >> nLogyRatioUV));
+  }
+
+  MV_FORCEINLINE const uint8_t* GetSrcBlock(int nX, int nY)
+  {
+    return pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(nX, nY);
+  }
+
   //	MV_FORCEINLINE int LengthPenalty(int vx, int vy);
   template<typename pixel_t>
   sad_t LumaSADx(WorkingArea &workarea, const unsigned char *pRef0);
