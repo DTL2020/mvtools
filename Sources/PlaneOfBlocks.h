@@ -70,6 +70,8 @@ public:
   MVVector(size_t size, IScriptEnvironment* env);
   size_t size() const;
 
+  size_t size_bytes;
+
   T& operator[](size_t index);
 
 private:
@@ -179,8 +181,8 @@ private:
   ExhaustiveSearchFunction_t get_ExhaustiveSearchFunction(int BlockX, int BlockY, int SearchParam, int bits_per_pixel, arch_t arch);
   ExhaustiveSearchFunction_t ExhaustiveSearchFunctions[MAX_SUPPORTED_EXH_SEARCHPARAM + 1]; // the function pointer
 
-//  std::vector <VECTOR>              /* motion vectors of the blocks */
-//    vectors;           /* before the search, contains the hierachal predictor */
+ // std::vector <VECTOR>              /* motion vectors of the blocks */
+ //   vectors;           /* before the search, contains the hierachal predictor */
                        /* after the search, contains the best motion vector */
   MVVector <VECTOR> vectors;
 
@@ -461,7 +463,7 @@ private:
   template<typename pixel_t>
   MV_FORCEINLINE sad_t LumaSAD(WorkingArea &workarea, const unsigned char *pRef0);
   template<typename pixel_t>
-  MV_FORCEINLINE void CheckMV0(WorkingArea &workarea, int vx, int vy);
+  MV_FORCEINLINE void CheckMV0(WorkingArea& workarea, int vx, int vy);
   template<typename pixel_t>
   MV_FORCEINLINE void CheckMV(WorkingArea &workarea, int vx, int vy);
   template<typename pixel_t>

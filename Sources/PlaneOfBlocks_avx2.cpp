@@ -244,7 +244,7 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp4_avx2(WorkingArea& workarea
     unsigned int uiSADRes = _mm_cvtsi128_si32(_mm_minpos_epu16(_mm_load_si128(&Arr128iSADs[y])));
     if ((unsigned short)uiSADRes < minsad)
     {
-      minsad = uiSADRes;
+      minsad = (unsigned short)uiSADRes;
       idx_min_sad = 7 - (uiSADRes >> 16) + y * 8;
     }
   }
@@ -443,7 +443,7 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea
     unsigned int uiSADRes = _mm_cvtsi128_si32(_mm_minpos_epu16(_mm_load_si128(&Arr128iSADs[y])));
     if ((unsigned short)uiSADRes < minsad)
     {
-      minsad = uiSADRes;
+      minsad = (unsigned short)uiSADRes;
       idx_min_sad = 7 - (uiSADRes >> 16) + y * 7;
     }
   }

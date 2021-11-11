@@ -87,7 +87,7 @@ PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSi
   , SADCHROMA(0)
   , SATD(0)
 //  , vectors(nBlkCount)
-, vectors(nBlkCount, env)
+  , vectors(nBlkCount, env)
   , smallestPlane((_nFlags & MOTION_SMALLEST_PLANE) != 0)
   , isse((_nFlags & MOTION_USE_ISSE) != 0)
   , chroma((_nFlags & MOTION_USE_CHROMA_MOTION) != 0)
@@ -545,6 +545,8 @@ void PlaneOfBlocks::InterpolatePrediction(PlaneOfBlocks& pob)
 
   bool bNoOverlap = (nOverlapX == 0 && nOverlapY == 0);
   bool bSmallOverlap = nOverlapX <= (nBlkSizeX >> 1) && nOverlapY <= (nBlkSizeY >> 1);
+  
+  int iout_x, iout_y, iout_sad;
 
   for (int l = 0, index = 0; l < nBlkY; l++)
   {
@@ -595,8 +597,8 @@ void PlaneOfBlocks::InterpolatePrediction(PlaneOfBlocks& pob)
 
       if (bNoOverlap)
       {
-        vectors[index].x = 9 * v1.x + 3 * v2.x + 3 * v3.x + v4.x;
-        vectors[index].y = 9 * v1.y + 3 * v2.y + 3 * v3.y + v4.y;
+        iout_x = 9 * v1.x + 3 * v2.x + 3 * v3.x + v4.x;
+        iout_y = 9 * v1.y + 3 * v2.y + 3 * v3.y + v4.y;
         tmp_sad = 9 * (safe_sad_t)v1.sad + 3 * (safe_sad_t)v2.sad + 3 * (safe_sad_t)v3.sad + (safe_sad_t)v4.sad + 8;
       
       }
@@ -607,8 +609,8 @@ void PlaneOfBlocks::InterpolatePrediction(PlaneOfBlocks& pob)
         int ay1 = (offy > 0) ? aoddy : aeveny;
         int ay2 = (nBlkSizeY - nOverlapY) * 4 - ay1;
         int a11 = ax1*ay1, a12 = ax1*ay2, a21 = ax2*ay1, a22 = ax2*ay2;
-        vectors[index].x = (a11*v1.x + a21*v2.x + a12*v3.x + a22*v4.x) / normov;
-        vectors[index].y = (a11*v1.y + a21*v2.y + a12*v3.y + a22*v4.y) / normov;
+        iout_x = (a11 * v1.x + a21 * v2.x + a12 * v3.x + a22 * v4.x) / normov;
+        iout_y = (a11 * v1.y + a21 * v2.y + a12 * v3.y + a22 * v4.y) / normov;
         // generic safe_sad_t is not always safe for the next calculations
         tmp_sad = (safe_sad_t)(((smallOverlapSafeSad_t)a11*v1.sad + (smallOverlapSafeSad_t)a21*v2.sad + (smallOverlapSafeSad_t)a12*v3.sad + (smallOverlapSafeSad_t)a22*v4.sad) / normov);
 #if 0
@@ -618,19 +620,39 @@ void PlaneOfBlocks::InterpolatePrediction(PlaneOfBlocks& pob)
       }
       else // large overlap. Weights are not quite correct but let it be
       {
-        vectors[index].x = (v1.x + v2.x + v3.x + v4.x) << 2;
-        vectors[index].y = (v1.y + v2.y + v3.y + v4.y) << 2;
+        iout_x = (v1.x + v2.x + v3.x + v4.x) << 2;
+        iout_y = (v1.y + v2.y + v3.y + v4.y) << 2;
         tmp_sad = ((safe_sad_t)v1.sad + v2.sad + v3.sad + v4.sad + 2) << 2;
       }
-      vectors[index].x = (vectors[index].x >> normFactor) << mulFactor;
-      vectors[index].y = (vectors[index].y >> normFactor) << mulFactor;
-      vectors[index].sad = (sad_t)(tmp_sad >> 4);
+
+      iout_x = (iout_x >> normFactor) << mulFactor;
+      iout_y = (iout_y >> normFactor) << mulFactor;
+      iout_sad = (sad_t)(tmp_sad >> 4);
+
+      if (sse2)
+      {
+        _mm_stream_si32(&vectors[index].x, iout_x);
+        _mm_stream_si32(&vectors[index].y, iout_y);
+        _mm_stream_si32(&vectors[index].sad, iout_sad);
+      }
+      else 
+      {
+        vectors[index].x = iout_x;
+        vectors[index].y = iout_y;
+        vectors[index].sad = iout_sad;
+      }
 #if 0
       if (vectors[index].sad < 0)
         _RPT1(0, "Vector and SAD Interpolate Problem: possible SAD overflow: %d\n", vectors[index].sad);
 #endif
     }	// for k < nBlkX
   }	// for l < nBlkY
+
+  if (sse2)
+  {
+    _mm_sfence();
+  }
+
 }
 
 /*
@@ -710,6 +732,7 @@ int PlaneOfBlocks::GetArraySize(int divideMode)
 template<typename pixel_t>
 void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
 {
+
   // Left (or right) predictor
   if ((workarea.blkScanDir == 1 && workarea.blkx > 0) || (workarea.blkScanDir == -1 && workarea.blkx < nBlkX - 1))
   {
@@ -724,8 +747,8 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
   // this is _not_ internal mt friendly, since here up or bottom predictors
   // are omitted for top/bottom data. Not non-mt case this happens only for
   // the most top and bottom blocks.
-  // In vertically sliced multithreaded case it happens an _each_ top/bottom of the sliced block
-  const bool isTop = workarea.blky == workarea.blky_beg;
+  // In vertically sliced multithreaded case it happens an _each_ top/bottom of the sliced block */
+  const bool isTop = workarea.blky == workarea.blky_beg; 
   const bool isBottom = workarea.blky == workarea.blky_end - 1;
     // Up predictor
   if (!isTop)
@@ -757,7 +780,7 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
   {
     workarea.predictors[3] = ClipMV(workarea, zeroMVfieldShifted);
   }
-
+  
   // Median predictor
   if (!isTop) // replaced 1 by 0 - Fizick
   {
@@ -810,11 +833,33 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
   // 48x48    1000*(48*48)/64=36000 1200   1200*48x48/64<<0=43200   1 555 200 000 still OK
   // 64x64    1000*(64*64)/64=64000 1200   1200*64x64/64<<0=76800   4 915 200 000 (int32 overflow!)
   safe_sad_t divisor = (safe_sad_t)LSAD + (workarea.predictor.sad >> 1);
-  workarea.nLambda = (int)(workarea.nLambda
-                     *(safe_sad_t)LSAD
-                     / divisor
-                     * LSAD
-                     / divisor);
+
+  if (sse2)
+  {
+    __m128 xmm_LSAD = _mm_cvt_si2ss(xmm_LSAD, LSAD);
+    __m128 xmm_divisor = _mm_cvt_si2ss(xmm_divisor, divisor);
+
+    xmm_LSAD = _mm_mul_ss(xmm_LSAD, xmm_LSAD);
+    xmm_divisor = _mm_mul_ss(xmm_divisor, xmm_divisor);
+    xmm_divisor = _mm_rcp_ss(xmm_divisor);
+
+    xmm_LSAD = _mm_mul_ss(xmm_divisor, xmm_LSAD);
+
+    __m128 xmm_nLambda = _mm_cvt_si2ss(xmm_nLambda, workarea.nLambda);
+
+    xmm_nLambda = _mm_mul_ss(xmm_nLambda, xmm_LSAD);
+    workarea.nLambda = _mm_cvt_ss2si(xmm_nLambda);
+  }
+  else
+  {
+    workarea.nLambda = (int)(workarea.nLambda
+      * (safe_sad_t)LSAD
+      / divisor
+      * LSAD
+      / divisor);
+  }
+ // workarea.nLambda = (int)(workarea.nLambda * (safe_sad_t)LSAD / divisor * LSAD / divisor); correct ?
+
   // replaced hard threshold by soft in v1.10.2 by Fizick (a liitle complex expression to avoid overflow)
   //	int a = LSAD/(LSAD + (workarea.predictor.sad>>1));
   //	workarea.nLambda = workarea.nLambda*a*a;
@@ -3165,12 +3210,10 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
       workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
       workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
 
-      // try to early prefetch ?
-     /* const uint8_t* pucRef = GetRefBlock(workarea, zeroMVfieldShifted.x - 2, zeroMVfieldShifted.y - 2); // upper left corner
-      for (int row = 0; row < 9; row++)
-      {
-        _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(pucRef + nRefPitch[0] * row)), _MM_HINT_NTA); // prefetch next Ref rows
-      }*/
+      // try to early prefetch
+      int iBlkX_pref = blkxStart + (iblkx + 1) * workarea.blkScanDir;
+      int iBlkIdx_pref = workarea.blky * nBlkX + iBlkX_pref;
+      _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&vectors[iBlkIdx_pref])), _MM_HINT_T0); // prefetch next vector 
 
       /* search the mv */
       workarea.predictor = ClipMV(workarea, vectors[workarea.blkIdx]);
@@ -3974,6 +4017,7 @@ MVVector<T>::MVVector()
 {
   my_size = 0;
   buffer = 0;
+  size_bytes = 0;
 }
 
 template<class T>
@@ -3981,6 +4025,7 @@ MVVector<T>::~MVVector()
 {
   my_size = 0;
   buffer = 0;
+  size_bytes = 0;
 #ifdef _WIN32
   VirtualFree(buffer, 0, MEM_RELEASE);
 #else
@@ -4002,7 +4047,9 @@ MVVector<T>::MVVector(size_t size, IScriptEnvironment* env)
   buffer = (T*)VirtualAlloc(0, stSizeToAlloc, MEM_LARGE_PAGES | MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
   error = GetLastError();
 
-  if (buffer == 0 && error != ERROR_SUCCESS)
+  size_bytes = stSizeToAlloc;
+
+  if (buffer == 0)
   {
     // may be enable in debug ?
 //    env->ThrowError("MVVector LargePages alloc error. While allocating %d pages of %d size, GetLastError returned: %d\n", NumLPUnits, stLPGranularity, error);
@@ -4010,7 +4057,9 @@ MVVector<T>::MVVector(size_t size, IScriptEnvironment* env)
     buffer = (T*)VirtualAlloc(0, size * sizeof(VECTOR), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     error = GetLastError();
 
-    if (buffer == 0 && error != ERROR_SUCCESS)
+    size_bytes = size * sizeof(VECTOR);
+
+    if (buffer == 0)
     {
       // major error - need to break
       env->ThrowError("MVVector VirtualAlloc 4 kB pages alloc error. GetLastError returned: %d\n", error);
