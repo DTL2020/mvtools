@@ -150,32 +150,7 @@ void DegrainN_sse2(
         for (int k = 0; k < trad; ++k)
         {
           __m128i src1, src2;
-          if (Wall[k * 2 + 1] != 0)
-          {
-            if constexpr (is_mod8) // load 8-8 pixels
-            {
-              src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2] + x));
-            }
-            else { // 4-4 pixels
-              src1 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2] + x));
-            }
-            const __m128i	s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1]));
-            val = _mm_add_epi16(val, s1);
-          }
-          if (Wall[k * 2 + 2] != 0)
-          {
-            if constexpr (is_mod8) // load 8-8 pixels
-            {
-              src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1] + x));
-            }
-            else { // 4-4 pixels
-              src2 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2 + 1] + x));
-            }
-            const __m128i	s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2]));
-            val = _mm_add_epi16(val, s2);
-          }
-/*          __m128i src1, src2;
-          if constexpr (is_mod8) // load 8-8 pixels
+          if constexpr(is_mod8) // load 8-8 pixels
           {
             src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2] + x));
             src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1] + x));
@@ -187,7 +162,7 @@ void DegrainN_sse2(
           const __m128i	s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1]));
           const __m128i	s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2]));
           val = _mm_add_epi16(val, s1);
-          val = _mm_add_epi16(val, s2);*/
+          val = _mm_add_epi16(val, s2);
         }
         if constexpr(is_mod8) {
           if constexpr(lsb_flag) {
@@ -230,7 +205,7 @@ void DegrainN_sse2(
       for (int x = 0; x < blockWidth; x += pixels_at_a_time)
       {
         __m128i src;
-        if constexpr (is_mod8) // load 8 pixels
+        if constexpr(is_mod8) // load 8 pixels
           src = _mm_loadl_epi64((__m128i*) (pSrc + x));
         else // load 4 pixels
           src = _mm_cvtsi32_si128(*(uint32_t *)(pSrc + x));
@@ -239,34 +214,7 @@ void DegrainN_sse2(
         for (int k = 0; k < trad; ++k)
         {
           __m128i src1, src2;
-          if (Wall[k * 2 + 1] != 0)
-          {
-            if constexpr (is_mod8) // load 8-8 pixels
-            {
-              src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2] + x));
-            }
-            else { // 4-4 pixels
-              src1 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2] + x));
-            }
-
-            const __m128i s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1]));
-            val = _mm_add_epi16(val, s1);
-          }
-          if (Wall[k * 2 + 2] != 0)
-          {
-            if constexpr (is_mod8) // load 8-8 pixels
-            {
-              src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1] + x));
-            }
-            else { // 4-4 pixels
-              src2 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2 + 1] + x));
-            }
-
-            const __m128i s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2]));
-            val = _mm_add_epi16(val, s2);
-          }
-/*          __m128i src1, src2;
-          if constexpr (is_mod8) // load 8-8 pixels
+          if constexpr(is_mod8) // load 8-8 pixels
           {
             src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2] + x));
             src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1] + x));
@@ -278,12 +226,12 @@ void DegrainN_sse2(
           const __m128i s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1]));
           const __m128i s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2]));
           val = _mm_add_epi16(val, s1);
-          val = _mm_add_epi16(val, s2);*/
-
+          val = _mm_add_epi16(val, s2);
         }
         auto res = _mm_packus_epi16(_mm_srli_epi16(val, 8), z);
         if constexpr(is_mod8) {
-          _mm_storel_epi64((__m128i*)(pDst + x), res);
+//          _mm_storel_epi64((__m128i*)(pDst + x), res);
+          _mm_stream_si64((__int64*)(pDst + x), _mm_cvtsi128_si64(res)); // _mm_stream_pi() not found ???
         }
         else {
           *(uint32_t*)(pDst + x) = _mm_cvtsi128_si32(res);
@@ -737,8 +685,8 @@ MDegrainN::MDegrainN(
     const int		d = k / 2 + 1;
     c_info._thsad = ClipFnc::interpolate_thsad(thsad, thsad2, d, _trad);
     c_info._thsadc = ClipFnc::interpolate_thsad(thsadc, thsadc2, d, _trad);
-//    c_info._thsad_sq = double(c_info._thsad) * double(c_info._thsad); // 2.7.46
-//    c_info._thsadc_sq = double(c_info._thsadc) * double(c_info._thsadc);
+    //    c_info._thsad_sq = double(c_info._thsad) * double(c_info._thsad); // 2.7.46
+    //    c_info._thsadc_sq = double(c_info._thsadc) * double(c_info._thsadc);
     c_info._thsad_sq = double(c_info._thsad);
     c_info._thsadc_sq = double(c_info._thsadc);
     for (int i = 0; i < _wpow - 1; i++)
@@ -1575,6 +1523,11 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       }
     }
   }	// for by
+
+//  if (sse2) - all versions must support SSE2 minimum ? 
+  {
+    _mm_sfence(); // after _mm_stream() in DegrainM_sse non-temporal store.
+  }
 }
 
 
@@ -2020,7 +1973,7 @@ void	MDegrainN::use_block_uv(
     p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
     np = plane_ptr->GetPitch();
     const sad_t block_sad = block.GetSAD(); // SAD of MV Block. Scaled to MVClip's bits_per_pixel;
-    wref = DegrainWeightN(c_info._thsadc, c_info._thsadc_sq, block_sad, _wpow);
+    wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
   }
   else
   {

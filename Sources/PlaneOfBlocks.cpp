@@ -834,7 +834,7 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
   // 64x64    1000*(64*64)/64=64000 1200   1200*64x64/64<<0=76800   4 915 200 000 (int32 overflow!)
   safe_sad_t divisor = (safe_sad_t)LSAD + (workarea.predictor.sad >> 1);
 
-  if (sse2)
+  if (sse2 && (optSearchOption != 0))
   {
     __m128 xmm_LSAD = _mm_cvt_si2ss(xmm_LSAD, LSAD);
     __m128 xmm_divisor = _mm_cvt_si2ss(xmm_divisor, divisor);

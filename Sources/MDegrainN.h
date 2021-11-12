@@ -144,7 +144,6 @@ private:
   // 2.7.46
   int _wpow;
 
-
   std::unique_ptr <YUY2Planes> _dst_planes;
   std::unique_ptr <YUY2Planes> _src_planes;
 
@@ -193,6 +192,5 @@ private:
 };
 
 MV_FORCEINLINE int DegrainWeightN(int thSAD, double thSAD_pow, int blockSAD, int wpow);
-
 
 #endif
