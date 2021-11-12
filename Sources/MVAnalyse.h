@@ -115,8 +115,6 @@ protected:
 
   int _delta_max;
 
-  BYTE *pVectBuf;
-
 public:
 
   MVAnalyse(

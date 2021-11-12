@@ -230,8 +230,7 @@ void DegrainN_sse2(
         }
         auto res = _mm_packus_epi16(_mm_srli_epi16(val, 8), z);
         if constexpr(is_mod8) {
-//          _mm_storel_epi64((__m128i*)(pDst + x), res);
-          _mm_stream_si64((__int64*)(pDst + x), _mm_cvtsi128_si64(res)); // _mm_stream_pi() not found ???
+          _mm_storel_epi64((__m128i*)(pDst + x), res);
         }
         else {
           *(uint32_t*)(pDst + x) = _mm_cvtsi128_si32(res);
@@ -534,7 +533,7 @@ MDegrainN::MDegrainN(
   PClip child, PClip super, PClip mvmulti, int trad,
   sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
-  sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, IScriptEnvironment* env_ptr
+  sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
   , MVFilter(mvmulti, "MDegrainN", env_ptr, 1, 0)
@@ -594,13 +593,6 @@ MDegrainN::MDegrainN(
   {
     env_ptr->ThrowError("MDegrainN: temporal radius must be at least 1.");
   }
-
-  if (wpow < 1 || wpow > 7)
-  {
-    env_ptr->ThrowError("MDegrainN: wpow must be from 1 to 7. 7 = equal weights.");
-  }
-
-  _wpow = wpow;
 
   _mv_clip_arr.resize(_trad * 2);
   for (int k = 0; k < _trad * 2; ++k)
@@ -685,15 +677,8 @@ MDegrainN::MDegrainN(
     const int		d = k / 2 + 1;
     c_info._thsad = ClipFnc::interpolate_thsad(thsad, thsad2, d, _trad);
     c_info._thsadc = ClipFnc::interpolate_thsad(thsadc, thsadc2, d, _trad);
-    //    c_info._thsad_sq = double(c_info._thsad) * double(c_info._thsad); // 2.7.46
-    //    c_info._thsadc_sq = double(c_info._thsadc) * double(c_info._thsadc);
-    c_info._thsad_sq = double(c_info._thsad);
-    c_info._thsadc_sq = double(c_info._thsadc);
-    for (int i = 0; i < _wpow - 1; i++)
-    {
-      c_info._thsad_sq *= double(c_info._thsad);
-      c_info._thsadc_sq *= double(c_info._thsadc);
-    }
+    c_info._thsad_sq = double(c_info._thsad) * double(c_info._thsad);
+    c_info._thsadc_sq = double(c_info._thsadc) * double(c_info._thsadc);
   }
 
   const int nSuperWidth = vi_super.width;
@@ -1523,11 +1508,6 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       }
     }
   }	// for by
-
-//  if (sse2) - all versions must support SSE2 minimum ? 
-  {
-    _mm_sfence(); // after _mm_stream() in DegrainM_sse non-temporal store.
-  }
 }
 
 
@@ -1948,7 +1928,7 @@ void	MDegrainN::use_block_y(
     p = plane_ptr->GetPointer(blx, bly);
     np = plane_ptr->GetPitch();
     const sad_t block_sad = block.GetSAD(); // SAD of MV Block. Scaled to MVClip's bits_per_pixel;
-    wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
+    wref = DegrainWeight(c_info._thsad, c_info._thsad_sq, block_sad);
   }
   else
   {
@@ -1973,7 +1953,7 @@ void	MDegrainN::use_block_uv(
     p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
     np = plane_ptr->GetPitch();
     const sad_t block_sad = block.GetSAD(); // SAD of MV Block. Scaled to MVClip's bits_per_pixel;
-    wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
+    wref = DegrainWeight(c_info._thsadc, c_info._thsadc_sq, block_sad);
   }
   else
   {
@@ -2010,23 +1990,3 @@ void MDegrainN::norm_weights(int wref_arr[], int trad)
   wref_arr[0] = wsrc;
 }
 
-MV_FORCEINLINE int DegrainWeightN(int thSAD, double thSAD_pow, int blockSAD, int wpow)
-{
-  // Returning directly prevents a divide by 0 if thSAD == blockSAD == 0.
-  // keep integer comparison for speed
-  if (thSAD <= blockSAD)
-    return 0;
-
-  if (wpow > 6) return (int)(1 << DEGRAIN_WEIGHT_BITS); // if 7  - equal weights version - fast return, max speed
-
-  double blockSAD_pow = blockSAD;
-
-  for (int i = 0; i < wpow - 1; i++)
-  {
-    blockSAD_pow *= blockSAD;
-  }
-
-  // float is approximately only 24 bit precise, use double
-  return (int)((double)(1 << DEGRAIN_WEIGHT_BITS) * (thSAD_pow - blockSAD_pow) / (thSAD_pow + blockSAD_pow));
-
-}

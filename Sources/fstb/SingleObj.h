@@ -1,7 +1,7 @@
 /*****************************************************************************
 
-        AioMax.h
-        Author: Laurent de Soras, 2011
+        SingleObj.h
+        Author: Laurent de Soras, 2015
 
 --- Legal stuff ---
 
@@ -15,11 +15,11 @@ http://sam.zoy.org/wtfpl/COPYING for more details.
 
 
 
-#if ! defined (conc_AioMax_HEADER_INCLUDED)
-#define	conc_AioMax_HEADER_INCLUDED
+#pragma once
+#if ! defined (fstb_SingleObj_HEADER_INCLUDED)
+#define	fstb_SingleObj_HEADER_INCLUDED
 
 #if defined (_MSC_VER)
-	#pragma once
 	#pragma warning (4 : 4250)
 #endif
 
@@ -27,25 +27,28 @@ http://sam.zoy.org/wtfpl/COPYING for more details.
 
 /*\\\ INCLUDE FILES \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*/
 
+#include "fstb/AllocAlign.h"
 
 
-namespace conc
+
+namespace fstb
 {
 
 
 
-template <class T>
-class AioMax
+template <class T, class A = AllocAlign <T, 16> >
+class SingleObj
 {
 
 /*\\\ PUBLIC \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*/
 
 public:
 
-	explicit inline
-	               AioMax (T operand);
+	               SingleObj ();
+	virtual        ~SingleObj ();
 
-	inline T       operator () (T old_val) const;
+	T *            operator -> () const;
+	T &            operator * () const;
 
 
 
@@ -59,7 +62,8 @@ protected:
 
 private:
 
-	T              _operand;
+	A              _allo;
+	T *            _obj_ptr;
 
 
 
@@ -67,27 +71,28 @@ private:
 
 private:
 
-	               AioMax ()                                   = delete;
-	               AioMax (const AioMax <T> &other)            = delete;
-	               AioMax (const AioMax <T> &&other)           = delete;
-	AioMax <T> &   operator = (const AioMax <T> &other)        = delete;
-	AioMax <T> &   operator = (const AioMax <T> &&other)       = delete;
-	bool           operator == (const AioMax <T> &other) const = delete;
-	bool           operator != (const AioMax <T> &other) const = delete;
+	               SingleObj (const SingleObj <T, A> &other)         = delete;
+	               SingleObj (const SingleObj <T, A> &&other)        = delete;
+	SingleObj <T, A> &
+	               operator = (const SingleObj <T, A> &other)        = delete;
+	SingleObj <T, A> &
+	               operator = (const SingleObj <T, A> &&other)       = delete;
+	bool           operator == (const SingleObj <T, A> &other) const = delete;
+	bool           operator != (const SingleObj <T, A> &other) const = delete;
 
-};	// class AioMax
-
-
-
-}	// namespace conc
+};	// class SingleObj
 
 
 
-#include "conc/AioMax.hpp"
+}	// namespace fstb
 
 
 
-#endif	// conc_AioMax_HEADER_INCLUDED
+#include "fstb/SingleObj.hpp"
+
+
+
+#endif	// fstb_SingleObj_HEADER_INCLUDED
 
 
 

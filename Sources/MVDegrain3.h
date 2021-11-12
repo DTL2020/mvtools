@@ -702,7 +702,7 @@ void Degrain1to6_16_sse41(BYTE *pDst, BYTE *pDstLsb, int WidthHeightForC, int nD
     for (int x = 0; x < blockWidth; x += 8 / sizeof(uint16_t)) // up to 4 pixels per cycle
     {
       // lambda to protect overread. Read exact number of bytes for all blocksizes 
-      auto getpixels_as_uint16_in_m128i = [x](const BYTE* p) {
+      auto getpixels_as_uint16_in_m128i = [&](const BYTE* p) {
         __m128i pixels;
         if constexpr (blockWidth == 2) // x == 0 for sure
           pixels = _mm_cvtsi32_si128(*(reinterpret_cast<const uint32_t*>(p /* + x * sizeof(uint16_t)*/))); // 4 bytes
@@ -884,11 +884,9 @@ MV_FORCEINLINE int DegrainWeight(int thSAD, double thSAD_sq, int blockSAD)
   if (thSAD <= blockSAD)
     return 0;
 
-
   // float is approximately only 24 bit precise, use double
   const double blockSAD_sq = double(blockSAD) * (blockSAD);
   return (int)((double)(1 << DEGRAIN_WEIGHT_BITS)*(thSAD_sq - blockSAD_sq) / (thSAD_sq + blockSAD_sq));
-
 }
 
 template<int level>

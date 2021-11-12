@@ -96,44 +96,6 @@ MVAnalyse::MVAnalyse(
     env->ThrowError("MAnalyse: parameter 'optPredictorType' must be 0, 1 or 2");
   }
 
-#ifdef _WIN32
-  // large pages priv:
-  DWORD error;
-  HANDLE hToken = NULL;
-  TOKEN_PRIVILEGES tp;
-  BOOL result;
-
-  // Enable Lock pages in memory priveledge for the current process
-  if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken))
-  {
-    tp.PrivilegeCount = 1;
-    tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-
-    if (LookupPrivilegeValue(NULL, SE_LOCK_MEMORY_NAME, &tp.Privileges[0].Luid))
-    {
-      result = AdjustTokenPrivileges(hToken, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
-      error = GetLastError();
-
-      if (!result || (error != ERROR_SUCCESS))
-      {
-//        env->ThrowError("LargePages: AdjustTokenPrivileges failed.");
-      }
-    }
-    else
-    {
-//      env->ThrowError("LargePages: LookupPrivilegeValue failed.");
-    }
-  }
-  else
-  {
-    // env->ThrowError("LargePages: Can not open process token"); // do not bug user with stop processing errors ???
-  }
-
-  // Cleanup
-  if (hToken != 0) CloseHandle(hToken);
-  hToken = NULL;
-#endif
-
   if (vi.IsY())
     chroma = false; // silent fallback
 
@@ -302,6 +264,8 @@ MVAnalyse::MVAnalyse(
   {
     ++nLevelsMax;
   }
+
+  nLevelsMax = 2;
 
   analysisData.nLvCount = (lv > 0) ? lv : nLevelsMax + lv;
   if (analysisData.nLvCount > nSuperLevels)

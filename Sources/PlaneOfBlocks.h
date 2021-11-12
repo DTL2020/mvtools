@@ -57,30 +57,6 @@ class MVClip;
 class MVFrame;
 
 
-// MVVector
-template <class T>
-class  MVVector
-{
-public:
-
-  typedef T* iterator;
-
-  MVVector();
-  ~MVVector();
-  MVVector(size_t size, IScriptEnvironment* env);
-  size_t size() const;
-
-  size_t size_bytes;
-
-  T& operator[](size_t index);
-
-private:
-  size_t my_size;
-  T* buffer;
-};
-
-
-
 
 // v2.5.13.1: This class is currently a bit messy,
 // it's being reorganised and reworked for further improvement.
@@ -116,8 +92,7 @@ public:
 
     /* compute the predictors from the upper plane */
   template<typename safe_sad_t, typename smallOverlapSafeSad_t>
-//  void InterpolatePrediction(const PlaneOfBlocks &pob);
-  void InterpolatePrediction(PlaneOfBlocks& pob); // need to fix MVVector [] to able to work with 'const' version
+  void InterpolatePrediction(const PlaneOfBlocks &pob);
 
 
   void WriteHeaderToArray(int *array);
@@ -181,10 +156,9 @@ private:
   ExhaustiveSearchFunction_t get_ExhaustiveSearchFunction(int BlockX, int BlockY, int SearchParam, int bits_per_pixel, arch_t arch);
   ExhaustiveSearchFunction_t ExhaustiveSearchFunctions[MAX_SUPPORTED_EXH_SEARCHPARAM + 1]; // the function pointer
 
- // std::vector <VECTOR>              /* motion vectors of the blocks */
- //   vectors;           /* before the search, contains the hierachal predictor */
+  std::vector <VECTOR>              /* motion vectors of the blocks */
+    vectors;           /* before the search, contains the hierachal predictor */
                        /* after the search, contains the best motion vector */
-  MVVector <VECTOR> vectors;
 
   bool           smallestPlane;     /* say whether vectors can use predictors from a smaller plane */
   bool           isse;              /* can we use isse asm code */
@@ -401,6 +375,11 @@ private:
   void ExpandingSearch(WorkingArea &workarea, int radius, int step, int mvx, int mvy); // diameter = 2*radius + 1
 
   // DTL test function, 8x8 block, 8 bit only
+  // 8x8 esa search radius 4
+  void ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int mvx, int mvy);
+  void ExhaustiveSearch8x8_uint8_np1_sp4_avx2(WorkingArea& workarea, int mvx, int mvy);
+  //void ExhaustiveSearch8x8_uint8_sp4_avx2_2(WorkingArea& workarea, int mvx, int mvy);
+
   // 8x8 esa search radius 1
   void ExhaustiveSearch8x8_uint8_sp1_c(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy);
@@ -408,14 +387,6 @@ private:
   // 8x8 esa search radius 2
   void ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
-
-  // 8x8 esa search radius 3
-  void ExhaustiveSearch8x8_uint8_sp3_c(WorkingArea& workarea, int mvx, int mvy);
-  void ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea, int mvx, int mvy);
-
-  // 8x8 esa search radius 4
-  void ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int mvx, int mvy);
-  void ExhaustiveSearch8x8_uint8_np1_sp4_avx2(WorkingArea& workarea, int mvx, int mvy);
   // END OF DTL test function
 
   template<typename pixel_t>
@@ -463,7 +434,7 @@ private:
   template<typename pixel_t>
   MV_FORCEINLINE sad_t LumaSAD(WorkingArea &workarea, const unsigned char *pRef0);
   template<typename pixel_t>
-  MV_FORCEINLINE void CheckMV0(WorkingArea& workarea, int vx, int vy);
+  MV_FORCEINLINE void CheckMV0(WorkingArea &workarea, int vx, int vy);
   template<typename pixel_t>
   MV_FORCEINLINE void CheckMV(WorkingArea &workarea, int vx, int vy);
   template<typename pixel_t>
