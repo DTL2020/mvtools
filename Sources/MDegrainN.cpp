@@ -166,20 +166,35 @@ void DegrainN_sse2(
         }
         if constexpr(is_mod8) {
           if constexpr(lsb_flag) {
+#ifdef _WIN64
+            _mm_stream_si64((__int64*)(pDst + x), _mm_cvtsi128_si64(_mm_packus_epi16(_mm_srli_epi16(val, 8), z))); // _mm_stream_pi() for x86 build !!  _mm_stream_si64() for x64 build !!
+            _mm_stream_si64((__int64*)(pDst + x), _mm_cvtsi128_si64(_mm_packus_epi16(_mm_and_si128(val, m), z))); // _mm_stream_pi() for x86 build !!  _mm_stream_si64() for x64 build !!
+#else
+            // heh - need to found cvt128 to 64 for _win32
             _mm_storel_epi64((__m128i*)(pDst + x), _mm_packus_epi16(_mm_srli_epi16(val, 8), z));
             _mm_storel_epi64((__m128i*)(pDstLsb + x), _mm_packus_epi16(_mm_and_si128(val, m), z));
+#endif
           }
           else {
-            _mm_storeu_si128((__m128i*)(pDst + x * 2), val);
+            _mm_storeu_si128((__m128i*)(pDst + x * 2), val); // if address is 16bytes aligned can stream_store - need checking ?
+            // if not aligned - try 2 _mm_stream_si64 of low and high parts ?
           }
         }
         else {
           if constexpr(lsb_flag) {
-            *(uint32_t*)(pDst + x) = _mm_cvtsi128_si32(_mm_packus_epi16(_mm_srli_epi16(val, 8), z));
-            *(uint32_t*)(pDstLsb + x) = _mm_cvtsi128_si32(_mm_packus_epi16(_mm_and_si128(val, m), z));
+//            *(uint32_t*)(pDst + x) = _mm_cvtsi128_si32(_mm_packus_epi16(_mm_srli_epi16(val, 8), z));
+            _mm_stream_si32((int*)(pDst + x), _mm_cvtsi128_si32(_mm_packus_epi16(_mm_srli_epi16(val, 8), z)));
+//            *(uint32_t*)(pDstLsb + x) = _mm_cvtsi128_si32(_mm_packus_epi16(_mm_and_si128(val, m), z));
+            _mm_stream_si32((int*)(pDstLsb + x), _mm_cvtsi128_si32(_mm_packus_epi16(_mm_and_si128(val, m), z)));
           }
           else {
-            _mm_storel_epi64((__m128i*)(pDst + x * 2), val);
+//            _mm_storel_epi64((__m128i*)(pDst + x * 2), val);
+#ifdef _WIN64
+            _mm_stream_si64((__int64*)(pDst + x * 2), _mm_cvtsi128_si64(val)); // _mm_stream_pi() for x86 build !!  _mm_stream_si64() for x64 build !!
+#else
+            // heh - need to found cvt128 to 64 for _win32
+            _mm_storel_epi64((__m128i*)(pDst + x * 2), val);// temporal cached store
+#endif
           }
         }
       }
@@ -231,10 +246,16 @@ void DegrainN_sse2(
         auto res = _mm_packus_epi16(_mm_srli_epi16(val, 8), z);
         if constexpr(is_mod8) {
 //          _mm_storel_epi64((__m128i*)(pDst + x), res);
-          _mm_stream_si64((__int64*)(pDst + x), _mm_cvtsi128_si64(res)); // _mm_stream_pi() not found ???
+#ifdef _WIN64
+          _mm_stream_si64((__int64*)(pDst + x), _mm_cvtsi128_si64(res)); // _mm_stream_pi() for x86 build !!  _mm_stream_si64() for x64 build !!
+#else
+          //_mm_stream_pi((__m64*)(pDst + x), res); // heh - need to found cvt128 to 64 for _win32
+          _mm_storel_epi64((__m128i*)(pDst + x), res); // temporal cached store
+#endif
         }
         else {
-          *(uint32_t*)(pDst + x) = _mm_cvtsi128_si32(res);
+//          *(uint32_t*)(pDst + x) = _mm_cvtsi128_si32(res);
+            _mm_stream_si32((int*)(pDst + x), _mm_cvtsi128_si32(res));
         }
       }
 
