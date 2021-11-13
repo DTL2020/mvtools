@@ -726,13 +726,9 @@ int PlaneOfBlocks::GetArraySize(int divideMode)
   return size;
 }
 
-
-
-
 template<typename pixel_t>
 void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
 {
-
   // Left (or right) predictor
   if ((workarea.blkScanDir == 1 && workarea.blkx > 0) || (workarea.blkScanDir == -1 && workarea.blkx < nBlkX - 1))
   {
@@ -865,6 +861,184 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
   //	workarea.nLambda = workarea.nLambda*a*a;
 }
 
+template<typename pixel_t>
+void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
+{
+  VECTOR v1; VECTOR v2; VECTOR v3;
+
+  // Gathering vectors first
+
+  // Left (or right) predictor
+  if ((workarea.blkScanDir == 1 && workarea.blkx > 0) || (workarea.blkScanDir == -1 && workarea.blkx < nBlkX - 1))
+  {
+    v1 = vectors[workarea.blkIdx - workarea.blkScanDir];
+  }
+  else
+  {
+    v1 = zeroMVfieldShifted;
+  }
+  // fixme note:
+  // MAnalyze mt-inconsistency reason #1
+  // this is _not_ internal mt friendly, since here up or bottom predictors
+  // are omitted for top/bottom data. Not non-mt case this happens only for
+  // the most top and bottom blocks.
+  // In vertically sliced multithreaded case it happens an _each_ top/bottom of the sliced block */
+  const bool isTop = workarea.blky == workarea.blky_beg;
+  const bool isBottom = workarea.blky == workarea.blky_end - 1;
+  // Up predictor
+  if (!isTop)
+  {
+    v2 = vectors[workarea.blkIdx - nBlkX];
+  }
+  else
+  {
+    v2 = zeroMVfieldShifted;
+  }
+  // Original problem: random, small, rare, mostly irreproducible differences between multiple encodings.
+  // In all, I spent at least a week on the problem during a half year, losing hope
+  // and restarting again four times. Nasty bug it was.
+  // !smallestPlane: use bottom right only if a coarser level exists or else we get random
+  // crap from a previous frame.
+// bottom-right predictor (from coarse level)
+  if (!isBottom &&
+    !smallestPlane && // v2.7.44
+    ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
+  {
+    v3 = vectors[workarea.blkIdx + nBlkX + workarea.blkScanDir];
+  }
+  // Up-right predictor
+  else if (!isTop && ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
+  {
+    v3 = vectors[workarea.blkIdx - nBlkX + workarea.blkScanDir];
+  }
+  else
+  {
+    v3 = zeroMVfieldShifted;
+  }
+
+  // Copy SADs
+  workarea.predictors[1].sad = v1.sad;
+  workarea.predictors[2].sad = v2.sad;
+  workarea.predictors[3].sad = v3.sad;
+
+  // ClipMV x,y
+  __m128i xmm0_x, xmm1_y;
+  __m128i xmm6_sad1, xmm7_sad2, xmm8_sad3;
+#ifdef _DEBUG
+  xmm0_x = _mm_setzero_si128(); // no need to clear in release - overwritten
+  xmm1_y = _mm_setzero_si128();
+#endif
+
+  // SSE 4.1 !
+  xmm0_x = _mm_cvtsi32_si128(v1.x);
+  xmm0_x = _mm_insert_epi32(xmm0_x, v2.x, 1);  // SSE 4.1 !
+  xmm0_x = _mm_insert_epi32(xmm0_x, v3.x, 2);
+
+  xmm1_y = _mm_cvtsi32_si128(v1.y);
+  xmm1_y = _mm_insert_epi32(xmm1_y, v2.y, 1); // SSE 4.1 !
+  xmm1_y = _mm_insert_epi32(xmm1_y, v3.y, 2);
+
+  xmm6_sad1 = _mm_cvtsi32_si128(v1.sad);
+  xmm7_sad2 = _mm_cvtsi32_si128(v2.sad);
+  xmm8_sad3 = _mm_cvtsi32_si128(v3.sad);
+
+  __m128i xmm2_DxMin = _mm_set1_epi32(workarea.nDxMin); // for AVX2 builds - will be vpbroadcastd - enable AVX2 in C++ compiler !
+  __m128i xmm3_DxMax = _mm_set1_epi32(workarea.nDxMax - 1);
+  __m128i xmm4_DyMin = _mm_set1_epi32(workarea.nDyMin);
+  __m128i xmm5_DyMax = _mm_set1_epi32(workarea.nDyMax - 1); 
+
+  xmm0_x = _mm_max_epi32(xmm0_x, xmm2_DxMin); // SSE 4.1 !!
+  xmm1_y = _mm_max_epi32(xmm1_y, xmm4_DyMin);
+
+  xmm0_x = _mm_min_epi32(xmm0_x, xmm3_DxMax);
+  xmm1_y = _mm_min_epi32(xmm1_y, xmm5_DyMax); // no < and >= and -1 (?) for this version
+
+  xmm6_sad1 = _mm_max_epi32(xmm6_sad1, xmm7_sad2);
+  xmm6_sad1 = _mm_max_epi32(xmm6_sad1, xmm8_sad3);
+
+  workarea.predictors[1].x = _mm_cvtsi128_si32(xmm0_x);
+  workarea.predictors[2].x = _mm_extract_epi32(xmm0_x, 1);
+  workarea.predictors[3].x = _mm_extract_epi32(xmm0_x, 2);
+
+  workarea.predictors[1].y = _mm_cvtsi128_si32(xmm1_y);
+  workarea.predictors[2].y = _mm_extract_epi32(xmm1_y, 1);
+  workarea.predictors[3].y = _mm_extract_epi32(xmm1_y, 2);
+
+  // Median predictor
+  if (!isTop) // replaced 1 by 0 - Fizick
+  {
+    workarea.predictors[0].x = Median(workarea.predictors[1].x, workarea.predictors[2].x, workarea.predictors[3].x);
+    workarea.predictors[0].y = Median(workarea.predictors[1].y, workarea.predictors[2].y, workarea.predictors[3].y);
+    //		workarea.predictors[0].sad = Median(workarea.predictors[1].sad, workarea.predictors[2].sad, workarea.predictors[3].sad);
+        // but it is not true median vector (x and y may be mixed) and not its sad ?!
+        // we really do not know SAD, here is more safe estimation especially for phaseshift method - v1.6.0
+//    workarea.predictors[0].sad = std::max(workarea.predictors[1].sad, std::max(workarea.predictors[2].sad, workarea.predictors[3].sad));
+    workarea.predictors[0].sad = _mm_cvtsi128_si32(xmm6_sad1);
+  }
+  else
+  {
+    //		workarea.predictors[0].x = (workarea.predictors[1].x + workarea.predictors[2].x + workarea.predictors[3].x);
+    //		workarea.predictors[0].y = (workarea.predictors[1].y + workarea.predictors[2].y + workarea.predictors[3].y);
+    //		workarea.predictors[0].sad = (workarea.predictors[1].sad + workarea.predictors[2].sad + workarea.predictors[3].sad);
+        // but for top line we have only left workarea.predictor[1] - v1.6.0
+    workarea.predictors[0].x = workarea.predictors[1].x;
+    workarea.predictors[0].y = workarea.predictors[1].y;
+    workarea.predictors[0].sad = workarea.predictors[1].sad;
+  }
+
+  // if there are no other planes, predictor is the median
+  if (smallestPlane)
+  {
+    workarea.predictor = workarea.predictors[0];
+  }
+  /*
+    else
+    {
+      if ( workarea.predictors[0].sad < workarea.predictor.sad )// disabled by Fizick (hierarchy only!)
+      {
+        workarea.predictors[4] = workarea.predictor;
+        workarea.predictor = workarea.predictors[0];
+        workarea.predictors[0] = workarea.predictors[4];
+      }
+    }
+  */
+  //	if ( workarea.predictor.sad > LSAD ) { workarea.nLambda = 0; } // generalized (was LSAD=400) by Fizick
+
+  // v2.7.11.32:
+  typedef bigsad_t safe_sad_t;
+  // for large block sizes int32 overflows during calculation even for 8 bits, so we always use 64 bit bigsad_t intermediate here
+  // (some calculations for truemotion=true)
+  // blksize  lambda                LSAD   LSAD (renormalized)        lambda*LSAD
+  // 8x8      1000*(8*8)/64=1000    1200   1200*8x8/64<<0=1200          1 200 000
+  // 16x16    1000*(16*16)/64=4000  1200   1200*16x16/64<<0=4800       19 200 000
+  // 24x24    1000*(24*24)/64=9000  1200   1200*24x24/64<<0=10800      97 200 000
+  // 32x32    1000*(32*32)/64=16000 1200   1200*32x32/64<<0=19200     307 200 000
+  //          other level:   128000                         19200   2 457 600 000 (int32 overflow!)
+  // 48x48    1000*(48*48)/64=36000 1200   1200*48x48/64<<0=43200   1 555 200 000 still OK
+  // 64x64    1000*(64*64)/64=64000 1200   1200*64x64/64<<0=76800   4 915 200 000 (int32 overflow!)
+  safe_sad_t divisor = (safe_sad_t)LSAD + (workarea.predictor.sad >> 1);
+
+  __m128 xmm_LSAD = _mm_cvt_si2ss(xmm_LSAD, LSAD);
+  __m128 xmm_divisor = _mm_cvt_si2ss(xmm_divisor, divisor);
+
+  xmm_LSAD = _mm_mul_ss(xmm_LSAD, xmm_LSAD);
+  xmm_divisor = _mm_mul_ss(xmm_divisor, xmm_divisor);
+  xmm_divisor = _mm_rcp_ss(xmm_divisor);
+
+  xmm_LSAD = _mm_mul_ss(xmm_divisor, xmm_LSAD);
+
+  __m128 xmm_nLambda = _mm_cvt_si2ss(xmm_nLambda, workarea.nLambda);
+
+  xmm_nLambda = _mm_mul_ss(xmm_nLambda, xmm_LSAD);
+  workarea.nLambda = _mm_cvt_ss2si(xmm_nLambda);
+    
+  // workarea.nLambda = (int)(workarea.nLambda * (safe_sad_t)LSAD / divisor * LSAD / divisor); correct ?
+
+   // replaced hard threshold by soft in v1.10.2 by Fizick (a liitle complex expression to avoid overflow)
+   //	int a = LSAD/(LSAD + (workarea.predictor.sad>>1));
+   //	workarea.nLambda = workarea.nLambda*a*a;
+}
+
 
 
 template<typename pixel_t>
@@ -956,7 +1130,13 @@ template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
 {
   typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
-  FetchPredictors<pixel_t>(workarea);
+
+  if (sse41 && optSearchOption > 0)
+  {
+    FetchPredictors_sse41<pixel_t>(workarea);
+  }
+  else
+    FetchPredictors<pixel_t>(workarea);
 
   sad_t sad;
   sad_t saduv;
@@ -1229,7 +1409,13 @@ template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
 {
     typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
-    FetchPredictors<pixel_t>(workarea);
+
+    if (sse41 && optSearchOption > 0)
+    {
+      FetchPredictors_sse41<pixel_t>(workarea);
+    }
+    else
+      FetchPredictors<pixel_t>(workarea);
 
     sad_t sad;
     sad_t saduv;
@@ -3018,9 +3204,34 @@ MV_FORCEINLINE int	PlaneOfBlocks::ClipMVy(WorkingArea &workarea, int vy)
 MV_FORCEINLINE VECTOR	PlaneOfBlocks::ClipMV(WorkingArea &workarea, VECTOR v)
 {
   VECTOR v2;
-  v2.x = ClipMVx(workarea, v.x);
-  v2.y = ClipMVy(workarea, v.y);
+
+  if (sse41 && optSearchOption == 1)
+  {
+    __m128i xmm0_x = _mm_cvtsi32_si128(v.x);
+    __m128i xmm1_y = _mm_cvtsi32_si128(v.y);
+
+    __m128i xmm2_DxMin = _mm_cvtsi32_si128(workarea.nDxMin);
+    __m128i xmm3_DxMax = _mm_cvtsi32_si128(workarea.nDxMax - 1);
+    __m128i xmm4_DyMin = _mm_cvtsi32_si128(workarea.nDyMin);
+    __m128i xmm5_DyMax = _mm_cvtsi32_si128(workarea.nDyMax - 1);
+
+    xmm0_x = _mm_max_epi32(xmm0_x, xmm2_DxMin); // SSE 4.1 !!
+    xmm1_y = _mm_max_epi32(xmm1_y, xmm4_DyMin);
+
+    xmm0_x = _mm_min_epi32(xmm0_x, xmm3_DxMax);
+    xmm1_y = _mm_min_epi32(xmm1_y, xmm5_DyMax); // no < and >= and -1 (?) for this version
+
+    v2.x = _mm_cvtsi128_si32(xmm0_x);
+    v2.y = _mm_cvtsi128_si32(xmm1_y);
+  }
+  else
+  {
+    v2.x = ClipMVx(workarea, v.x);
+    v2.y = ClipMVy(workarea, v.y);
+  }
+
   v2.sad = v.sad;
+
   return v2;
 }
 
@@ -3213,10 +3424,14 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
       // try to early prefetch
       int iBlkX_pref = blkxStart + (iblkx + 1) * workarea.blkScanDir;
       int iBlkIdx_pref = workarea.blky * nBlkX + iBlkX_pref;
-      _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&vectors[iBlkIdx_pref])), _MM_HINT_T0); // prefetch next vector 
+      PrefetchVECTOR(iBlkIdx_pref);
+      PrefetchVECTOR(iBlkIdx_pref - nBlkX);
+      PrefetchVECTOR(iBlkIdx_pref + nBlkX + workarea.blkScanDir);
+      PrefetchVECTOR(iBlkIdx_pref - nBlkX + workarea.blkScanDir); 
 
       /* search the mv */
-      workarea.predictor = ClipMV(workarea, vectors[workarea.blkIdx]);
+      workarea.predictor = ClipMV(workarea, vectors[workarea.blkIdx]); 
+
       if (temporal)
       {
         workarea.predictors[4] = ClipMV(workarea, *reinterpret_cast<VECTOR*>(&_vecPrev[workarea.blkIdx*N_PER_BLOCK])); // temporal predictor
@@ -4083,3 +4298,34 @@ T& MVVector<T>::operator[](size_t index) // need to add something for 'const' to
   return buffer[index];
 }
 
+MV_FORCEINLINE void PlaneOfBlocks::PrefetchVECTOR(int idx)
+{
+  if (idx < 0 || idx > nBlkCount)
+    return;
+
+  VECTOR* pVector = &vectors[idx];
+  // check if start and end of VECTOR structure hit the same 64-byte cache line (128 for L2/L3 cache ?)
+  char* pStart = (char*)pVector;
+  char* pEnd = (char*)pVector + sizeof(VECTOR) - 1;
+
+#ifdef _WIN64
+  char *pStart64 = (char*)((__int64)pStart >> 6);
+  char *pEnd64 = (char*)((__int64)pEnd >> 6);
+#else
+  char *pStart64 = (char*)((int)pStart >> 6);
+  char *pEnd64 = (char*)((int)pEnd >> 6);
+#endif
+
+  if (pStart64 == pEnd64)
+  {
+    _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(pStart)), _MM_HINT_T0); 
+  }
+  else
+  {
+    _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(pStart)), _MM_HINT_T0); 
+    _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(pEnd)), _MM_HINT_T0); 
+  }
+
+
+
+}

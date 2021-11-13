@@ -364,6 +364,9 @@ private:
   template<typename pixel_t>
   void FetchPredictors(WorkingArea &workarea);
 
+  template<typename pixel_t>
+  void FetchPredictors_sse41(WorkingArea &workarea);
+
   /* performs a diamond search */
   template<typename pixel_t>
   void DiamondSearch(WorkingArea &workarea, int step);
@@ -470,13 +473,17 @@ private:
   MV_FORCEINLINE void CheckMV2(WorkingArea &workarea, int vx, int vy, int *dir, int val);
   template<typename pixel_t>
   MV_FORCEINLINE void CheckMVdir(WorkingArea &workarea, int vx, int vy, int *dir, int val);
+
   MV_FORCEINLINE int ClipMVx(WorkingArea &workarea, int vx);
   MV_FORCEINLINE int ClipMVy(WorkingArea &workarea, int vy);
   MV_FORCEINLINE VECTOR ClipMV(WorkingArea &workarea, VECTOR v);
+
   MV_FORCEINLINE static int Median(int a, int b, int c);
   // MV_FORCEINLINE static unsigned int SquareDifferenceNorm(const VECTOR& v1, const VECTOR& v2); // not used
   MV_FORCEINLINE static unsigned int SquareDifferenceNorm(const VECTOR& v1, const int v2x, const int v2y);
   MV_FORCEINLINE bool IsInFrame(int i);
+
+  MV_FORCEINLINE void PrefetchVECTOR(int idx);
 
   template<typename pixel_t>
   void Refine(WorkingArea &workarea);
