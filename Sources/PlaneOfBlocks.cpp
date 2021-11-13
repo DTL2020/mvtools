@@ -830,30 +830,12 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
   // 64x64    1000*(64*64)/64=64000 1200   1200*64x64/64<<0=76800   4 915 200 000 (int32 overflow!)
   safe_sad_t divisor = (safe_sad_t)LSAD + (workarea.predictor.sad >> 1);
 
-  if (sse2 && (optSearchOption != 0))
-  {
-    __m128 xmm_LSAD = _mm_cvt_si2ss(xmm_LSAD, LSAD);
-    __m128 xmm_divisor = _mm_cvt_si2ss(xmm_divisor, divisor);
+  workarea.nLambda = (int)(workarea.nLambda
+    * (safe_sad_t)LSAD
+    / divisor
+    * LSAD
+    / divisor);
 
-    xmm_LSAD = _mm_mul_ss(xmm_LSAD, xmm_LSAD);
-    xmm_divisor = _mm_mul_ss(xmm_divisor, xmm_divisor);
-    xmm_divisor = _mm_rcp_ss(xmm_divisor);
-
-    xmm_LSAD = _mm_mul_ss(xmm_divisor, xmm_LSAD);
-
-    __m128 xmm_nLambda = _mm_cvt_si2ss(xmm_nLambda, workarea.nLambda);
-
-    xmm_nLambda = _mm_mul_ss(xmm_nLambda, xmm_LSAD);
-    workarea.nLambda = _mm_cvt_ss2si(xmm_nLambda);
-  }
-  else
-  {
-    workarea.nLambda = (int)(workarea.nLambda
-      * (safe_sad_t)LSAD
-      / divisor
-      * LSAD
-      / divisor);
-  }
  // workarea.nLambda = (int)(workarea.nLambda * (safe_sad_t)LSAD / divisor * LSAD / divisor); correct ?
 
   // replaced hard threshold by soft in v1.10.2 by Fizick (a liitle complex expression to avoid overflow)
@@ -967,8 +949,37 @@ void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
   // Median predictor
   if (!isTop) // replaced 1 by 0 - Fizick
   {
-    workarea.predictors[0].x = Median(workarea.predictors[1].x, workarea.predictors[2].x, workarea.predictors[3].x);
-    workarea.predictors[0].y = Median(workarea.predictors[1].y, workarea.predictors[2].y, workarea.predictors[3].y);
+//   workarea.predictors[0].x = Median(workarea.predictors[1].x, workarea.predictors[2].x, workarea.predictors[3].x);
+//   workarea.predictors[0].y = Median(workarea.predictors[1].y, workarea.predictors[2].y, workarea.predictors[3].y);
+    // Median as of   a + b + c - imax(a, imax(b, c)) - imin(c, imin(a, b)) looks correct.
+    __m128i xmm0_a = _mm_cvtsi32_si128(workarea.predictors[1].x);
+    xmm0_a = _mm_insert_epi32(xmm0_a, workarea.predictors[1].y, 1);  // SSE 4.1 !
+
+    __m128i xmm1_b = _mm_cvtsi32_si128(workarea.predictors[2].x);
+    xmm1_b = _mm_insert_epi32(xmm1_b, workarea.predictors[2].y, 1);  // SSE 4.1 !
+
+    __m128i xmm2_c = _mm_cvtsi32_si128(workarea.predictors[3].x);
+    xmm2_c = _mm_insert_epi32(xmm2_c, workarea.predictors[3].y, 1);  // SSE 4.1 !
+
+    __m128i xmm3_sum = xmm0_a; // better use AXV2 with triple op ?
+    __m128i xmm4_min = xmm0_a;
+    __m128i xmm5_max = xmm0_a;
+
+    xmm3_sum = _mm_add_epi32(xmm3_sum, xmm1_b);
+    xmm3_sum = _mm_add_epi32(xmm3_sum, xmm2_c);
+
+    xmm4_min = _mm_min_epi32(xmm4_min, xmm1_b);
+    xmm4_min = _mm_min_epi32(xmm4_min, xmm2_c);
+
+    xmm5_max = _mm_max_epi32(xmm5_max, xmm1_b);
+    xmm5_max = _mm_max_epi32(xmm5_max, xmm2_c);
+
+    xmm3_sum = _mm_sub_epi32(xmm3_sum, xmm5_max);
+    xmm3_sum = _mm_sub_epi32(xmm3_sum, xmm4_min);
+
+    workarea.predictors[0].x = _mm_cvtsi128_si32(xmm3_sum);
+    workarea.predictors[0].y = _mm_extract_epi32(xmm3_sum, 1);
+
     //		workarea.predictors[0].sad = Median(workarea.predictors[1].sad, workarea.predictors[2].sad, workarea.predictors[3].sad);
         // but it is not true median vector (x and y may be mixed) and not its sad ?!
         // we really do not know SAD, here is more safe estimation especially for phaseshift method - v1.6.0
@@ -1018,8 +1029,16 @@ void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
   // 64x64    1000*(64*64)/64=64000 1200   1200*64x64/64<<0=76800   4 915 200 000 (int32 overflow!)
   safe_sad_t divisor = (safe_sad_t)LSAD + (workarea.predictor.sad >> 1);
 
+  __m128 xmm_divisor = _mm_setzero_ps();
   __m128 xmm_LSAD = _mm_cvt_si2ss(xmm_LSAD, LSAD);
-  __m128 xmm_divisor = _mm_cvt_si2ss(xmm_divisor, divisor);
+  if (sizeof(safe_sad_t) == 4) // safe_sad_t may be 64bit ?
+  {
+    xmm_divisor = _mm_cvt_si2ss(xmm_divisor, divisor);
+  }
+  else
+  {
+    xmm_divisor = _mm_cvtsi64_ss(xmm_divisor, divisor);
+  }
 
   xmm_LSAD = _mm_mul_ss(xmm_LSAD, xmm_LSAD);
   xmm_divisor = _mm_mul_ss(xmm_divisor, xmm_divisor);
