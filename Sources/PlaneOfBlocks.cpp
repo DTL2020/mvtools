@@ -1662,7 +1662,7 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
 
 // DTL test
 template<typename pixel_t>
-void PlaneOfBlocks::PseudoEPZSearch_optSO2(WorkingArea& workarea)
+MV_FORCEINLINE void PlaneOfBlocks::PseudoEPZSearch_optSO2(WorkingArea& workarea)
 {
   typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
 
@@ -1686,44 +1686,41 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2(WorkingArea& workarea)
   workarea.nMinCost = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2
 
   // Global MV predictor  - added by Fizick
-  workarea.globalMVPredictor = ClipMV(workarea, workarea.globalMVPredictor);
+  workarea.globalMVPredictor = ClipMV_SO2(workarea, workarea.globalMVPredictor);
 
-  //	if ( workarea.IsVectorOK(workarea.globalMVPredictor.x, workarea.globalMVPredictor.y ) )
+
+  sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y));
+  sad_t cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
+
+  if (cost < workarea.nMinCost)
   {
-    sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y));
-    sad_t cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
+    workarea.bestMV.x = workarea.globalMVPredictor.x;
+    workarea.bestMV.y = workarea.globalMVPredictor.y;
+    workarea.bestMV.sad = sad;
+    workarea.nMinCost = cost;
+  }
+  //	}
+  //	Then, the predictor :
+  //	if (   (( workarea.predictor.x != zeroMVfieldShifted.x ) || ( workarea.predictor.y != zeroMVfieldShifted.y ))
+  //	    && (( workarea.predictor.x != workarea.globalMVPredictor.x ) || ( workarea.predictor.y != workarea.globalMVPredictor.y )))
+  //	{
+  sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
+  cost = sad;
 
-    if (cost < workarea.nMinCost)
-    {
-      workarea.bestMV.x = workarea.globalMVPredictor.x;
-      workarea.bestMV.y = workarea.globalMVPredictor.y;
-      workarea.bestMV.sad = sad;
-      workarea.nMinCost = cost;
-    }
-    //	}
-    //	Then, the predictor :
-    //	if (   (( workarea.predictor.x != zeroMVfieldShifted.x ) || ( workarea.predictor.y != zeroMVfieldShifted.y ))
-    //	    && (( workarea.predictor.x != workarea.globalMVPredictor.x ) || ( workarea.predictor.y != workarea.globalMVPredictor.y )))
-    //	{
-    sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
-    cost = sad;
-
-    if (cost < workarea.nMinCost)
-    {
-      workarea.bestMV.x = workarea.predictor.x;
-      workarea.bestMV.y = workarea.predictor.y;
-      workarea.bestMV.sad = sad;
-      workarea.nMinCost = cost;
-    }
+  if (cost < workarea.nMinCost)
+  {
+    workarea.bestMV.x = workarea.predictor.x;
+    workarea.bestMV.y = workarea.predictor.y;
+    workarea.bestMV.sad = sad;
+    workarea.nMinCost = cost;
   }
 
   // then all the other predictors
-  int npred = 4;
-
-  for (int i = 0; i < npred; i++)
-  {
-    CheckMV0<pixel_t>(workarea, workarea.predictors[i].x, workarea.predictors[i].y);
-  }	// for i
+  // vectors were clipped in FetchPredictors - no new IsVectorOK() check ?
+  CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[0].x, workarea.predictors[0].y);
+  CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[1].x, workarea.predictors[1].y);
+  CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[2].x, workarea.predictors[2].y);
+  CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[3].x, workarea.predictors[3].y);
 
   // then, we refine, 
   ExhaustiveSearch8x8_uint8_np1_sp2_avx2(workarea, workarea.bestMV.x, workarea.bestMV.y);
@@ -3277,6 +3274,34 @@ MV_FORCEINLINE void	PlaneOfBlocks::CheckMV0(WorkingArea &workarea, int vx, int v
   }
 }
 
+/* check if the vector (vx, vy) is better than the best vector found so far without penalty new - renamed in v.2.11*/
+template<typename pixel_t>
+MV_FORCEINLINE void	PlaneOfBlocks::CheckMV0_SO2(WorkingArea& workarea, int vx, int vy)
+{		//here the chance for default values are high especially for zeroMVfieldShifted (on left/top border)
+  if (
+#ifdef ONLY_CHECK_NONDEFAULT_MV
+  ((vx != 0) || (vy != zeroMVfieldShifted.y)) &&
+    ((vx != workarea.predictor.x) || (vy != workarea.predictor.y)) &&
+    ((vx != workarea.globalMVPredictor.x) || (vy != workarea.globalMVPredictor.y)) &&
+#endif
+    1)
+  {
+    // from 2.5.11.9-SVP: no additional SAD calculations if partial sum is already above minCost
+    sad_t cost = workarea.MotionDistorsion<pixel_t>(vx, vy);
+    if (cost >= workarea.nMinCost) return;
+
+    sad_t sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, vx, vy));
+    cost += sad;
+    if (cost >= workarea.nMinCost) return;
+
+    workarea.bestMV.x = vx;
+    workarea.bestMV.y = vy;
+    workarea.nMinCost = cost;
+    workarea.bestMV.sad = sad;
+
+  }
+}
+
 /* check if the vector (vx, vy) is better than the best vector found so far */
 template<typename pixel_t>
 MV_FORCEINLINE void	PlaneOfBlocks::CheckMV(WorkingArea &workarea, int vx, int vy)
@@ -3453,12 +3478,61 @@ MV_FORCEINLINE int	PlaneOfBlocks::ClipMVy(WorkingArea &workarea, int vy)
 }
 
 /* clip a vector to the search boundaries */
-MV_FORCEINLINE VECTOR	PlaneOfBlocks::ClipMV(WorkingArea &workarea, VECTOR v)
+MV_FORCEINLINE VECTOR	PlaneOfBlocks::ClipMV(WorkingArea& workarea, VECTOR v)
 {
   VECTOR v2;
-  v2.x = ClipMVx(workarea, v.x);
-  v2.y = ClipMVy(workarea, v.y);
+
+  if (sse41 && optSearchOption == 1)
+  {
+    __m128i xmm0_x = _mm_cvtsi32_si128(v.x);
+    __m128i xmm1_y = _mm_cvtsi32_si128(v.y);
+
+    __m128i xmm2_DxMin = _mm_cvtsi32_si128(workarea.nDxMin);
+    __m128i xmm3_DxMax = _mm_cvtsi32_si128(workarea.nDxMax - 1);
+    __m128i xmm4_DyMin = _mm_cvtsi32_si128(workarea.nDyMin);
+    __m128i xmm5_DyMax = _mm_cvtsi32_si128(workarea.nDyMax - 1);
+
+    xmm0_x = _mm_max_epi32(xmm0_x, xmm2_DxMin); // SSE 4.1 !!
+    xmm1_y = _mm_max_epi32(xmm1_y, xmm4_DyMin);
+
+    xmm0_x = _mm_min_epi32(xmm0_x, xmm3_DxMax);
+    xmm1_y = _mm_min_epi32(xmm1_y, xmm5_DyMax); // no < and >= and -1 (?) for this version
+
+    v2.x = _mm_cvtsi128_si32(xmm0_x);
+    v2.y = _mm_cvtsi128_si32(xmm1_y);
+  }
+  else
+  {
+    v2.x = ClipMVx(workarea, v.x);
+    v2.y = ClipMVy(workarea, v.y);
+  }
+
   v2.sad = v.sad;
+
+  return v2;
+}
+
+MV_FORCEINLINE VECTOR	PlaneOfBlocks::ClipMV_SO2(WorkingArea& workarea, VECTOR v)
+{
+  VECTOR v2;
+
+  __m128i xmm0_x = _mm_cvtsi32_si128(v.x);
+  __m128i xmm1_y = _mm_cvtsi32_si128(v.y);
+
+  __m128i xmm2_DxMin = _mm_cvtsi32_si128(workarea.nDxMin);
+  __m128i xmm3_DxMax = _mm_cvtsi32_si128(workarea.nDxMax - 1);
+  __m128i xmm4_DyMin = _mm_cvtsi32_si128(workarea.nDyMin);
+  __m128i xmm5_DyMax = _mm_cvtsi32_si128(workarea.nDyMax - 1);
+
+  xmm0_x = _mm_max_epi32(xmm0_x, xmm2_DxMin); // SSE 4.1 !!
+  xmm1_y = _mm_max_epi32(xmm1_y, xmm4_DyMin);
+
+  xmm0_x = _mm_min_epi32(xmm0_x, xmm3_DxMax);
+  xmm1_y = _mm_min_epi32(xmm1_y, xmm5_DyMax); // no < and >= and -1 (?) for this version
+
+  v2.x = _mm_cvtsi128_si32(xmm0_x);
+  v2.y = _mm_cvtsi128_si32(xmm1_y);
+
   return v2;
 }
 
@@ -4617,3 +4691,31 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp1_c(WorkingArea& workarea, int m
 
 }
 
+MV_FORCEINLINE void PlaneOfBlocks::PrefetchVECTOR(int idx)
+{
+  if (idx < 0 || idx > nBlkCount)
+    return;
+
+  VECTOR* pVector = &vectors[idx];
+  // check if start and end of VECTOR structure hit the same 64-byte cache line (128 for L2/L3 cache ?)
+  char* pStart = (char*)pVector;
+  char* pEnd = (char*)pVector + sizeof(VECTOR) - 1;
+
+#ifdef _WIN64
+  char* pStart64 = (char*)((__int64)pStart >> 6);
+  char* pEnd64 = (char*)((__int64)pEnd >> 6);
+#else
+  char* pStart64 = (char*)((int)pStart >> 6);
+  char* pEnd64 = (char*)((int)pEnd >> 6);
+#endif
+
+  if (pStart64 == pEnd64)
+  {
+    _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(pStart)), _MM_HINT_T0);
+  }
+  else
+  {
+    _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(pStart)), _MM_HINT_T0);
+    _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(pEnd)), _MM_HINT_T0);
+  }
+}

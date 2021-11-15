@@ -368,7 +368,7 @@ private:
 
   /* performs an epz search */
   template<typename pixel_t>
-  void PseudoEPZSearch_optSO2(WorkingArea& workarea); // full predictors, optSearchOption = 2 set of params
+  MV_FORCEINLINE void PseudoEPZSearch_optSO2(WorkingArea& workarea); // full predictors, optSearchOption = 2 set of params
 
   /* performs an epz search */
   template<typename pixel_t>
@@ -446,6 +446,8 @@ private:
   template<typename pixel_t>
   MV_FORCEINLINE void CheckMV0(WorkingArea &workarea, int vx, int vy);
   template<typename pixel_t>
+  MV_FORCEINLINE void CheckMV0_SO2(WorkingArea& workarea, int vx, int vy);
+  template<typename pixel_t>
   MV_FORCEINLINE void CheckMV(WorkingArea &workarea, int vx, int vy);
   template<typename pixel_t>
   MV_FORCEINLINE void CheckMV2(WorkingArea &workarea, int vx, int vy, int *dir, int val);
@@ -454,6 +456,7 @@ private:
   MV_FORCEINLINE int ClipMVx(WorkingArea &workarea, int vx);
   MV_FORCEINLINE int ClipMVy(WorkingArea &workarea, int vy);
   MV_FORCEINLINE VECTOR ClipMV(WorkingArea &workarea, VECTOR v);
+  MV_FORCEINLINE VECTOR	ClipMV_SO2(WorkingArea& workarea, VECTOR v);
   MV_FORCEINLINE static int Median(int a, int b, int c);
   // MV_FORCEINLINE static unsigned int SquareDifferenceNorm(const VECTOR& v1, const VECTOR& v2); // not used
   MV_FORCEINLINE static unsigned int SquareDifferenceNorm(const VECTOR& v1, const int v2x, const int v2y);
@@ -472,6 +475,8 @@ private:
   void	recalculate_mv_slice(Slicer::TaskData &td);
 
   void	estimate_global_mv_doubled_slice(Slicer::TaskData &td);
+
+  MV_FORCEINLINE void PrefetchVECTOR(int idx);
 
 };
 
