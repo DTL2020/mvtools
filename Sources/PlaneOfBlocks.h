@@ -228,7 +228,7 @@ private:
   sad_t _thSAD;
   //  const VECTOR zeroMV = {0,0,(sad_t)-1};
   int _predictorType; // 2.7.46
-
+  bool bInterframe;
 
   // Working area
   class WorkingArea
@@ -338,6 +338,16 @@ private:
   template<typename pixel_t>
   void FetchPredictors(WorkingArea &workarea);
 
+<<<<<<< Updated upstream
+=======
+  template<typename pixel_t>
+  void FetchPredictors_sse41(WorkingArea &workarea);
+
+  template<typename pixel_t>
+  MV_FORCEINLINE void FetchPredictors_sse41_interframe(WorkingArea& workarea);
+
+
+>>>>>>> Stashed changes
   /* performs a diamond search */
   template<typename pixel_t>
   void DiamondSearch(WorkingArea &workarea, int step);
@@ -359,6 +369,10 @@ private:
   /* performs an epz search */
   template<typename pixel_t>
   void PseudoEPZSearch(WorkingArea &workarea); // full predictors, slowest, max quality
+
+  /* performs an epz search */
+  template<typename pixel_t>
+  void PseudoEPZSearch_optSO2(WorkingArea& workarea); // full predictors, optSearchOption = 2 set of params
 
   /* performs an epz search */
   template<typename pixel_t>
@@ -454,6 +468,10 @@ private:
 
   template<typename pixel_t>
   void	search_mv_slice(Slicer::TaskData &td);
+
+  template<typename pixel_t>
+  void	search_mv_slice_SO2(Slicer::TaskData& td); // with optSearchOption = 2 set of params
+
   template<typename pixel_t>
   void	recalculate_mv_slice(Slicer::TaskData &td);
 
