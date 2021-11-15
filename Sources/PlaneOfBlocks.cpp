@@ -86,7 +86,8 @@ PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSi
   , BLITCHROMA(0)
   , SADCHROMA(0)
   , SATD(0)
-  , vectors(nBlkCount)
+//  , vectors(nBlkCount)
+  , vectors(nBlkCount, env)
   , smallestPlane((_nFlags & MOTION_SMALLEST_PLANE) != 0)
   , isse((_nFlags & MOTION_USE_ISSE) != 0)
   , chroma((_nFlags & MOTION_USE_CHROMA_MOTION) != 0)
@@ -209,9 +210,9 @@ PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSi
     }
   }
 
-  if (optSearchOption == 2 && arch != USE_AVX2)
+  if (optSearchOption == 2 && (arch != USE_AVX2 || nPel != 1))
   {
-    env->ThrowError("optSearchOption=2 require AVX2 or more CPU");
+    env->ThrowError("optSearchOption=2 require AVX2 or more CPU and pel=1");
   }
 
   // for debug:
@@ -516,14 +517,14 @@ void PlaneOfBlocks::RecalculateMVs(
 }
 
 
-
 template<typename safe_sad_t, typename smallOverlapSafeSad_t>
-void PlaneOfBlocks::InterpolatePrediction(const PlaneOfBlocks &pob)
+//void PlaneOfBlocks::InterpolatePrediction(const PlaneOfBlocks &pob)
+void PlaneOfBlocks::InterpolatePrediction(PlaneOfBlocks& pob)
 {
   int normFactor = 3 - nLogPel + pob.nLogPel;
   int mulFactor = (normFactor < 0) ? -normFactor : 0;
   normFactor = (normFactor < 0) ? 0 : normFactor;
-  int normov = (nBlkSizeX - nOverlapX)*(nBlkSizeY - nOverlapY);
+  int normov = (nBlkSizeX - nOverlapX) * (nBlkSizeY - nOverlapY);
   int aoddx = (nBlkSizeX * 3 - nOverlapX * 2);
   int aevenx = (nBlkSizeX * 3 - nOverlapX * 4);
   int aoddy = (nBlkSizeY * 3 - nOverlapY * 2);
@@ -556,6 +557,8 @@ void PlaneOfBlocks::InterpolatePrediction(const PlaneOfBlocks &pob)
   bool bNoOverlap = (nOverlapX == 0 && nOverlapY == 0);
   bool bSmallOverlap = nOverlapX <= (nBlkSizeX >> 1) && nOverlapY <= (nBlkSizeY >> 1);
 
+  int iout_x, iout_y, iout_sad;
+
   for (int l = 0, index = 0; l < nBlkY; l++)
   {
     for (int k = 0; k < nBlkX; k++, index++)
@@ -580,23 +583,23 @@ void PlaneOfBlocks::InterpolatePrediction(const PlaneOfBlocks &pob)
       {
         if ((j == 0) || (j >= 2 * pob.nBlkY - 1))
         {
-          v1 = v2 = v3 = v4 = pob.vectors[iper2 + (jper2) * pob.nBlkX];
+          v1 = v2 = v3 = v4 = pob.vectors[iper2 + (jper2)*pob.nBlkX];
         }
         else
         {
-          v1 = v2 = pob.vectors[iper2 + (jper2) * pob.nBlkX];
+          v1 = v2 = pob.vectors[iper2 + (jper2)*pob.nBlkX];
           v3 = v4 = pob.vectors[iper2 + (jper2 + offy) * pob.nBlkX];
         }
       }
       else if ((j == 0) || (j >= 2 * pob.nBlkY - 1))
       {
-        v1 = v2 = pob.vectors[iper2 + (jper2) * pob.nBlkX];
-        v3 = v4 = pob.vectors[iper2 + offx + (jper2) * pob.nBlkX];
+        v1 = v2 = pob.vectors[iper2 + (jper2)*pob.nBlkX];
+        v3 = v4 = pob.vectors[iper2 + offx + (jper2)*pob.nBlkX];
       }
       else
       {
-        v1 = pob.vectors[iper2 + (jper2) * pob.nBlkX];
-        v2 = pob.vectors[iper2 + offx + (jper2) * pob.nBlkX];
+        v1 = pob.vectors[iper2 + (jper2)*pob.nBlkX];
+        v2 = pob.vectors[iper2 + offx + (jper2)*pob.nBlkX];
         v3 = pob.vectors[iper2 + (jper2 + offy) * pob.nBlkX];
         v4 = pob.vectors[iper2 + offx + (jper2 + offy) * pob.nBlkX];
       }
@@ -605,10 +608,10 @@ void PlaneOfBlocks::InterpolatePrediction(const PlaneOfBlocks &pob)
 
       if (bNoOverlap)
       {
-        vectors[index].x = 9 * v1.x + 3 * v2.x + 3 * v3.x + v4.x;
-        vectors[index].y = 9 * v1.y + 3 * v2.y + 3 * v3.y + v4.y;
+        iout_x = 9 * v1.x + 3 * v2.x + 3 * v3.x + v4.x;
+        iout_y = 9 * v1.y + 3 * v2.y + 3 * v3.y + v4.y;
         tmp_sad = 9 * (safe_sad_t)v1.sad + 3 * (safe_sad_t)v2.sad + 3 * (safe_sad_t)v3.sad + (safe_sad_t)v4.sad + 8;
-      
+
       }
       else if (bSmallOverlap) // corrected in v1.4.11
       {
@@ -616,11 +619,11 @@ void PlaneOfBlocks::InterpolatePrediction(const PlaneOfBlocks &pob)
         int ax2 = (nBlkSizeX - nOverlapX) * 4 - ax1;
         int ay1 = (offy > 0) ? aoddy : aeveny;
         int ay2 = (nBlkSizeY - nOverlapY) * 4 - ay1;
-        int a11 = ax1*ay1, a12 = ax1*ay2, a21 = ax2*ay1, a22 = ax2*ay2;
-        vectors[index].x = (a11*v1.x + a21*v2.x + a12*v3.x + a22*v4.x) / normov;
-        vectors[index].y = (a11*v1.y + a21*v2.y + a12*v3.y + a22*v4.y) / normov;
+        int a11 = ax1 * ay1, a12 = ax1 * ay2, a21 = ax2 * ay1, a22 = ax2 * ay2;
+        iout_x = (a11 * v1.x + a21 * v2.x + a12 * v3.x + a22 * v4.x) / normov;
+        iout_y = (a11 * v1.y + a21 * v2.y + a12 * v3.y + a22 * v4.y) / normov;
         // generic safe_sad_t is not always safe for the next calculations
-        tmp_sad = (safe_sad_t)(((smallOverlapSafeSad_t)a11*v1.sad + (smallOverlapSafeSad_t)a21*v2.sad + (smallOverlapSafeSad_t)a12*v3.sad + (smallOverlapSafeSad_t)a22*v4.sad) / normov);
+        tmp_sad = (safe_sad_t)(((smallOverlapSafeSad_t)a11 * v1.sad + (smallOverlapSafeSad_t)a21 * v2.sad + (smallOverlapSafeSad_t)a12 * v3.sad + (smallOverlapSafeSad_t)a22 * v4.sad) / normov);
 #if 0
         if (tmp_sad < 0)
           _RPT1(0, "Vector and SAD Interpolate Problem: possible SAD overflow %d\n", (sad_t)tmp_sad);
@@ -628,25 +631,52 @@ void PlaneOfBlocks::InterpolatePrediction(const PlaneOfBlocks &pob)
       }
       else // large overlap. Weights are not quite correct but let it be
       {
-        vectors[index].x = (v1.x + v2.x + v3.x + v4.x) << 2;
-        vectors[index].y = (v1.y + v2.y + v3.y + v4.y) << 2;
+        iout_x = (v1.x + v2.x + v3.x + v4.x) << 2;
+        iout_y = (v1.y + v2.y + v3.y + v4.y) << 2;
         tmp_sad = ((safe_sad_t)v1.sad + v2.sad + v3.sad + v4.sad + 2) << 2;
       }
-      vectors[index].x = (vectors[index].x >> normFactor) << mulFactor;
-      vectors[index].y = (vectors[index].y >> normFactor) << mulFactor;
-      vectors[index].sad = (sad_t)(tmp_sad >> 4);
+
+      iout_x = (iout_x >> normFactor) << mulFactor;
+      iout_y = (iout_y >> normFactor) << mulFactor;
+      iout_sad = (sad_t)(tmp_sad >> 4);
+
+      if (sse2)
+      {
+        _mm_stream_si32(&vectors[index].x, iout_x);
+        _mm_stream_si32(&vectors[index].y, iout_y);
+        _mm_stream_si32(&vectors[index].sad, iout_sad);
+      }
+      else
+      {
+        vectors[index].x = iout_x;
+        vectors[index].y = iout_y;
+        vectors[index].sad = iout_sad;
+      }
 #if 0
       if (vectors[index].sad < 0)
         _RPT1(0, "Vector and SAD Interpolate Problem: possible SAD overflow: %d\n", vectors[index].sad);
 #endif
     }	// for k < nBlkX
   }	// for l < nBlkY
+
+  if (sse2)
+  {
+    _mm_sfence();
+  }
+
 }
 
+/*
 // instantiate
 template void PlaneOfBlocks::InterpolatePrediction<sad_t, sad_t>(const PlaneOfBlocks &pob);
 template void PlaneOfBlocks::InterpolatePrediction<sad_t, bigsad_t>(const PlaneOfBlocks &pob);
 template void PlaneOfBlocks::InterpolatePrediction<bigsad_t, bigsad_t>(const PlaneOfBlocks &pob);
+*/
+// instantiate
+template void PlaneOfBlocks::InterpolatePrediction<sad_t, sad_t>(PlaneOfBlocks& pob);
+template void PlaneOfBlocks::InterpolatePrediction<sad_t, bigsad_t>(PlaneOfBlocks& pob);
+template void PlaneOfBlocks::InterpolatePrediction<bigsad_t, bigsad_t>(PlaneOfBlocks& pob);
+
 
 void PlaneOfBlocks::WriteHeaderToArray(int *array)
 {
@@ -823,7 +853,7 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
 }
 
 template<typename pixel_t>
-void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
+MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
 {
   VECTOR v1; VECTOR v2; VECTOR v3;
 
@@ -1316,7 +1346,12 @@ template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
 {
   typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
-  FetchPredictors<pixel_t>(workarea);
+  if (sse41 && optSearchOption > 0)
+  {
+    FetchPredictors_sse41<pixel_t>(workarea);
+  }
+  else
+    FetchPredictors<pixel_t>(workarea);
 
   sad_t sad;
   sad_t saduv;
@@ -1589,7 +1624,12 @@ template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
 {
     typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
-    FetchPredictors<pixel_t>(workarea);
+    if (sse41 && optSearchOption > 0)
+    {
+      FetchPredictors_sse41<pixel_t>(workarea);
+    }
+    else
+      FetchPredictors<pixel_t>(workarea);
 
     sad_t sad;
     sad_t saduv;
@@ -1662,7 +1702,7 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
 
 // DTL test
 template<typename pixel_t>
-MV_FORCEINLINE void PlaneOfBlocks::PseudoEPZSearch_optSO2(WorkingArea& workarea)
+void PlaneOfBlocks::PseudoEPZSearch_optSO2(WorkingArea& workarea)
 {
   typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
 
@@ -1723,12 +1763,76 @@ MV_FORCEINLINE void PlaneOfBlocks::PseudoEPZSearch_optSO2(WorkingArea& workarea)
   CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[3].x, workarea.predictors[3].y);
 
   // then, we refine, 
-  ExhaustiveSearch8x8_uint8_np1_sp2_avx2(workarea, workarea.bestMV.x, workarea.bestMV.y);
+  // sp = 1 for level=0 (finest) sp = 2 for other levels
+  (this->*ExhaustiveSearch8x8_avx2)(workarea, workarea.bestMV.x, workarea.bestMV.y);
 
   // we store the result
-  vectors[workarea.blkIdx].x = workarea.bestMV.x;
-  vectors[workarea.blkIdx].y = workarea.bestMV.y;
-  vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
+  vectors[workarea.blkIdx] = workarea.bestMV;
+
+  workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
+}
+
+
+template<typename pixel_t>
+void PlaneOfBlocks::PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea)
+{
+  typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
+
+  if (bInterframe)
+  {
+    FetchPredictors_sse41_interframe<pixel_t>(workarea);
+  }
+  else
+  {
+    FetchPredictors_sse41<pixel_t>(workarea);
+  }
+
+  sad_t sad;
+
+  // We treat zero alone
+  // Do we bias zero with not taking into account distorsion ?
+  workarea.bestMV.x = zeroMVfieldShifted.x;
+  workarea.bestMV.y = zeroMVfieldShifted.y;
+  sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, 0, zeroMVfieldShifted.y));
+  workarea.bestMV.sad = sad;
+  workarea.nMinCost = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2
+
+  // Global MV predictor  - added by Fizick
+  workarea.globalMVPredictor = ClipMV_SO2(workarea, workarea.globalMVPredictor);
+
+
+  sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y));
+  sad_t cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
+
+  if (cost < workarea.nMinCost)
+  {
+    workarea.bestMV.x = workarea.globalMVPredictor.x;
+    workarea.bestMV.y = workarea.globalMVPredictor.y;
+    workarea.bestMV.sad = sad;
+    workarea.nMinCost = cost;
+  }
+  //	}
+  //	Then, the predictor :
+  //	if (   (( workarea.predictor.x != zeroMVfieldShifted.x ) || ( workarea.predictor.y != zeroMVfieldShifted.y ))
+  //	    && (( workarea.predictor.x != workarea.globalMVPredictor.x ) || ( workarea.predictor.y != workarea.globalMVPredictor.y )))
+  //	{
+  sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
+  cost = sad;
+
+  if (cost < workarea.nMinCost)
+  {
+    workarea.bestMV.x = workarea.predictor.x;
+    workarea.bestMV.y = workarea.predictor.y;
+    workarea.bestMV.sad = sad;
+    workarea.nMinCost = cost;
+  }
+
+  // then, we refine, 
+  // sp = 1 for level=0 (finest) sp = 2 for other levels
+  (this->*ExhaustiveSearch8x8_avx2)(workarea, workarea.bestMV.x, workarea.bestMV.y);
+
+  // we store the result
+  vectors[workarea.blkIdx] = workarea.bestMV;
 
   workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
 }
@@ -3482,7 +3586,7 @@ MV_FORCEINLINE VECTOR	PlaneOfBlocks::ClipMV(WorkingArea& workarea, VECTOR v)
 {
   VECTOR v2;
 
-  if (sse41 && optSearchOption == 1)
+  if (sse41 && optSearchOption > 0)
   {
     __m128i xmm0_x = _mm_cvtsi32_si128(v.x);
     __m128i xmm1_y = _mm_cvtsi32_si128(v.y);
@@ -3849,6 +3953,25 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
 
   workarea.DCT = 0;
 
+  if (nSearchParam == 1)
+  {
+    ExhaustiveSearch8x8_avx2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp1_avx2;
+  }
+  else // sp = 2 at all levels except finest
+  {
+    ExhaustiveSearch8x8_avx2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp2_avx2;
+  }
+  /*
+  if (_predictorType == 0) // this selector method do not work not now - need to found why ???
+  {
+    Sel_Pseudo_EPZ_search_SO2 = &PlaneOfBlocks::PseudoEPZSearch_optSO2;
+  }
+  else if (_predictorType == 1)
+  {
+    Sel_Pseudo_EPZ_search_SO2 = &PlaneOfBlocks::PseudoEPZSearch_optSO2_glob_med_pred;
+  }
+  */
+
   int* pBlkData = _out + 1 + workarea.blky_beg * nBlkX * N_PER_BLOCK;
   if (outfilebuf != NULL)
   {
@@ -3961,11 +4084,11 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
       PrefetchVECTOR(iBlkIdx_pref - nBlkX);
       PrefetchVECTOR(iBlkIdx_pref + nBlkX + workarea.blkScanDir);
       PrefetchVECTOR(iBlkIdx_pref - nBlkX + workarea.blkScanDir);
-
+      
       /* search the mv */
-      workarea.predictor = ClipMV(workarea, vectors[workarea.blkIdx]);
+      workarea.predictor = ClipMV_SO2(workarea, vectors[workarea.blkIdx]);
 
-      workarea.predictors[4] = ClipMV(workarea, zeroMV);
+      workarea.predictors[4] = ClipMV_SO2(workarea, zeroMV);
 
       bInterframe = bInterframeH && bInterframeV;
 
@@ -3977,7 +4100,11 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
       else // if (_predictorType == 2) // DTL: no predictiors
         PseudoEPZSearch_no_pred<pixel_t>(workarea);
         */
-      PseudoEPZSearch_optSO2<pixel_t>(workarea); // all predictors (original)
+      if (_predictorType == 0)
+        PseudoEPZSearch_optSO2<pixel_t>(workarea); // all predictors (original)
+      else //if (_predictorType == 1)
+        PseudoEPZSearch_optSO2_glob_med_pred<pixel_t>(workarea);
+//      (this->*Sel_Pseudo_EPZ_search_SO2)(workarea);
 
       // workarea.bestMV = zeroMV; // debug
 
@@ -4538,8 +4665,11 @@ PlaneOfBlocks::ExhaustiveSearchFunction_t PlaneOfBlocks::get_ExhaustiveSearchFun
 
   // SearchParam 1 or 2 or 4 is supported at the moment
   func_fn[std::make_tuple(8, 8, 1, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp1_avx2;
+  func_fn[std::make_tuple(8, 8, 1, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp1_c;
   func_fn[std::make_tuple(8, 8, 2, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp2_avx2;
   func_fn[std::make_tuple(8, 8, 2, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp2_c;
+  func_fn[std::make_tuple(8, 8, 3, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp3_avx2;
+  func_fn[std::make_tuple(8, 8, 3, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp3_c;
   func_fn[std::make_tuple(8, 8, 4, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp4_avx2;
   func_fn[std::make_tuple(8, 8, 4, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c;
 
@@ -4560,8 +4690,6 @@ PlaneOfBlocks::ExhaustiveSearchFunction_t PlaneOfBlocks::get_ExhaustiveSearchFun
 }
 
 
-
-
 void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int mvx, int mvy) // 8x8 esa search radius 4
 {
   // debug check !
@@ -4570,7 +4698,7 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int m
   {
     return;
   }
-  if (!workarea.IsVectorOK(mvx + 3, mvy + 4))
+  if (!workarea.IsVectorOK(mvx + 3, mvy + 4)) // 8 positions only so -4..+3.
   {
     return;
   }
@@ -4586,9 +4714,9 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int m
   unsigned short minsad = 65535;
   int x_minsad = 0;
   int y_minsad = 0;
-  for (int x = -4; x < 4; x++)
+  for (int y = 3; y > -5; y--) // reversed scan to match _mm_minpos() logic ?
   {
-    for (int y = -4; y < 5; y++)
+    for (int x = 4; x > -5; x--)
     {
       int sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlock(workarea, mvx + x, mvy + y), nRefPitch[0]);
       if (sad < minsad)
@@ -4611,6 +4739,47 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int m
 }
 
 // Dispatcher for DTL tests
+void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp3_c(WorkingArea& workarea, int mvx, int mvy) // 8x8 esa search radius 3,  works for any nPel !.
+{
+  // debug check !
+  // idea - may be not 4 checks are required - only upper left corner (starting addresses of buffer) and lower right (to not over-run atfer end of buffer - need check/test)
+  if (!workarea.IsVectorOK(mvx - 3, mvy - 3))
+  {
+    return;
+  }
+  if (!workarea.IsVectorOK(mvx + 3, mvy + 3))
+  {
+    return;
+  }
+
+  unsigned short minsad = 65535;
+  int x_minsad = 0;
+  int y_minsad = 0;
+  for (int y = 3; y > -4; y--)
+  {
+    for (int x = 3; x > -4; x--)
+    {
+      int sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlock(workarea, mvx + x, mvy + y), nRefPitch[0]);
+      if (sad < minsad)
+      {
+        minsad = sad;
+        x_minsad = x;
+        y_minsad = y;
+      }
+    }
+  }
+
+  sad_t cost = minsad + ((penaltyNew * minsad) >> 8);
+  if (cost >= workarea.nMinCost) return;
+
+  workarea.bestMV.x = mvx + x_minsad;
+  workarea.bestMV.y = mvy + y_minsad;
+  workarea.nMinCost = cost;
+  workarea.bestMV.sad = minsad;
+
+}
+
+
 void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy) // 8x8 esa search radius 2,  works for any nPel !.
 {
   // debug check !
@@ -4627,9 +4796,9 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int m
   unsigned short minsad = 65535;
   int x_minsad = 0;
   int y_minsad = 0;
-  for (int y = -2; y < 3; y++)
+  for (int y = 2; y > -3; y--)
   {
-    for (int x = -2; x < 3; x++)
+    for (int x = 2; x > -3; x--)
     {
       int sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlock(workarea, mvx + x, mvy + y), nRefPitch[0]);
       if (sad < minsad)
@@ -4667,9 +4836,9 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp1_c(WorkingArea& workarea, int m
   unsigned short minsad = 65535;
   int x_minsad = 0;
   int y_minsad = 0;
-  for (int y = -1; y < 2; y++)
+  for (int y = 1; y > -2; y--)
   {
-    for (int x = -1; x < 2; x++)
+    for (int x = 1; x > -2; x--)
     {
       int sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlock(workarea, mvx + x, mvy + y), nRefPitch[0]);
       if (sad < minsad)
@@ -4689,6 +4858,78 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp1_c(WorkingArea& workarea, int m
   workarea.nMinCost = cost;
   workarea.bestMV.sad = minsad;
 
+}
+
+// MV_Vector
+template<class T>
+MVVector<T>::MVVector()
+{
+  my_size = 0;
+  buffer = 0;
+  size_bytes = 0;
+}
+
+template<class T>
+MVVector<T>::~MVVector()
+{
+  my_size = 0;
+  buffer = 0;
+  size_bytes = 0;
+#ifdef _WIN32
+  VirtualFree(buffer, 0, MEM_RELEASE);
+#else
+  delete[]buffer;
+#endif
+}
+
+
+template<class T>
+MVVector<T>::MVVector(size_t size, IScriptEnvironment* env)
+{
+  my_size = size;
+#ifdef _WIN32
+  DWORD error;
+  // large pages - allocate if possible, if error - silent fallback to standard 4kB pages
+  SIZE_T stLPGranularity = GetLargePageMinimum();
+  SIZE_T NumLPUnits = ((size * sizeof(VECTOR)) / stLPGranularity) + 1;
+  SIZE_T stSizeToAlloc = NumLPUnits * stLPGranularity;
+  buffer = (T*)VirtualAlloc(0, stSizeToAlloc, MEM_LARGE_PAGES | MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+  error = GetLastError();
+
+  size_bytes = stSizeToAlloc;
+
+  if (buffer == 0)
+  {
+    // may be enable in debug ?
+//    env->ThrowError("MVVector LargePages alloc error. While allocating %d pages of %d size, GetLastError returned: %d\n", NumLPUnits, stLPGranularity, error);
+    // standart 4kB pages
+    buffer = (T*)VirtualAlloc(0, size * sizeof(VECTOR), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    error = GetLastError();
+
+    size_bytes = size * sizeof(VECTOR);
+
+    if (buffer == 0)
+    {
+      // major error - need to break
+      env->ThrowError("MVVector VirtualAlloc 4 kB pages alloc error. GetLastError returned: %d\n", error);
+    }
+  }
+
+#else //Linux ?
+  buffer = new T[size];
+#endif
+}
+
+template<class T>
+size_t MVVector<T>::size()const
+{
+  return my_size;
+}
+
+template<class T>
+T& MVVector<T>::operator[](size_t index) // need to add something for 'const' to make working 'const' version of InterpolatePredictors ?
+{
+  return buffer[index];
 }
 
 MV_FORCEINLINE void PlaneOfBlocks::PrefetchVECTOR(int idx)

@@ -56,7 +56,27 @@ class DCTClass;
 class MVClip;
 class MVFrame;
 
+// MVVector
+template <class T>
+class  MVVector
+{
+public:
 
+  typedef T* iterator;
+
+  MVVector();
+  ~MVVector();
+  MVVector(size_t size, IScriptEnvironment* env);
+  size_t size() const;
+
+  size_t size_bytes;
+
+  T& operator[](size_t index);
+
+private:
+  size_t my_size;
+  T* buffer;
+};
 
 // v2.5.13.1: This class is currently a bit messy,
 // it's being reorganised and reworked for further improvement.
@@ -92,7 +112,8 @@ public:
 
     /* compute the predictors from the upper plane */
   template<typename safe_sad_t, typename smallOverlapSafeSad_t>
-  void InterpolatePrediction(const PlaneOfBlocks &pob);
+//  void InterpolatePrediction(const PlaneOfBlocks &pob);
+  void InterpolatePrediction(PlaneOfBlocks& pob); // temp for MVVector[]
 
 
   void WriteHeaderToArray(int *array);
@@ -156,8 +177,9 @@ private:
   ExhaustiveSearchFunction_t get_ExhaustiveSearchFunction(int BlockX, int BlockY, int SearchParam, int bits_per_pixel, arch_t arch);
   ExhaustiveSearchFunction_t ExhaustiveSearchFunctions[MAX_SUPPORTED_EXH_SEARCHPARAM + 1]; // the function pointer
 
-  std::vector <VECTOR>              /* motion vectors of the blocks */
-    vectors;           /* before the search, contains the hierachal predictor */
+  //std::vector <VECTOR>              /* motion vectors of the blocks */
+  //  vectors;           /* before the search, contains the hierachal predictor */
+  MVVector <VECTOR> vectors;
                        /* after the search, contains the best motion vector */
 
   bool           smallestPlane;     /* say whether vectors can use predictors from a smaller plane */
@@ -339,7 +361,7 @@ private:
   void FetchPredictors(WorkingArea &workarea);
 
   template<typename pixel_t>
-  void FetchPredictors_sse41(WorkingArea &workarea);
+  MV_FORCEINLINE void FetchPredictors_sse41(WorkingArea &workarea);
 
   template<typename pixel_t>
   MV_FORCEINLINE void FetchPredictors_sse41_interframe(WorkingArea& workarea);
@@ -368,7 +390,7 @@ private:
 
   /* performs an epz search */
   template<typename pixel_t>
-  MV_FORCEINLINE void PseudoEPZSearch_optSO2(WorkingArea& workarea); // full predictors, optSearchOption = 2 set of params
+  void PseudoEPZSearch_optSO2(WorkingArea& workarea); // full predictors, optSearchOption = 2 set of params
 
   /* performs an epz search */
   template<typename pixel_t>
@@ -377,6 +399,11 @@ private:
   /* performs an epz search */
   template<typename pixel_t>
   void PseudoEPZSearch_glob_med_pred(WorkingArea& workarea); // planes >=2 recommended
+
+  /* performs an epz search */
+  template<typename pixel_t>
+  void PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea); // global and median predictors, optSearchOption = 2 set of params
+
 
   //	void PhaseShiftSearch(int vx, int vy);
 
@@ -397,6 +424,10 @@ private:
   // 8x8 esa search radius 2
   void ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
+
+  // 8x8 esa search radius 3
+  void ExhaustiveSearch8x8_uint8_sp3_c(WorkingArea& workarea, int mvx, int mvy);
+  void ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea, int mvx, int mvy);
   // END OF DTL test function
 
   template<typename pixel_t>
@@ -477,6 +508,11 @@ private:
   void	estimate_global_mv_doubled_slice(Slicer::TaskData &td);
 
   MV_FORCEINLINE void PrefetchVECTOR(int idx);
+
+  void(PlaneOfBlocks::* ExhaustiveSearch8x8_avx2)(WorkingArea& workarea, int mvx, int mvy); // selector for sp1 and sp2
+
+//  template<typename pixel_t> // this selector method do not works for some reason - need to found why
+//  void(PlaneOfBlocks::* Sel_Pseudo_EPZ_search_SO2)(WorkingArea& workarea); // selector for optPredictors 0,1
 
 };
 
