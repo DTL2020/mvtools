@@ -391,7 +391,7 @@ void PlaneOfBlocks::SearchMVs(
   if(bits_per_pixel == 8)
     if (optSearchOption == 2)
     {
-      slicer.start(nBlkY, *this, &PlaneOfBlocks::search_mv_slice<uint8_t>, 4);
+      slicer.start(nBlkY, *this, &PlaneOfBlocks::search_mv_slice_SO2<uint8_t>, 4);
     }
     else
     {
@@ -822,8 +822,6 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
   //	workarea.nLambda = workarea.nLambda*a*a;
 }
 
-<<<<<<< Updated upstream
-=======
 template<typename pixel_t>
 void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
 {
@@ -1045,8 +1043,6 @@ void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
    //	int a = LSAD/(LSAD + (workarea.predictor.sad>>1));
    //	workarea.nLambda = workarea.nLambda*a*a;
 }
-
->>>>>>> Stashed changes
 
 template<typename pixel_t>
 MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41_interframe(WorkingArea& workarea)

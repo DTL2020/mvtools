@@ -338,16 +338,12 @@ private:
   template<typename pixel_t>
   void FetchPredictors(WorkingArea &workarea);
 
-<<<<<<< Updated upstream
-=======
   template<typename pixel_t>
   void FetchPredictors_sse41(WorkingArea &workarea);
 
   template<typename pixel_t>
   MV_FORCEINLINE void FetchPredictors_sse41_interframe(WorkingArea& workarea);
 
-
->>>>>>> Stashed changes
   /* performs a diamond search */
   template<typename pixel_t>
   void DiamondSearch(WorkingArea &workarea, int step);
