@@ -404,6 +404,10 @@ private:
   template<typename pixel_t>
   void PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea); // global and median predictors, optSearchOption = 2 set of params
 
+    /* performs an epz search */
+  template<typename pixel_t>
+  void PseudoEPZSearch_optSO2_no_pred(WorkingArea& workarea); // no predictors, planes = 1 recommended, optSearchOption = 2 set of params
+
 
   //	void PhaseShiftSearch(int vx, int vy);
 
@@ -420,10 +424,12 @@ private:
   // 8x8 esa search radius 1
   void ExhaustiveSearch8x8_uint8_sp1_c(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy);
+  void ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy);
 
   // 8x8 esa search radius 2
   void ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
+  void ExhaustiveSearch8x8_uint8_SO2_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
 
   // 8x8 esa search radius 3
   void ExhaustiveSearch8x8_uint8_sp3_c(WorkingArea& workarea, int mvx, int mvy);
@@ -506,8 +512,6 @@ private:
   void	recalculate_mv_slice(Slicer::TaskData &td);
 
   void	estimate_global_mv_doubled_slice(Slicer::TaskData &td);
-
-  MV_FORCEINLINE void PrefetchVECTOR(int idx);
 
   void(PlaneOfBlocks::* ExhaustiveSearch8x8_avx2)(WorkingArea& workarea, int mvx, int mvy); // selector for sp1 and sp2
 

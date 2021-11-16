@@ -1590,11 +1590,9 @@ template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch_no_pred(WorkingArea& workarea)
 {
     typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
- //   FetchPredictors<pixel_t>(workarea);
 
     sad_t sad;
     sad_t saduv;
-
 
     // We treat zero alone
     // Do we bias zero with not taking into account distorsion ?
@@ -1837,7 +1835,32 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea)
   workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
 }
 
+template<typename pixel_t>
+void PlaneOfBlocks::PseudoEPZSearch_optSO2_no_pred(WorkingArea& workarea)
+{
+  typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
 
+  sad_t sad;
+  
+  // We treat zero alone
+  // Do we bias zero with not taking into account distorsion ?
+  workarea.bestMV.x = zeroMVfieldShifted.x;
+  workarea.bestMV.y = zeroMVfieldShifted.y;
+
+  sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, 0, zeroMVfieldShifted.y));
+
+  workarea.bestMV.sad = sad;
+  workarea.nMinCost = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2
+
+  // then, we refine, 
+  // sp = 1 for level=0 (finest) sp = 2 for other levels
+  (this->*ExhaustiveSearch8x8_avx2)(workarea, workarea.bestMV.x, workarea.bestMV.y);
+
+  // we store the result
+  vectors[workarea.blkIdx] = workarea.bestMV;
+
+  workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
+}
 
 template<typename pixel_t>
 void PlaneOfBlocks::DiamondSearch(WorkingArea &workarea, int length)
@@ -3955,11 +3978,11 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
 
   if (nSearchParam == 1)
   {
-    ExhaustiveSearch8x8_avx2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp1_avx2;
+    ExhaustiveSearch8x8_avx2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2;
   }
   else // sp = 2 at all levels except finest
   {
-    ExhaustiveSearch8x8_avx2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp2_avx2;
+    ExhaustiveSearch8x8_avx2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp2_avx2;
   }
   /*
   if (_predictorType == 0) // this selector method do not work not now - need to found why ???
@@ -3969,6 +3992,10 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
   else if (_predictorType == 1)
   {
     Sel_Pseudo_EPZ_search_SO2 = &PlaneOfBlocks::PseudoEPZSearch_optSO2_glob_med_pred;
+  }
+   else if (_predictorType == 2)
+  {
+    Sel_Pseudo_EPZ_search_SO2 = &PlaneOfBlocks::PseudoEPZSearch_optSO2_no_pred;
   }
   */
 
@@ -3988,9 +4015,9 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
   int nBlkSizeX_Ovr[3] = { (nBlkSizeX - nOverlapX), (nBlkSizeX - nOverlapX) >> nLogxRatioUV, (nBlkSizeX - nOverlapX) >> nLogxRatioUV };
   int nBlkSizeY_Ovr[3] = { (nBlkSizeY - nOverlapY), (nBlkSizeY - nOverlapY) >> nLogyRatioUV, (nBlkSizeY - nOverlapY) >> nLogyRatioUV };
 
-  for (workarea.blky = workarea.blky_beg; workarea.blky < workarea.blky_end; workarea.blky++)
+  for (workarea.blky = workarea.blky_beg + 1; workarea.blky < workarea.blky_end - 1; workarea.blky++) // +1 and -1 for disabling IsVectorOK in Exa_search sp1 and sp2 
   {
-    bInterframeV = ((workarea.blky != workarea.blky_beg) && (workarea.blky != workarea.blky_end - 1));
+//    bInterframeV = ((workarea.blky != workarea.blky_beg) && (workarea.blky != workarea.blky_end - 1)); always true now
 
     workarea.blkScanDir = (workarea.blky % 2 == 0 || !_meander_flag) ? 1 : -1;
     // meander (alternate) scan blocks (even row left to right, odd row right to left)
@@ -4076,21 +4103,13 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
       workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
       workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
       workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
-
-      // try to early prefetch
-      int iBlkX_pref = blkxStart + (iblkx + 1) * workarea.blkScanDir;
-      int iBlkIdx_pref = workarea.blky * nBlkX + iBlkX_pref;
-      PrefetchVECTOR(iBlkIdx_pref);
-      PrefetchVECTOR(iBlkIdx_pref - nBlkX);
-      PrefetchVECTOR(iBlkIdx_pref + nBlkX + workarea.blkScanDir);
-      PrefetchVECTOR(iBlkIdx_pref - nBlkX + workarea.blkScanDir);
-      
+    
       /* search the mv */
       workarea.predictor = ClipMV_SO2(workarea, vectors[workarea.blkIdx]);
 
       workarea.predictors[4] = ClipMV_SO2(workarea, zeroMV);
 
-      bInterframe = bInterframeH && bInterframeV;
+      bInterframe = bInterframeH;//&& bInterframeV;
 
 /*      // Possible point of placement selection of 'predictors control'
       if (_predictorType == 0)
@@ -4102,8 +4121,10 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
         */
       if (_predictorType == 0)
         PseudoEPZSearch_optSO2<pixel_t>(workarea); // all predictors (original)
-      else //if (_predictorType == 1)
+      else if (_predictorType == 1)
         PseudoEPZSearch_optSO2_glob_med_pred<pixel_t>(workarea);
+      else // _predictorType == 2
+        PseudoEPZSearch_optSO2_no_pred<pixel_t>(workarea);
 //      (this->*Sel_Pseudo_EPZ_search_SO2)(workarea);
 
       // workarea.bestMV = zeroMV; // debug
@@ -4932,31 +4953,3 @@ T& MVVector<T>::operator[](size_t index) // need to add something for 'const' to
   return buffer[index];
 }
 
-MV_FORCEINLINE void PlaneOfBlocks::PrefetchVECTOR(int idx)
-{
-  if (idx < 0 || idx > nBlkCount)
-    return;
-
-  VECTOR* pVector = &vectors[idx];
-  // check if start and end of VECTOR structure hit the same 64-byte cache line (128 for L2/L3 cache ?)
-  char* pStart = (char*)pVector;
-  char* pEnd = (char*)pVector + sizeof(VECTOR) - 1;
-
-#ifdef _WIN64
-  char* pStart64 = (char*)((__int64)pStart >> 6);
-  char* pEnd64 = (char*)((__int64)pEnd >> 6);
-#else
-  char* pStart64 = (char*)((int)pStart >> 6);
-  char* pEnd64 = (char*)((int)pEnd >> 6);
-#endif
-
-  if (pStart64 == pEnd64)
-  {
-    _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(pStart)), _MM_HINT_T0);
-  }
-  else
-  {
-    _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(pStart)), _MM_HINT_T0);
-    _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(pEnd)), _MM_HINT_T0);
-  }
-}
