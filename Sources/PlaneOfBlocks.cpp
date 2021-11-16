@@ -215,6 +215,7 @@ PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSi
     env->ThrowError("optSearchOption=2 require AVX2 or more CPU and pel=1");
   }
 
+
   // for debug:
   //         SAD = x264_pixel_sad_4x4_mmx2;
   //         VAR = Var_C<8>;
@@ -3999,6 +4000,12 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
   }
   */
 
+  const int iY_H_Padding = pSrcFrame->GetPlane(YPLANE)->GetHPadding();
+  const int iY_V_Padding = pSrcFrame->GetPlane(YPLANE)->GetVPadding();
+  const int iY_Ext_Width = pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth();
+  const int iY_Ext_Height = pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight();
+  const int iY_Height = pSrcFrame->GetPlane(YPLANE)->GetHeight();
+
   int* pBlkData = _out + 1 + workarea.blky_beg * nBlkX * N_PER_BLOCK;
   if (outfilebuf != NULL)
   {
@@ -4015,20 +4022,20 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
   int nBlkSizeX_Ovr[3] = { (nBlkSizeX - nOverlapX), (nBlkSizeX - nOverlapX) >> nLogxRatioUV, (nBlkSizeX - nOverlapX) >> nLogxRatioUV };
   int nBlkSizeY_Ovr[3] = { (nBlkSizeY - nOverlapY), (nBlkSizeY - nOverlapY) >> nLogyRatioUV, (nBlkSizeY - nOverlapY) >> nLogyRatioUV };
 
-  for (workarea.blky = workarea.blky_beg + 1; workarea.blky < workarea.blky_end - 1; workarea.blky++) // +1 and -1 for disabling IsVectorOK in Exa_search sp1 and sp2 
+  for (workarea.blky = workarea.blky_beg; workarea.blky < workarea.blky_end; workarea.blky++) 
   {
-//    bInterframeV = ((workarea.blky != workarea.blky_beg) && (workarea.blky != workarea.blky_end - 1)); always true now
+    bInterframeV = ((workarea.blky != workarea.blky_beg) && (workarea.blky != workarea.blky_end - 1));
 
     workarea.blkScanDir = (workarea.blky % 2 == 0 || !_meander_flag) ? 1 : -1;
     // meander (alternate) scan blocks (even row left to right, odd row right to left)
     int blkxStart = (workarea.blky % 2 == 0 || !_meander_flag) ? 0 : nBlkX - 1;
     if (workarea.blkScanDir == 1) // start with leftmost block
     {
-      workarea.x[0] = pSrcFrame->GetPlane(YPLANE)->GetHPadding();
+      workarea.x[0] = iY_H_Padding; //  pSrcFrame->GetPlane(YPLANE)->GetHPadding();
     }
     else // start with rightmost block, but it is already set at prev row
     {
-      workarea.x[0] = pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nBlkSizeX_Ovr[0] * (nBlkX - 1);
+      workarea.x[0] = iY_H_Padding /*pSrcFrame->GetPlane(YPLANE)->GetHPadding()*/ + nBlkSizeX_Ovr[0] * (nBlkX - 1);
     }
 
     for (int iblkx = 0; iblkx < nBlkX; iblkx++)
@@ -4096,20 +4103,38 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
       // may be they must be scaled by nPel ?
 
       // decreased padding of coarse levels
-      int nHPaddingScaled = pSrcFrame->GetPlane(YPLANE)->GetHPadding() >> nLogScale;
-      int nVPaddingScaled = pSrcFrame->GetPlane(YPLANE)->GetVPadding() >> nLogScale;
+      int nHPaddingScaled = iY_H_Padding /*pSrcFrame->GetPlane(YPLANE)->GetHPadding()*/ >> nLogScale;
+      int nVPaddingScaled = iY_V_Padding /*pSrcFrame->GetPlane(YPLANE)->GetVPadding()*/ >> nLogScale;
       /* computes search boundaries */
-      workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
+/*    workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
       workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
       workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
-      workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
-    
+      workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);*/
+      workarea.nDxMax = nPel * (iY_Ext_Width - workarea.x[0] - nBlkSizeX - iY_H_Padding + nHPaddingScaled);
+      workarea.nDyMax = nPel * (iY_Ext_Height - workarea.y[0] - nBlkSizeY - iY_V_Padding + nVPaddingScaled);
+      workarea.nDxMin = -nPel * (workarea.x[0] - iY_H_Padding + nHPaddingScaled);
+      workarea.nDyMin = -nPel * (workarea.y[0] - iY_V_Padding + nVPaddingScaled);
+
+      // try to limit to 0.. (height) ?
+//      if (workarea.nDyMin < 0) workarea.nDyMin = 0;
+      __m128i xmm0_DyMin = _mm_cvtsi32_si128(workarea.nDyMin);
+      __m128i xmm1_zero = _mm_setzero_si128();
+      xmm0_DyMin = _mm_max_epi32(xmm0_DyMin, xmm1_zero);
+      workarea.nDyMin = _mm_cvtsi128_si32(xmm0_DyMin);
+
+      // may be required ??
+      __m128i xmm0_DyMax = _mm_cvtsi32_si128(workarea.nDyMax);
+      __m128i xmm1_Height = _mm_cvtsi32_si128(iY_Height);
+      xmm0_DyMax = _mm_min_epi32(xmm0_DyMin, xmm1_Height);
+      workarea.nDyMax = _mm_cvtsi128_si32(xmm0_DyMax);
+         
+
       /* search the mv */
       workarea.predictor = ClipMV_SO2(workarea, vectors[workarea.blkIdx]);
 
       workarea.predictors[4] = ClipMV_SO2(workarea, zeroMV);
 
-      bInterframe = bInterframeH;//&& bInterframeV;
+      bInterframe = bInterframeH && bInterframeV;
 
 /*      // Possible point of placement selection of 'predictors control'
       if (_predictorType == 0)
