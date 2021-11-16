@@ -115,9 +115,9 @@ void DegrainN_C(
 //   2: 8bit in, native16 out
 template <int blockWidth, int blockHeight, int out16_type>
 void DegrainN_sse2(
-  BYTE *pDst, BYTE *pDstLsb, int nDstPitch,
-  const BYTE *pSrc, int nSrcPitch,
-  const BYTE *pRef[], int Pitch[],
+  BYTE* pDst, BYTE* pDstLsb, int nDstPitch,
+  const BYTE* pSrc, int nSrcPitch,
+  const BYTE* pRef[], int Pitch[],
   int Wall[], int trad
 )
 {
@@ -132,7 +132,7 @@ void DegrainN_sse2(
   constexpr bool is_mod8 = blockWidth % 8 == 0;
   constexpr int pixels_at_a_time = is_mod8 ? 8 : 4; // 4 for 4 and 12; 8 for all others 8, 16, 24, 32...
 
-  if constexpr(lsb_flag || out16)
+  if constexpr (lsb_flag || out16)
   {
     // no rounding
     const __m128i m = _mm_set1_epi16(255);
@@ -150,7 +150,7 @@ void DegrainN_sse2(
         for (int k = 0; k < trad; ++k)
         {
           __m128i src1, src2;
-          if constexpr(is_mod8) // load 8-8 pixels
+          if constexpr (is_mod8) // load 8-8 pixels
           {
             src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2] + x));
             src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1] + x));
@@ -164,8 +164,8 @@ void DegrainN_sse2(
           val = _mm_add_epi16(val, s1);
           val = _mm_add_epi16(val, s2);
         }
-        if constexpr(is_mod8) {
-          if constexpr(lsb_flag) {
+        if constexpr (is_mod8) {
+          if constexpr (lsb_flag) {
 #ifdef _WIN64
             _mm_stream_si64((__int64*)(pDst + x), _mm_cvtsi128_si64(_mm_packus_epi16(_mm_srli_epi16(val, 8), z))); // _mm_stream_pi() for x86 build !!  _mm_stream_si64() for x64 build !!
             _mm_stream_si64((__int64*)(pDst + x), _mm_cvtsi128_si64(_mm_packus_epi16(_mm_and_si128(val, m), z))); // _mm_stream_pi() for x86 build !!  _mm_stream_si64() for x64 build !!
@@ -181,14 +181,14 @@ void DegrainN_sse2(
           }
         }
         else {
-          if constexpr(lsb_flag) {
-//            *(uint32_t*)(pDst + x) = _mm_cvtsi128_si32(_mm_packus_epi16(_mm_srli_epi16(val, 8), z));
+          if constexpr (lsb_flag) {
+            //            *(uint32_t*)(pDst + x) = _mm_cvtsi128_si32(_mm_packus_epi16(_mm_srli_epi16(val, 8), z));
             _mm_stream_si32((int*)(pDst + x), _mm_cvtsi128_si32(_mm_packus_epi16(_mm_srli_epi16(val, 8), z)));
-//            *(uint32_t*)(pDstLsb + x) = _mm_cvtsi128_si32(_mm_packus_epi16(_mm_and_si128(val, m), z));
+            //            *(uint32_t*)(pDstLsb + x) = _mm_cvtsi128_si32(_mm_packus_epi16(_mm_and_si128(val, m), z));
             _mm_stream_si32((int*)(pDstLsb + x), _mm_cvtsi128_si32(_mm_packus_epi16(_mm_and_si128(val, m), z)));
           }
           else {
-//            _mm_storel_epi64((__m128i*)(pDst + x * 2), val);
+            //            _mm_storel_epi64((__m128i*)(pDst + x * 2), val);
 #ifdef _WIN64
             _mm_stream_si64((__int64*)(pDst + x * 2), _mm_cvtsi128_si64(val)); // _mm_stream_pi() for x86 build !!  _mm_stream_si64() for x64 build !!
 #else
@@ -199,7 +199,7 @@ void DegrainN_sse2(
         }
       }
       pDst += nDstPitch;
-      if constexpr(lsb_flag)
+      if constexpr (lsb_flag)
         pDstLsb += nDstPitch;
       pSrc += nSrcPitch;
       for (int k = 0; k < trad; ++k)
@@ -220,16 +220,16 @@ void DegrainN_sse2(
       for (int x = 0; x < blockWidth; x += pixels_at_a_time)
       {
         __m128i src;
-        if constexpr(is_mod8) // load 8 pixels
+        if constexpr (is_mod8) // load 8 pixels
           src = _mm_loadl_epi64((__m128i*) (pSrc + x));
         else // load 4 pixels
-          src = _mm_cvtsi32_si128(*(uint32_t *)(pSrc + x));
+          src = _mm_cvtsi32_si128(*(uint32_t*)(pSrc + x));
 
         __m128i val = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_set1_epi16(Wall[0])), o);
         for (int k = 0; k < trad; ++k)
         {
           __m128i src1, src2;
-          if constexpr(is_mod8) // load 8-8 pixels
+          if constexpr (is_mod8) // load 8-8 pixels
           {
             src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2] + x));
             src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1] + x));
@@ -244,8 +244,8 @@ void DegrainN_sse2(
           val = _mm_add_epi16(val, s2);
         }
         auto res = _mm_packus_epi16(_mm_srli_epi16(val, 8), z);
-        if constexpr(is_mod8) {
-//          _mm_storel_epi64((__m128i*)(pDst + x), res);
+        if constexpr (is_mod8) {
+          //          _mm_storel_epi64((__m128i*)(pDst + x), res);
 #ifdef _WIN64
           _mm_stream_si64((__int64*)(pDst + x), _mm_cvtsi128_si64(res)); // _mm_stream_pi() for x86 build !!  _mm_stream_si64() for x64 build !!
 #else
@@ -254,8 +254,8 @@ void DegrainN_sse2(
 #endif
         }
         else {
-//          *(uint32_t*)(pDst + x) = _mm_cvtsi128_si32(res);
-            _mm_stream_si32((int*)(pDst + x), _mm_cvtsi128_si32(res));
+          //          *(uint32_t*)(pDst + x) = _mm_cvtsi128_si32(res);
+          _mm_stream_si32((int*)(pDst + x), _mm_cvtsi128_si32(res));
         }
       }
 
@@ -1545,7 +1545,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
     }
   }	// for by
 
-//  if (sse2) - all versions must support SSE2 minimum ? 
+  //  if (sse2) - all versions must support SSE2 minimum ? 
   {
     _mm_sfence(); // after _mm_stream() in DegrainM_sse non-temporal store.
   }
@@ -1691,6 +1691,11 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
     pDstShort += rowsize * _dst_short_pitch; // short pointer
     pDstInt += rowsize * _dst_int_pitch; // int pointer
   } // for by
+
+  //  if (sse2) - all versions must support SSE2 minimum ? 
+  {
+    _mm_sfence(); // after _mm_stream() in DegrainM_sse non-temporal store.
+  }
 }
 
 
@@ -1792,6 +1797,12 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
       }
     }
   } // for by
+
+  //  if (sse2) - all versions must support SSE2 minimum ? 
+  {
+    _mm_sfence(); // after _mm_stream() in DegrainM_sse non-temporal store.
+  }
+
 }
 
 
@@ -1952,6 +1963,11 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
     pDstShort += effective_dstShortPitch; // pitch is short granularity
     pDstInt += effective_dstIntPitch; // pitch is int granularity
   } // for by
+
+  //  if (sse2) - all versions must support SSE2 minimum ? 
+  {
+    _mm_sfence(); // after _mm_stream() in DegrainM_sse non-temporal store.
+  }
 }
 
 
@@ -2051,3 +2067,4 @@ MV_FORCEINLINE int DegrainWeightN(int thSAD, double thSAD_pow, int blockSAD, int
   return (int)((double)(1 << DEGRAIN_WEIGHT_BITS) * (thSAD_pow - blockSAD_pow) / (thSAD_pow + blockSAD_pow));
 
 }
+
