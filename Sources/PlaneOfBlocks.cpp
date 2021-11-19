@@ -737,9 +737,6 @@ int PlaneOfBlocks::GetArraySize(int divideMode)
   return size;
 }
 
-
-
-
 template<typename pixel_t>
 void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
 {
@@ -962,19 +959,14 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
 //   workarea.predictors[0].x = Median(workarea.predictors[1].x, workarea.predictors[2].x, workarea.predictors[3].x);
 //   workarea.predictors[0].y = Median(workarea.predictors[1].y, workarea.predictors[2].y, workarea.predictors[3].y);
     // Median as of   a + b + c - imax(a, imax(b, c)) - imin(c, imin(a, b)) looks correct.
-
-    /*    __m128i xmm0_a = _mm_cvtsi32_si128(workarea.predictors[1].x);
+    __m128i xmm0_a = _mm_cvtsi32_si128(workarea.predictors[1].x);
     xmm0_a = _mm_insert_epi32(xmm0_a, workarea.predictors[1].y, 1);  // SSE 4.1 !
 
     __m128i xmm1_b = _mm_cvtsi32_si128(workarea.predictors[2].x);
     xmm1_b = _mm_insert_epi32(xmm1_b, workarea.predictors[2].y, 1);  // SSE 4.1 !
 
     __m128i xmm2_c = _mm_cvtsi32_si128(workarea.predictors[3].x);
-    xmm2_c = _mm_insert_epi32(xmm2_c, workarea.predictors[3].y, 1);  // SSE 4.1 ! */
-    // if predictor is VECTOR and VECTOR.x and VECTOR.y are 4byte ints in sequence - we can load 4+4 bytes into xmm with 64bit load op:
-    __m128i xmm0_a = _mm_cvtsi64_si128(workarea.predictors[1].x);
-    __m128i xmm1_b = _mm_cvtsi64_si128(workarea.predictors[2].x);
-    __m128i xmm2_c = _mm_cvtsi64_si128(workarea.predictors[3].x);
+    xmm2_c = _mm_insert_epi32(xmm2_c, workarea.predictors[3].y, 1);  // SSE 4.1 !
 
     __m128i xmm3_sum = xmm0_a; // better use AXV2 with triple op ?
     __m128i xmm4_min = xmm0_a;
@@ -991,12 +983,9 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
 
     xmm3_sum = _mm_sub_epi32(xmm3_sum, xmm5_max);
     xmm3_sum = _mm_sub_epi32(xmm3_sum, xmm4_min);
-/*
-    workarea.predictors[0].x = _mm_cvtsi128_si32(xmm3_sum);
-    workarea.predictors[0].y = _mm_extract_epi32(xmm3_sum, 1); */
-    // also store may be as easy as movq:
-    *(__int64*)(&workarea.predictors[0].x) = _mm_cvtsi128_si64(xmm3_sum);
 
+    workarea.predictors[0].x = _mm_cvtsi128_si32(xmm3_sum);
+    workarea.predictors[0].y = _mm_extract_epi32(xmm3_sum, 1);
     //		workarea.predictors[0].sad = Median(workarea.predictors[1].sad, workarea.predictors[2].sad, workarea.predictors[3].sad);
         // but it is not true median vector (x and y may be mixed) and not its sad ?!
         // we really do not know SAD, here is more safe estimation especially for phaseshift method - v1.6.0
@@ -1076,32 +1065,32 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
 }
 
 template<typename pixel_t>
-MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41_interframe(WorkingArea& workarea)
+MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41_intraframe(WorkingArea& workarea)
 {
   VECTOR v1; VECTOR v2; VECTOR v3;
 
   // Gathering vectors first
-    v1 = vectors[workarea.blkIdx - workarea.blkScanDir];
+  v1 = vectors[workarea.blkIdx - workarea.blkScanDir];
   // fixme note:
   // MAnalyze mt-inconsistency reason #1
   // this is _not_ internal mt friendly, since here up or bottom predictors
   // are omitted for top/bottom data. Not non-mt case this happens only for
   // the most top and bottom blocks.
   // In vertically sliced multithreaded case it happens an _each_ top/bottom of the sliced block */
-    v2 = vectors[workarea.blkIdx - nBlkX];
+  v2 = vectors[workarea.blkIdx - nBlkX];
 
-    // Original problem: random, small, rare, mostly irreproducible differences between multiple encodings.
-  // In all, I spent at least a week on the problem during a half year, losing hope
-  // and restarting again four times. Nasty bug it was.
-  // !smallestPlane: use bottom right only if a coarser level exists or else we get random
-  // crap from a previous frame.
+  // Original problem: random, small, rare, mostly irreproducible differences between multiple encodings.
+// In all, I spent at least a week on the problem during a half year, losing hope
+// and restarting again four times. Nasty bug it was.
+// !smallestPlane: use bottom right only if a coarser level exists or else we get random
+// crap from a previous frame.
 // bottom-right predictor (from coarse level)
   if (!smallestPlane)
   {
     v3 = vectors[workarea.blkIdx + nBlkX + workarea.blkScanDir];
   }
   // Up-right predictor
-  else 
+  else
   {
     v3 = vectors[workarea.blkIdx - nBlkX + workarea.blkScanDir];
   }
@@ -1154,49 +1143,43 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41_interframe(WorkingArea&
   workarea.predictors[2].y = _mm_extract_epi32(xmm1_y, 1);
   workarea.predictors[3].y = _mm_extract_epi32(xmm1_y, 2);
 
-    //   workarea.predictors[0].x = Median(workarea.predictors[1].x, workarea.predictors[2].x, workarea.predictors[3].x);
-    //   workarea.predictors[0].y = Median(workarea.predictors[1].y, workarea.predictors[2].y, workarea.predictors[3].y);
-        // Median as of   a + b + c - imax(a, imax(b, c)) - imin(c, imin(a, b)) looks correct.
+  //   workarea.predictors[0].x = Median(workarea.predictors[1].x, workarea.predictors[2].x, workarea.predictors[3].x);
+  //   workarea.predictors[0].y = Median(workarea.predictors[1].y, workarea.predictors[2].y, workarea.predictors[3].y);
+      // Median as of   a + b + c - imax(a, imax(b, c)) - imin(c, imin(a, b)) looks correct.
 
-        /*    __m128i xmm0_a = _mm_cvtsi32_si128(workarea.predictors[1].x);
-        xmm0_a = _mm_insert_epi32(xmm0_a, workarea.predictors[1].y, 1);  // SSE 4.1 !
+  __m128i xmm0_a = _mm_cvtsi32_si128(workarea.predictors[1].x);
+  xmm0_a = _mm_insert_epi32(xmm0_a, workarea.predictors[1].y, 1);  // SSE 4.1 !
 
-        __m128i xmm1_b = _mm_cvtsi32_si128(workarea.predictors[2].x);
-        xmm1_b = _mm_insert_epi32(xmm1_b, workarea.predictors[2].y, 1);  // SSE 4.1 !
+  __m128i xmm1_b = _mm_cvtsi32_si128(workarea.predictors[2].x);
+  xmm1_b = _mm_insert_epi32(xmm1_b, workarea.predictors[2].y, 1);  // SSE 4.1 !
 
-        __m128i xmm2_c = _mm_cvtsi32_si128(workarea.predictors[3].x);
-        xmm2_c = _mm_insert_epi32(xmm2_c, workarea.predictors[3].y, 1);  // SSE 4.1 ! */
-        // if predictor is VECTOR and VECTOR.x and VECTOR.y are 4byte ints in sequence - we can load 4+4 bytes into xmm with 64bit load op:
-    __m128i xmm0_a = _mm_cvtsi64_si128(workarea.predictors[1].x);
-    __m128i xmm1_b = _mm_cvtsi64_si128(workarea.predictors[2].x);
-    __m128i xmm2_c = _mm_cvtsi64_si128(workarea.predictors[3].x);
+  __m128i xmm2_c = _mm_cvtsi32_si128(workarea.predictors[3].x);
+  xmm2_c = _mm_insert_epi32(xmm2_c, workarea.predictors[3].y, 1);  // SSE 4.1 !
 
-    __m128i xmm3_sum = xmm0_a; // better use AXV2 with triple op ?
-    __m128i xmm4_min = xmm0_a;
-    __m128i xmm5_max = xmm0_a;
+  __m128i xmm3_sum = xmm0_a; // better use AXV2 with triple op ?
+  __m128i xmm4_min = xmm0_a;
+  __m128i xmm5_max = xmm0_a;
 
-    xmm3_sum = _mm_add_epi32(xmm3_sum, xmm1_b);
-    xmm3_sum = _mm_add_epi32(xmm3_sum, xmm2_c);
+  xmm3_sum = _mm_add_epi32(xmm3_sum, xmm1_b);
+  xmm3_sum = _mm_add_epi32(xmm3_sum, xmm2_c);
 
-    xmm4_min = _mm_min_epi32(xmm4_min, xmm1_b);
-    xmm4_min = _mm_min_epi32(xmm4_min, xmm2_c);
+  xmm4_min = _mm_min_epi32(xmm4_min, xmm1_b);
+  xmm4_min = _mm_min_epi32(xmm4_min, xmm2_c);
 
-    xmm5_max = _mm_max_epi32(xmm5_max, xmm1_b);
-    xmm5_max = _mm_max_epi32(xmm5_max, xmm2_c);
+  xmm5_max = _mm_max_epi32(xmm5_max, xmm1_b);
+  xmm5_max = _mm_max_epi32(xmm5_max, xmm2_c);
 
-    xmm3_sum = _mm_sub_epi32(xmm3_sum, xmm5_max);
-    xmm3_sum = _mm_sub_epi32(xmm3_sum, xmm4_min);
-    /*
-        workarea.predictors[0].x = _mm_cvtsi128_si32(xmm3_sum);
-        workarea.predictors[0].y = _mm_extract_epi32(xmm3_sum, 1); */
-        // also store may be as easy as movq:
-    *(__int64*)(&workarea.predictors[0].x) = _mm_cvtsi128_si64(xmm3_sum);
+  xmm3_sum = _mm_sub_epi32(xmm3_sum, xmm5_max);
+  xmm3_sum = _mm_sub_epi32(xmm3_sum, xmm4_min);
 
-    //		workarea.predictors[0].sad = Median(workarea.predictors[1].sad, workarea.predictors[2].sad, workarea.predictors[3].sad);
-        // but it is not true median vector (x and y may be mixed) and not its sad ?!
-        // we really do not know SAD, here is more safe estimation especially for phaseshift method - v1.6.0
+  workarea.predictors[0].x = _mm_cvtsi128_si32(xmm3_sum);
+  workarea.predictors[0].y = _mm_extract_epi32(xmm3_sum, 1);
+
+  //		workarea.predictors[0].sad = Median(workarea.predictors[1].sad, workarea.predictors[2].sad, workarea.predictors[3].sad);
+      // but it is not true median vector (x and y may be mixed) and not its sad ?!
+      // we really do not know SAD, here is more safe estimation especially for phaseshift method - v1.6.0
 //    workarea.predictors[0].sad = std::max(workarea.predictors[1].sad, std::max(workarea.predictors[2].sad, workarea.predictors[3].sad));
-    workarea.predictors[0].sad = _mm_cvtsi128_si32(xmm6_sad1);
+  workarea.predictors[0].sad = _mm_cvtsi128_si32(xmm6_sad1);
 
   // if there are no other planes, predictor is the median
   if (smallestPlane)
@@ -1258,6 +1241,157 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41_interframe(WorkingArea&
    //	int a = LSAD/(LSAD + (workarea.predictor.sad>>1));
    //	workarea.nLambda = workarea.nLambda*a*a;
 }
+
+template<typename pixel_t>
+void PlaneOfBlocks::FetchPredictors_avx2_intraframe(WorkingArea& workarea) // linker do not see it in the _avx2 file ???
+{
+  VECTOR v1; VECTOR v2; VECTOR v3;
+
+  // Gathering vectors first
+  v1 = vectors[workarea.blkIdx - workarea.blkScanDir];
+  // fixme note:
+  // MAnalyze mt-inconsistency reason #1
+  // this is _not_ internal mt friendly, since here up or bottom predictors
+  // are omitted for top/bottom data. Not non-mt case this happens only for
+  // the most top and bottom blocks.
+  // In vertically sliced multithreaded case it happens an _each_ top/bottom of the sliced block */
+  v2 = vectors[workarea.blkIdx - nBlkX];
+
+  // Original problem: random, small, rare, mostly irreproducible differences between multiple encodings.
+// In all, I spent at least a week on the problem during a half year, losing hope
+// and restarting again four times. Nasty bug it was.
+// !smallestPlane: use bottom right only if a coarser level exists or else we get random
+// crap from a previous frame.
+// bottom-right predictor (from coarse level)
+  if (!smallestPlane)
+  {
+    v3 = vectors[workarea.blkIdx + nBlkX + workarea.blkScanDir];
+  }
+  // Up-right predictor
+  else
+  {
+    v3 = vectors[workarea.blkIdx - nBlkX + workarea.blkScanDir];
+  }
+
+  // Copy SADs
+  workarea.predictors[1].sad = v1.sad;
+  workarea.predictors[2].sad = v2.sad;
+  workarea.predictors[3].sad = v3.sad;
+
+  // ClipMV x,y of v1,v2,v3
+  __m256i ymm0_3xy = _mm256_set_epi32(0, 0, v3.x, v3.y, v2.x, v2.y, v1.x, v1.y); // compiler decide how to ?
+
+  ymm0_3xy = _mm256_min_epi32(ymm0_3xy, _mm256_broadcastq_epi64(_mm_set_epi32(0, 0, workarea.nDxMax - 1, workarea.nDyMax - 1)));
+  ymm0_3xy = _mm256_max_epi32(ymm0_3xy, _mm256_broadcastq_epi64(_mm_set_epi32(0, 0, workarea.nDxMin, workarea.nDyMin)));
+
+  workarea.predictors[1].x = _mm256_extract_epi32(ymm0_3xy, 1);
+  workarea.predictors[1].y = _mm256_extract_epi32(ymm0_3xy, 0);
+
+  workarea.predictors[2].x = _mm256_extract_epi32(ymm0_3xy, 3);
+  workarea.predictors[2].y = _mm256_extract_epi32(ymm0_3xy, 2);
+
+  workarea.predictors[3].x = _mm256_extract_epi32(ymm0_3xy, 5);
+  workarea.predictors[3].y = _mm256_extract_epi32(ymm0_3xy, 4);
+
+  //   workarea.predictors[0].x = Median(workarea.predictors[1].x, workarea.predictors[2].x, workarea.predictors[3].x);
+  //   workarea.predictors[0].y = Median(workarea.predictors[1].y, workarea.predictors[2].y, workarea.predictors[3].y);
+      // Median as of   a + b + c - imax(a, imax(b, c)) - imin(c, imin(a, b)) looks correct.
+
+  __m128i xmm0_a = _mm_cvtsi32_si128(workarea.predictors[1].x);
+  xmm0_a = _mm_insert_epi32(xmm0_a, workarea.predictors[1].y, 1);
+
+  __m128i xmm1_b = _mm_cvtsi32_si128(workarea.predictors[2].x);
+  xmm1_b = _mm_insert_epi32(xmm1_b, workarea.predictors[2].y, 1);
+
+  __m128i xmm2_c = _mm_cvtsi32_si128(workarea.predictors[2].x);
+  xmm2_c = _mm_insert_epi32(xmm2_c, workarea.predictors[2].y, 1);
+
+  __m128i xmm3_sum = _mm_add_epi32(_mm_add_epi32(xmm0_a, xmm1_b), xmm2_c);
+  __m128i xmm4_min = _mm_min_epi32(_mm_min_epi32(xmm0_a, xmm1_b), xmm2_c);
+  __m128i xmm5_max = _mm_max_epi32(_mm_max_epi32(xmm0_a, xmm1_b), xmm2_c);
+
+  xmm3_sum = _mm_sub_epi32(_mm_sub_epi32(xmm3_sum, xmm5_max), xmm4_min);
+
+  workarea.predictors[0].x = _mm_cvtsi128_si32(xmm3_sum);
+  workarea.predictors[0].y = _mm_extract_epi32(xmm3_sum, 1);
+
+  //		workarea.predictors[0].sad = Median(workarea.predictors[1].sad, workarea.predictors[2].sad, workarea.predictors[3].sad);
+      // but it is not true median vector (x and y may be mixed) and not its sad ?!
+      // we really do not know SAD, here is more safe estimation especially for phaseshift method - v1.6.0
+//    workarea.predictors[0].sad = std::max(workarea.predictors[1].sad, std::max(workarea.predictors[2].sad, workarea.predictors[3].sad));
+  __m128i xmm6_sad1, xmm7_sad2, xmm8_sad3;
+  xmm6_sad1 = _mm_cvtsi32_si128(v1.sad);
+  xmm7_sad2 = _mm_cvtsi32_si128(v2.sad);
+  xmm8_sad3 = _mm_cvtsi32_si128(v3.sad);
+
+  xmm6_sad1 = _mm_max_epi32(_mm_max_epi32(xmm6_sad1, xmm7_sad2), xmm8_sad3);
+
+  workarea.predictors[0].sad = _mm_cvtsi128_si32(xmm6_sad1);
+
+  // if there are no other planes, predictor is the median
+  if (smallestPlane)
+  {
+    workarea.predictor = workarea.predictors[0];
+  }
+  /*
+    else
+    {
+      if ( workarea.predictors[0].sad < workarea.predictor.sad )// disabled by Fizick (hierarchy only!)
+      {
+        workarea.predictors[4] = workarea.predictor;
+        workarea.predictor = workarea.predictors[0];
+        workarea.predictors[0] = workarea.predictors[4];
+      }
+    }
+  */
+  //	if ( workarea.predictor.sad > LSAD ) { workarea.nLambda = 0; } // generalized (was LSAD=400) by Fizick
+
+  // v2.7.11.32:
+  typedef bigsad_t safe_sad_t;
+  // for large block sizes int32 overflows during calculation even for 8 bits, so we always use 64 bit bigsad_t intermediate here
+  // (some calculations for truemotion=true)
+  // blksize  lambda                LSAD   LSAD (renormalized)        lambda*LSAD
+  // 8x8      1000*(8*8)/64=1000    1200   1200*8x8/64<<0=1200          1 200 000
+  // 16x16    1000*(16*16)/64=4000  1200   1200*16x16/64<<0=4800       19 200 000
+  // 24x24    1000*(24*24)/64=9000  1200   1200*24x24/64<<0=10800      97 200 000
+  // 32x32    1000*(32*32)/64=16000 1200   1200*32x32/64<<0=19200     307 200 000
+  //          other level:   128000                         19200   2 457 600 000 (int32 overflow!)
+  // 48x48    1000*(48*48)/64=36000 1200   1200*48x48/64<<0=43200   1 555 200 000 still OK
+  // 64x64    1000*(64*64)/64=64000 1200   1200*64x64/64<<0=76800   4 915 200 000 (int32 overflow!)
+  safe_sad_t divisor = (safe_sad_t)LSAD + (workarea.predictor.sad >> 1);
+
+  __m128 xmm_divisor = _mm_setzero_ps();
+  __m128 xmm_LSAD = _mm_cvt_si2ss(xmm_LSAD, LSAD);
+  if (sizeof(safe_sad_t) == 4) // safe_sad_t may be 64bit ?
+  {
+    xmm_divisor = _mm_cvt_si2ss(xmm_divisor, divisor);
+  }
+  else
+  {
+    xmm_divisor = _mm_cvtsi64_ss(xmm_divisor, divisor);
+  }
+
+  xmm_LSAD = _mm_mul_ss(xmm_LSAD, xmm_LSAD);
+  xmm_divisor = _mm_mul_ss(xmm_divisor, xmm_divisor);
+  xmm_divisor = _mm_rcp_ss(xmm_divisor);
+
+  xmm_LSAD = _mm_mul_ss(xmm_divisor, xmm_LSAD);
+
+  __m128 xmm_nLambda = _mm_cvt_si2ss(xmm_nLambda, workarea.nLambda);
+
+  xmm_nLambda = _mm_mul_ss(xmm_nLambda, xmm_LSAD);
+  workarea.nLambda = _mm_cvt_ss2si(xmm_nLambda);
+
+  // workarea.nLambda = (int)(workarea.nLambda * (safe_sad_t)LSAD / divisor * LSAD / divisor); correct ?
+
+   // replaced hard threshold by soft in v1.10.2 by Fizick (a liitle complex expression to avoid overflow)
+   //	int a = LSAD/(LSAD + (workarea.predictor.sad>>1));
+   //	workarea.nLambda = workarea.nLambda*a*a;
+
+  _mm256_zeroupper();
+
+}
+
 
 
 template<typename pixel_t>
@@ -1705,9 +1839,10 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2(WorkingArea& workarea)
 {
   typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
 
-  if (bInterframe)
+  if (workarea.bIntraframe)
   {
-    FetchPredictors_sse41_interframe<pixel_t>(workarea);
+//    FetchPredictors_sse41_intraframe<pixel_t>(workarea);
+    FetchPredictors_avx2_intraframe<pixel_t>(workarea); // check if faster
   }
   else
   {
@@ -1777,9 +1912,10 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea)
 {
   typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
 
-  if (bInterframe)
+  if (workarea.bIntraframe)
   {
-    FetchPredictors_sse41_interframe<pixel_t>(workarea);
+//    FetchPredictors_sse41_intraframe<pixel_t>(workarea);
+    FetchPredictors_avx2_intraframe<pixel_t>(workarea); // check if faster
   }
   else
   {
@@ -3612,22 +3748,30 @@ MV_FORCEINLINE VECTOR	PlaneOfBlocks::ClipMV(WorkingArea& workarea, VECTOR v)
 
   if (sse41 && optSearchOption > 0)
   {
-    __m128i xmm0_x = _mm_cvtsi32_si128(v.x);
-    __m128i xmm1_y = _mm_cvtsi32_si128(v.y);
+    /*    __m128i xmm0_x = _mm_cvtsi32_si128(v.x);
+        __m128i xmm1_y = _mm_cvtsi32_si128(v.y);
 
-    __m128i xmm2_DxMin = _mm_cvtsi32_si128(workarea.nDxMin);
-    __m128i xmm3_DxMax = _mm_cvtsi32_si128(workarea.nDxMax - 1);
-    __m128i xmm4_DyMin = _mm_cvtsi32_si128(workarea.nDyMin);
-    __m128i xmm5_DyMax = _mm_cvtsi32_si128(workarea.nDyMax - 1);
+        __m128i xmm2_DxMin = _mm_cvtsi32_si128(workarea.nDxMin);
+        __m128i xmm3_DxMax = _mm_cvtsi32_si128(workarea.nDxMax - 1);
+        __m128i xmm4_DyMin = _mm_cvtsi32_si128(workarea.nDyMin);
+        __m128i xmm5_DyMax = _mm_cvtsi32_si128(workarea.nDyMax - 1);
 
-    xmm0_x = _mm_max_epi32(xmm0_x, xmm2_DxMin); // SSE 4.1 !!
-    xmm1_y = _mm_max_epi32(xmm1_y, xmm4_DyMin);
+        xmm0_x = _mm_max_epi32(xmm0_x, xmm2_DxMin); // SSE 4.1 !!
+        xmm1_y = _mm_max_epi32(xmm1_y, xmm4_DyMin);
 
-    xmm0_x = _mm_min_epi32(xmm0_x, xmm3_DxMax);
-    xmm1_y = _mm_min_epi32(xmm1_y, xmm5_DyMax); // no < and >= and -1 (?) for this version
+        xmm0_x = _mm_min_epi32(xmm0_x, xmm3_DxMax);
+        xmm1_y = _mm_min_epi32(xmm1_y, xmm5_DyMax); // no < and >= and -1 (?) for this version
 
-    v2.x = _mm_cvtsi128_si32(xmm0_x);
-    v2.y = _mm_cvtsi128_si32(xmm1_y);
+        v2.x = _mm_cvtsi128_si32(xmm0_x);
+        v2.y = _mm_cvtsi128_si32(xmm1_y);*/
+    __m128i xmm0_xy = _mm_set_epi32(0, 0, v.x, v.y); // check is it faster ??, may be y,x allow 64bit load/store ? need to check disasm.
+
+    xmm0_xy = _mm_min_epi32(xmm0_xy, _mm_set_epi32(0, 0, workarea.nDxMax - 1, workarea.nDyMax - 1));
+    xmm0_xy = _mm_max_epi32(xmm0_xy, _mm_set_epi32(0, 0, workarea.nDxMin, workarea.nDyMin));
+
+    v2.y = _mm_cvtsi128_si32(xmm0_xy);
+    v2.x = _mm_extract_epi32(xmm0_xy, 1);
+
   }
   else
   {
@@ -3643,7 +3787,7 @@ MV_FORCEINLINE VECTOR	PlaneOfBlocks::ClipMV(WorkingArea& workarea, VECTOR v)
 MV_FORCEINLINE VECTOR	PlaneOfBlocks::ClipMV_SO2(WorkingArea& workarea, VECTOR v)
 {
   VECTOR v2;
-
+  /*
   __m128i xmm0_x = _mm_cvtsi32_si128(v.x);
   __m128i xmm1_y = _mm_cvtsi32_si128(v.y);
 
@@ -3659,7 +3803,16 @@ MV_FORCEINLINE VECTOR	PlaneOfBlocks::ClipMV_SO2(WorkingArea& workarea, VECTOR v)
   xmm1_y = _mm_min_epi32(xmm1_y, xmm5_DyMax); // no < and >= and -1 (?) for this version
 
   v2.x = _mm_cvtsi128_si32(xmm0_x);
-  v2.y = _mm_cvtsi128_si32(xmm1_y);
+  v2.y = _mm_cvtsi128_si32(xmm1_y);*/
+  __m128i xmm0_xy = _mm_set_epi32(0, 0, v.x, v.y); // check is it faster ??
+
+  xmm0_xy = _mm_min_epi32(xmm0_xy, _mm_set_epi32(0, 0, workarea.nDxMax - 1, workarea.nDyMax - 1));
+  xmm0_xy = _mm_max_epi32(xmm0_xy, _mm_set_epi32(0, 0, workarea.nDxMin, workarea.nDyMin));
+
+  v2.y = _mm_cvtsi128_si32(xmm0_xy);
+  v2.x = _mm_extract_epi32(xmm0_xy, 1);
+
+  v2.sad = v.sad;
 
   return v2;
 }
@@ -4111,31 +4264,16 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
       workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
       workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);*/
       workarea.nDxMax = nPel * (iY_Ext_Width - workarea.x[0] - nBlkSizeX - iY_H_Padding + nHPaddingScaled);
-      workarea.nDyMax = nPel * (iY_Ext_Height - workarea.y[0] - nBlkSizeY - iY_V_Padding + nVPaddingScaled);
+      workarea.nDyMax = nPel * (iY_Ext_Height - workarea.y[0] - nBlkSizeY - iY_V_Padding + nVPaddingScaled - nSearchParam);
       workarea.nDxMin = -nPel * (workarea.x[0] - iY_H_Padding + nHPaddingScaled);
-      workarea.nDyMin = -nPel * (workarea.y[0] - iY_V_Padding + nVPaddingScaled);
-
-      // try to limit to 0.. (height) ?
-//      if (workarea.nDyMin < 0) workarea.nDyMin = 0;
-      __m128i xmm0_DyMin = _mm_cvtsi32_si128(workarea.nDyMin);
-      __m128i xmm1_zero = _mm_setzero_si128();
-      xmm0_DyMin = _mm_max_epi32(xmm0_DyMin, xmm1_zero);
-      workarea.nDyMin = _mm_cvtsi128_si32(xmm0_DyMin);
-
-      // may be required ??
-      //if (workarea.nDyMax > iY_Height) workarea.nDyMax = iY_Height;
-      __m128i xmm0_DyMax = _mm_cvtsi32_si128(workarea.nDyMax);
-      __m128i xmm1_Height = _mm_cvtsi32_si128(iY_Height);
-      xmm0_DyMax = _mm_min_epi32(xmm0_DyMax, xmm1_Height);
-      workarea.nDyMax = _mm_cvtsi128_si32(xmm0_DyMax);
-         
+      workarea.nDyMin = -nPel * (workarea.y[0] - iY_V_Padding + nVPaddingScaled - nSearchParam); // if (- nSearchParam) not helps - need to think more.
 
       /* search the mv */
       workarea.predictor = ClipMV_SO2(workarea, vectors[workarea.blkIdx]);
 
       workarea.predictors[4] = ClipMV_SO2(workarea, zeroMV);
 
-      bInterframe = bInterframeH && bInterframeV;
+      workarea.bIntraframe = bInterframeH && bInterframeV;
 
       if (_predictorType == 0)
         PseudoEPZSearch_optSO2<pixel_t>(workarea); // all predictors (original)

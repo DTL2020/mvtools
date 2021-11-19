@@ -250,7 +250,6 @@ private:
   sad_t _thSAD;
   //  const VECTOR zeroMV = {0,0,(sad_t)-1};
   int _predictorType; // 2.7.46
-  bool bInterframe;
 
   // Working area
   class WorkingArea
@@ -297,6 +296,8 @@ private:
 
     int pixelsize;
     int bits_per_pixel;
+
+    bool bIntraframe;
 
     // Data set once
     TmpDataArray dctSrc;
@@ -364,7 +365,11 @@ private:
   MV_FORCEINLINE void FetchPredictors_sse41(WorkingArea &workarea);
 
   template<typename pixel_t>
-  MV_FORCEINLINE void FetchPredictors_sse41_interframe(WorkingArea& workarea);
+  MV_FORCEINLINE void FetchPredictors_sse41_intraframe(WorkingArea& workarea);
+
+  template<typename pixel_t>
+  MV_FORCEINLINE void FetchPredictors_avx2_intraframe(WorkingArea& workarea);
+
 
   /* performs a diamond search */
   template<typename pixel_t>
