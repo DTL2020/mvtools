@@ -1258,11 +1258,11 @@ void PlaneOfBlocks::FetchPredictors_avx2_intraframe(WorkingArea& workarea) // li
   workarea.predictors[3].sad = v3.sad;
 
   // ClipMV x,y of v1,v2,v3
-  __m256i ymm0_3xy = _mm256_set_epi32(0, 0, v3.x, v3.y, v2.x, v2.y, v1.x, v1.y); // compiler decide how to ?
+  __m256i ymm0_3yx = _mm256_set_epi32(0, 0, v3.y, v3.x, v2.y, v2.x, v1.y, v1.x); // compiler decide how to ?
 
-  ymm0_3xy = _mm256_min_epi32(ymm0_3xy, _mm256_broadcastq_epi64(_mm_set_epi32(0, 0, workarea.nDxMax - 1, workarea.nDyMax - 1)));
-  ymm0_3xy = _mm256_max_epi32(ymm0_3xy, _mm256_broadcastq_epi64(_mm_set_epi32(0, 0, workarea.nDxMin, workarea.nDyMin)));
-
+  ymm0_3yx = _mm256_min_epi32(ymm0_3yx, _mm256_broadcastq_epi64(_mm_set_epi32(0, 0, workarea.nDyMax - 1, workarea.nDxMax - 1)));
+  ymm0_3yx = _mm256_max_epi32(ymm0_3yx, _mm256_broadcastq_epi64(_mm_set_epi32(0, 0, workarea.nDyMin, workarea.nDxMin)));
+  /*
   workarea.predictors[1].x = _mm256_extract_epi32(ymm0_3xy, 1);
   workarea.predictors[1].y = _mm256_extract_epi32(ymm0_3xy, 0);
 
@@ -1271,6 +1271,10 @@ void PlaneOfBlocks::FetchPredictors_avx2_intraframe(WorkingArea& workarea) // li
 
   workarea.predictors[3].x = _mm256_extract_epi32(ymm0_3xy, 5);
   workarea.predictors[3].y = _mm256_extract_epi32(ymm0_3xy, 4);
+  */
+  _mm_storel_epi64((__m128i*) & workarea.predictors[1].x, _mm256_castsi256_si128(ymm0_3yx));
+  _mm_storel_epi64((__m128i*) & workarea.predictors[2].x, _mm256_castsi256_si128(_mm256_srli_si256(ymm0_3yx, 8))); // shift high 64 to low in low 128 of ymm
+  _mm_storel_epi64((__m128i*) & workarea.predictors[3].x, _mm256_castsi256_si128(_mm256_permute4x64_epi64(ymm0_3yx, 14))); // shift high 128 to low part of ymm
 
   //   workarea.predictors[0].x = Median(workarea.predictors[1].x, workarea.predictors[2].x, workarea.predictors[3].x);
   //   workarea.predictors[0].y = Median(workarea.predictors[1].y, workarea.predictors[2].y, workarea.predictors[3].y);
