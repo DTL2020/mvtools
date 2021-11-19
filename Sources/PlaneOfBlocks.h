@@ -285,7 +285,7 @@ private:
     VECTOR predictor;           /* best predictor for the current vector */
     VECTOR predictors[MAX_PREDICTOR];   /* set of predictors for the current block */
 
-    int nDxMin;                 /* minimum x coordinate for the vector */
+    int nDxMin;                 /* minimum x coordinate for the vector */ //need to be in order DxMin, DyMin for ClipMV faster load
     int nDyMin;                 /* minimum y coordinate for the vector */
     int nDxMax;                 /* maximum x corrdinate for the vector */
     int nDyMax;                 /* maximum y coordinate for the vector */

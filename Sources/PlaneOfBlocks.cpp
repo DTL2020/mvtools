@@ -912,7 +912,7 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
 
   // ClipMV x,y
   __m128i xmm0_x, xmm1_y;
-  __m128i xmm6_sad1, xmm7_sad2, xmm8_sad3;
+
 #ifdef _DEBUG
   xmm0_x = _mm_setzero_si128(); // no need to clear in release - overwritten
   xmm1_y = _mm_setzero_si128();
@@ -927,9 +927,6 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
   xmm1_y = _mm_insert_epi32(xmm1_y, v2.y, 1); // SSE 4.1 !
   xmm1_y = _mm_insert_epi32(xmm1_y, v3.y, 2);
 
-  xmm6_sad1 = _mm_cvtsi32_si128(v1.sad);
-  xmm7_sad2 = _mm_cvtsi32_si128(v2.sad);
-  xmm8_sad3 = _mm_cvtsi32_si128(v3.sad);
 
   __m128i xmm2_DxMin = _mm_set1_epi32(workarea.nDxMin); // for AVX2 builds - will be vpbroadcastd - enable AVX2 in C++ compiler !
   __m128i xmm3_DxMax = _mm_set1_epi32(workarea.nDxMax - 1);
@@ -941,9 +938,6 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
 
   xmm0_x = _mm_min_epi32(xmm0_x, xmm3_DxMax);
   xmm1_y = _mm_min_epi32(xmm1_y, xmm5_DyMax); // no < and >= and -1 (?) for this version
-
-  xmm6_sad1 = _mm_max_epi32(xmm6_sad1, xmm7_sad2);
-  xmm6_sad1 = _mm_max_epi32(xmm6_sad1, xmm8_sad3);
 
   workarea.predictors[1].x = _mm_cvtsi128_si32(xmm0_x);
   workarea.predictors[2].x = _mm_extract_epi32(xmm0_x, 1);
@@ -959,37 +953,38 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
 //   workarea.predictors[0].x = Median(workarea.predictors[1].x, workarea.predictors[2].x, workarea.predictors[3].x);
 //   workarea.predictors[0].y = Median(workarea.predictors[1].y, workarea.predictors[2].y, workarea.predictors[3].y);
     // Median as of   a + b + c - imax(a, imax(b, c)) - imin(c, imin(a, b)) looks correct.
-    __m128i xmm0_a = _mm_cvtsi32_si128(workarea.predictors[1].x);
-    xmm0_a = _mm_insert_epi32(xmm0_a, workarea.predictors[1].y, 1);  // SSE 4.1 !
 
-    __m128i xmm1_b = _mm_cvtsi32_si128(workarea.predictors[2].x);
-    xmm1_b = _mm_insert_epi32(xmm1_b, workarea.predictors[2].y, 1);  // SSE 4.1 !
+    /*  __m128i xmm0_a = _mm_set_epi32(0, 0, workarea.predictors[1].y, workarea.predictors[1].x);
+    __m128i xmm1_b = _mm_set_epi32(0, 0, workarea.predictors[2].y, workarea.predictors[2].x);
+    __m128i xmm2_c = _mm_set_epi32(0, 0, workarea.predictors[3].y, workarea.predictors[3].x);*/
+    
+    __m128i xmm0_a = _mm_loadl_epi64((__m128i*) & workarea.predictors[1].x);
+    __m128i xmm1_b = _mm_loadl_epi64((__m128i*) & workarea.predictors[2].x);
+    __m128i xmm2_c = _mm_loadl_epi64((__m128i*) & workarea.predictors[3].x);
 
-    __m128i xmm2_c = _mm_cvtsi32_si128(workarea.predictors[3].x);
-    xmm2_c = _mm_insert_epi32(xmm2_c, workarea.predictors[3].y, 1);  // SSE 4.1 !
+    __m128i xmm3_sum = _mm_add_epi32(_mm_add_epi32(xmm0_a, xmm1_b), xmm2_c);
+    __m128i xmm4_min = _mm_min_epi32(_mm_min_epi32(xmm0_a, xmm1_b), xmm2_c);
+    __m128i xmm5_max = _mm_max_epi32(_mm_max_epi32(xmm0_a, xmm1_b), xmm2_c);
 
-    __m128i xmm3_sum = xmm0_a; // better use AXV2 with triple op ?
-    __m128i xmm4_min = xmm0_a;
-    __m128i xmm5_max = xmm0_a;
+    xmm3_sum = _mm_sub_epi32(_mm_sub_epi32(xmm3_sum, xmm5_max), xmm4_min);
 
-    xmm3_sum = _mm_add_epi32(xmm3_sum, xmm1_b);
-    xmm3_sum = _mm_add_epi32(xmm3_sum, xmm2_c);
+    _mm_storel_epi64((__m128i*) & workarea.predictors[0].x, xmm3_sum);
 
-    xmm4_min = _mm_min_epi32(xmm4_min, xmm1_b);
-    xmm4_min = _mm_min_epi32(xmm4_min, xmm2_c);
+/*    workarea.predictors[0].x = _mm_cvtsi128_si32(xmm3_sum);
+    workarea.predictors[0].y = _mm_extract_epi32(xmm3_sum, 1);*/
 
-    xmm5_max = _mm_max_epi32(xmm5_max, xmm1_b);
-    xmm5_max = _mm_max_epi32(xmm5_max, xmm2_c);
-
-    xmm3_sum = _mm_sub_epi32(xmm3_sum, xmm5_max);
-    xmm3_sum = _mm_sub_epi32(xmm3_sum, xmm4_min);
-
-    workarea.predictors[0].x = _mm_cvtsi128_si32(xmm3_sum);
-    workarea.predictors[0].y = _mm_extract_epi32(xmm3_sum, 1);
     //		workarea.predictors[0].sad = Median(workarea.predictors[1].sad, workarea.predictors[2].sad, workarea.predictors[3].sad);
         // but it is not true median vector (x and y may be mixed) and not its sad ?!
         // we really do not know SAD, here is more safe estimation especially for phaseshift method - v1.6.0
 //    workarea.predictors[0].sad = std::max(workarea.predictors[1].sad, std::max(workarea.predictors[2].sad, workarea.predictors[3].sad));
+    __m128i xmm6_sad1, xmm7_sad2, xmm8_sad3;
+
+    xmm6_sad1 = _mm_cvtsi32_si128(v1.sad);
+    xmm7_sad2 = _mm_cvtsi32_si128(v2.sad);
+    xmm8_sad3 = _mm_cvtsi32_si128(v3.sad);
+
+    xmm6_sad1 = _mm_max_epi32(_mm_max_epi32(xmm6_sad1, xmm7_sad2), xmm8_sad3);
+
     workarea.predictors[0].sad = _mm_cvtsi128_si32(xmm6_sad1);
   }
   else
@@ -1147,33 +1142,17 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41_intraframe(WorkingArea&
   //   workarea.predictors[0].y = Median(workarea.predictors[1].y, workarea.predictors[2].y, workarea.predictors[3].y);
       // Median as of   a + b + c - imax(a, imax(b, c)) - imin(c, imin(a, b)) looks correct.
 
-  __m128i xmm0_a = _mm_cvtsi32_si128(workarea.predictors[1].x);
-  xmm0_a = _mm_insert_epi32(xmm0_a, workarea.predictors[1].y, 1);  // SSE 4.1 !
+  __m128i xmm0_a = _mm_loadl_epi64((__m128i*) & workarea.predictors[1].x);
+  __m128i xmm1_b = _mm_loadl_epi64((__m128i*) & workarea.predictors[2].x);
+  __m128i xmm2_c = _mm_loadl_epi64((__m128i*) & workarea.predictors[3].x);
 
-  __m128i xmm1_b = _mm_cvtsi32_si128(workarea.predictors[2].x);
-  xmm1_b = _mm_insert_epi32(xmm1_b, workarea.predictors[2].y, 1);  // SSE 4.1 !
+  __m128i xmm3_sum = _mm_add_epi32(_mm_add_epi32(xmm0_a, xmm1_b), xmm2_c);
+  __m128i xmm4_min = _mm_min_epi32(_mm_min_epi32(xmm0_a, xmm1_b), xmm2_c);
+  __m128i xmm5_max = _mm_max_epi32(_mm_max_epi32(xmm0_a, xmm1_b), xmm2_c);
 
-  __m128i xmm2_c = _mm_cvtsi32_si128(workarea.predictors[3].x);
-  xmm2_c = _mm_insert_epi32(xmm2_c, workarea.predictors[3].y, 1);  // SSE 4.1 !
+  xmm3_sum = _mm_sub_epi32(_mm_sub_epi32(xmm3_sum, xmm5_max), xmm4_min);
 
-  __m128i xmm3_sum = xmm0_a; // better use AXV2 with triple op ?
-  __m128i xmm4_min = xmm0_a;
-  __m128i xmm5_max = xmm0_a;
-
-  xmm3_sum = _mm_add_epi32(xmm3_sum, xmm1_b);
-  xmm3_sum = _mm_add_epi32(xmm3_sum, xmm2_c);
-
-  xmm4_min = _mm_min_epi32(xmm4_min, xmm1_b);
-  xmm4_min = _mm_min_epi32(xmm4_min, xmm2_c);
-
-  xmm5_max = _mm_max_epi32(xmm5_max, xmm1_b);
-  xmm5_max = _mm_max_epi32(xmm5_max, xmm2_c);
-
-  xmm3_sum = _mm_sub_epi32(xmm3_sum, xmm5_max);
-  xmm3_sum = _mm_sub_epi32(xmm3_sum, xmm4_min);
-
-  workarea.predictors[0].x = _mm_cvtsi128_si32(xmm3_sum);
-  workarea.predictors[0].y = _mm_extract_epi32(xmm3_sum, 1);
+  _mm_storel_epi64((__m128i*) & workarea.predictors[0].x, xmm3_sum);
 
   //		workarea.predictors[0].sad = Median(workarea.predictors[1].sad, workarea.predictors[2].sad, workarea.predictors[3].sad);
       // but it is not true median vector (x and y may be mixed) and not its sad ?!
@@ -1297,14 +1276,9 @@ void PlaneOfBlocks::FetchPredictors_avx2_intraframe(WorkingArea& workarea) // li
   //   workarea.predictors[0].y = Median(workarea.predictors[1].y, workarea.predictors[2].y, workarea.predictors[3].y);
       // Median as of   a + b + c - imax(a, imax(b, c)) - imin(c, imin(a, b)) looks correct.
 
-  __m128i xmm0_a = _mm_cvtsi32_si128(workarea.predictors[1].x);
-  xmm0_a = _mm_insert_epi32(xmm0_a, workarea.predictors[1].y, 1);
-
-  __m128i xmm1_b = _mm_cvtsi32_si128(workarea.predictors[2].x);
-  xmm1_b = _mm_insert_epi32(xmm1_b, workarea.predictors[2].y, 1);
-
-  __m128i xmm2_c = _mm_cvtsi32_si128(workarea.predictors[2].x);
-  xmm2_c = _mm_insert_epi32(xmm2_c, workarea.predictors[2].y, 1);
+  __m128i xmm0_a = _mm_loadl_epi64((__m128i*) & workarea.predictors[1].x);
+  __m128i xmm1_b = _mm_loadl_epi64((__m128i*) & workarea.predictors[2].x);
+  __m128i xmm2_c = _mm_loadl_epi64((__m128i*) & workarea.predictors[3].x);
 
   __m128i xmm3_sum = _mm_add_epi32(_mm_add_epi32(xmm0_a, xmm1_b), xmm2_c);
   __m128i xmm4_min = _mm_min_epi32(_mm_min_epi32(xmm0_a, xmm1_b), xmm2_c);
@@ -1312,8 +1286,7 @@ void PlaneOfBlocks::FetchPredictors_avx2_intraframe(WorkingArea& workarea) // li
 
   xmm3_sum = _mm_sub_epi32(_mm_sub_epi32(xmm3_sum, xmm5_max), xmm4_min);
 
-  workarea.predictors[0].x = _mm_cvtsi128_si32(xmm3_sum);
-  workarea.predictors[0].y = _mm_extract_epi32(xmm3_sum, 1);
+  _mm_storel_epi64((__m128i*) & workarea.predictors[0].x, xmm3_sum);
 
   //		workarea.predictors[0].sad = Median(workarea.predictors[1].sad, workarea.predictors[2].sad, workarea.predictors[3].sad);
       // but it is not true median vector (x and y may be mixed) and not its sad ?!
@@ -3748,29 +3721,28 @@ MV_FORCEINLINE VECTOR	PlaneOfBlocks::ClipMV(WorkingArea& workarea, VECTOR v)
 
   if (sse41 && optSearchOption > 0)
   {
-    /*    __m128i xmm0_x = _mm_cvtsi32_si128(v.x);
-        __m128i xmm1_y = _mm_cvtsi32_si128(v.y);
+   /*   __m128i xmm0_x = _mm_cvtsi32_si128(v.x);
+      __m128i xmm1_y = _mm_cvtsi32_si128(v.y);
 
-        __m128i xmm2_DxMin = _mm_cvtsi32_si128(workarea.nDxMin);
-        __m128i xmm3_DxMax = _mm_cvtsi32_si128(workarea.nDxMax - 1);
-        __m128i xmm4_DyMin = _mm_cvtsi32_si128(workarea.nDyMin);
-        __m128i xmm5_DyMax = _mm_cvtsi32_si128(workarea.nDyMax - 1);
+      __m128i xmm2_DxMin = _mm_cvtsi32_si128(workarea.nDxMin);
+      __m128i xmm3_DxMax = _mm_cvtsi32_si128(workarea.nDxMax - 1);
+      __m128i xmm4_DyMin = _mm_cvtsi32_si128(workarea.nDyMin);
+      __m128i xmm5_DyMax = _mm_cvtsi32_si128(workarea.nDyMax - 1);
 
-        xmm0_x = _mm_max_epi32(xmm0_x, xmm2_DxMin); // SSE 4.1 !!
-        xmm1_y = _mm_max_epi32(xmm1_y, xmm4_DyMin);
+      xmm0_x = _mm_max_epi32(xmm0_x, xmm2_DxMin); // SSE 4.1 !!
+      xmm1_y = _mm_max_epi32(xmm1_y, xmm4_DyMin);
 
-        xmm0_x = _mm_min_epi32(xmm0_x, xmm3_DxMax);
-        xmm1_y = _mm_min_epi32(xmm1_y, xmm5_DyMax); // no < and >= and -1 (?) for this version
+      xmm0_x = _mm_min_epi32(xmm0_x, xmm3_DxMax);
+      xmm1_y = _mm_min_epi32(xmm1_y, xmm5_DyMax); // no < and >= and -1 (?) for this version
 
-        v2.x = _mm_cvtsi128_si32(xmm0_x);
-        v2.y = _mm_cvtsi128_si32(xmm1_y);*/
-    __m128i xmm0_xy = _mm_set_epi32(0, 0, v.x, v.y); // check is it faster ??, may be y,x allow 64bit load/store ? need to check disasm.
+      v2.x = _mm_cvtsi128_si32(xmm0_x);
+      v2.y = _mm_cvtsi128_si32(xmm1_y);*/
+    __m128i xmm0_yx = _mm_loadl_epi64((__m128i*)&v.x); // check is it faster ??
 
-    xmm0_xy = _mm_min_epi32(xmm0_xy, _mm_set_epi32(0, 0, workarea.nDxMax - 1, workarea.nDyMax - 1));
-    xmm0_xy = _mm_max_epi32(xmm0_xy, _mm_set_epi32(0, 0, workarea.nDxMin, workarea.nDyMin));
+    xmm0_yx = _mm_min_epi32(xmm0_yx, _mm_set_epi32(0, 0, workarea.nDyMax - 1, workarea.nDxMax - 1));
+    xmm0_yx = _mm_max_epi32(xmm0_yx, _mm_set_epi32(0, 0, workarea.nDyMin, workarea.nDxMin));
 
-    v2.y = _mm_cvtsi128_si32(xmm0_xy);
-    v2.x = _mm_extract_epi32(xmm0_xy, 1);
+    _mm_storel_epi64((__m128i*) & v2.x, xmm0_yx);
 
   }
   else
@@ -3787,30 +3759,20 @@ MV_FORCEINLINE VECTOR	PlaneOfBlocks::ClipMV(WorkingArea& workarea, VECTOR v)
 MV_FORCEINLINE VECTOR	PlaneOfBlocks::ClipMV_SO2(WorkingArea& workarea, VECTOR v)
 {
   VECTOR v2;
-  /*
-  __m128i xmm0_x = _mm_cvtsi32_si128(v.x);
-  __m128i xmm1_y = _mm_cvtsi32_si128(v.y);
+/*  __m128i xmm0_yx = _mm_set_epi32(0, 0, v.y, v.x); // check is it faster ??
 
-  __m128i xmm2_DxMin = _mm_cvtsi32_si128(workarea.nDxMin);
-  __m128i xmm3_DxMax = _mm_cvtsi32_si128(workarea.nDxMax - 1);
-  __m128i xmm4_DyMin = _mm_cvtsi32_si128(workarea.nDyMin);
-  __m128i xmm5_DyMax = _mm_cvtsi32_si128(workarea.nDyMax - 1);
+  xmm0_yx = _mm_min_epi32(xmm0_yx, _mm_set_epi32(0, 0, workarea.nDyMax - 1, workarea.nDxMax - 1));
+  xmm0_yx = _mm_max_epi32(xmm0_yx, _mm_set_epi32(0, 0, workarea.nDyMin, workarea.nDxMin));
 
-  xmm0_x = _mm_max_epi32(xmm0_x, xmm2_DxMin); // SSE 4.1 !!
-  xmm1_y = _mm_max_epi32(xmm1_y, xmm4_DyMin);
+  v2.x = _mm_cvtsi128_si32(xmm0_yx);
+  v2.y = _mm_extract_epi32(xmm0_yx, 1);*/
 
-  xmm0_x = _mm_min_epi32(xmm0_x, xmm3_DxMax);
-  xmm1_y = _mm_min_epi32(xmm1_y, xmm5_DyMax); // no < and >= and -1 (?) for this version
+  __m128i xmm0_yx = _mm_loadl_epi64((__m128i*) & v.x); // check is it faster ??
 
-  v2.x = _mm_cvtsi128_si32(xmm0_x);
-  v2.y = _mm_cvtsi128_si32(xmm1_y);*/
-  __m128i xmm0_xy = _mm_set_epi32(0, 0, v.x, v.y); // check is it faster ??
+  xmm0_yx = _mm_min_epi32(xmm0_yx, _mm_set_epi32(0, 0, workarea.nDyMax - 1, workarea.nDxMax - 1));
+  xmm0_yx = _mm_max_epi32(xmm0_yx, _mm_set_epi32(0, 0, workarea.nDyMin, workarea.nDxMin));
 
-  xmm0_xy = _mm_min_epi32(xmm0_xy, _mm_set_epi32(0, 0, workarea.nDxMax - 1, workarea.nDyMax - 1));
-  xmm0_xy = _mm_max_epi32(xmm0_xy, _mm_set_epi32(0, 0, workarea.nDxMin, workarea.nDyMin));
-
-  v2.y = _mm_cvtsi128_si32(xmm0_xy);
-  v2.x = _mm_extract_epi32(xmm0_xy, 1);
+  _mm_storel_epi64((__m128i*) & v2.x, xmm0_yx);
 
   v2.sad = v.sad;
 
