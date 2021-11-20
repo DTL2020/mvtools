@@ -1819,12 +1819,14 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2(WorkingArea& workarea)
   if (workarea.bIntraframe)
   {
 //    FetchPredictors_sse41_intraframe<pixel_t>(workarea);
-    FetchPredictors_avx2_intraframe<pixel_t>(workarea); // check if faster
+    FetchPredictors_avx2_intraframe<pixel_t>(workarea); // faster
   }
   else
   {
     FetchPredictors_sse41<pixel_t>(workarea);
   }
+  
+//  FetchPredictors<pixel_t>(workarea);
 
   sad_t sad;
 
@@ -1867,11 +1869,46 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2(WorkingArea& workarea)
   }
 
   // then all the other predictors
+  // compute checks on motion distortion first and skip MV if above cost:
+
+  __m256i ymm2_yx_predictors = _mm256_set_epi32(workarea.predictors[3].y, workarea.predictors[3].x, workarea.predictors[2].y, workarea.predictors[2].x, \
+    workarea.predictors[1].y, workarea.predictors[1].x, workarea.predictors[0].y, workarea.predictors[0].x);
+//  __m256i ymm3_predictor = _mm256_set_epi32(workarea.predictor.y, workarea.predictor.x, workarea.predictor.y, workarea.predictor.x, \
+//    workarea.predictor.y, workarea.predictor.x, workarea.predictor.y, workarea.predictor.x);
+  __m256i ymm3_predictor = _mm256_broadcastq_epi64(_mm_set_epi32(0, 0, workarea.predictor.y, workarea.predictor.x)); // hope movq + vpbroadcast
+
+  __m256i ymm_d1d2 = _mm256_sub_epi32(ymm3_predictor, ymm2_yx_predictors);
+  ymm_d1d2 = _mm256_add_epi32(_mm256_mullo_epi32(ymm_d1d2, ymm_d1d2), _mm256_srli_si256(ymm_d1d2, 4));
+
+  __m256i ymm_dist = _mm256_permutevar8x32_epi32(ymm_d1d2, _mm256_set_epi32(0, 0, 0, 0, 6, 4, 2, 0));
+  __m128i xmm_nLambda = _mm_set1_epi32(workarea.nLambda);
+  __m128i  xmm0_cost = _mm_srli_epi32(_mm_mullo_epi32(xmm_nLambda, _mm256_castsi256_si128(ymm_dist)), 8);
+  __m128i xmm_mask = _mm_cmplt_epi32(xmm0_cost, _mm_set1_epi32(workarea.nMinCost));
+    int iMask = _mm_movemask_epi8(xmm_mask);
+
   // vectors were clipped in FetchPredictors - no new IsVectorOK() check ?
-  CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[0].x, workarea.predictors[0].y);
-  CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[1].x, workarea.predictors[1].y);
-  CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[2].x, workarea.predictors[2].y);
-  CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[3].x, workarea.predictors[3].y);
+  if ((iMask & 0x1) != 0)
+  {
+    CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[0].x, workarea.predictors[0].y, _mm_extract_epi32(xmm0_cost, 0));
+  }
+  if ((iMask & 0x10) != 0)
+  {
+    CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[1].x, workarea.predictors[1].y, _mm_extract_epi32(xmm0_cost, 1));
+  }
+  if ((iMask & 0x100) != 0)
+  {
+    CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[2].x, workarea.predictors[2].y, _mm_extract_epi32(xmm0_cost, 2));
+  }
+  if ((iMask & 0x1000) != 0)
+  {
+    CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[3].x, workarea.predictors[3].y, _mm_extract_epi32(xmm0_cost, 3));
+  }
+  /*
+  CheckMV0<pixel_t>(workarea, workarea.predictors[0].x, workarea.predictors[0].y);
+  CheckMV0<pixel_t>(workarea, workarea.predictors[1].x, workarea.predictors[1].y);
+  CheckMV0<pixel_t>(workarea, workarea.predictors[2].x, workarea.predictors[2].y);
+  CheckMV0<pixel_t>(workarea, workarea.predictors[3].x, workarea.predictors[3].y);
+  */
 
   // then, we refine, 
   // sp = 1 for level=0 (finest) sp = 2 for other levels
@@ -1892,7 +1929,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea)
   if (workarea.bIntraframe)
   {
 //    FetchPredictors_sse41_intraframe<pixel_t>(workarea);
-    FetchPredictors_avx2_intraframe<pixel_t>(workarea); // check if faster
+    FetchPredictors_avx2_intraframe<pixel_t>(workarea); // faster
   }
   else
   {
@@ -3517,7 +3554,7 @@ MV_FORCEINLINE void	PlaneOfBlocks::CheckMV0(WorkingArea &workarea, int vx, int v
 
 /* check if the vector (vx, vy) is better than the best vector found so far without penalty new - renamed in v.2.11*/
 template<typename pixel_t>
-MV_FORCEINLINE void	PlaneOfBlocks::CheckMV0_SO2(WorkingArea& workarea, int vx, int vy)
+MV_FORCEINLINE void	PlaneOfBlocks::CheckMV0_SO2(WorkingArea& workarea, int vx, int vy, sad_t cost)
 {		//here the chance for default values are high especially for zeroMVfieldShifted (on left/top border)
   if (
 #ifdef ONLY_CHECK_NONDEFAULT_MV
@@ -3528,8 +3565,8 @@ MV_FORCEINLINE void	PlaneOfBlocks::CheckMV0_SO2(WorkingArea& workarea, int vx, i
     1)
   {
     // from 2.5.11.9-SVP: no additional SAD calculations if partial sum is already above minCost
-    sad_t cost = workarea.MotionDistorsion<pixel_t>(vx, vy);
-    if (cost >= workarea.nMinCost) return;
+//    sad_t cost = workarea.MotionDistorsion<pixel_t>(vx, vy); - no check for motiondistortion - made already in PseudoEPZSeach_SO2()
+//    if (cost >= workarea.nMinCost) return;
 
     sad_t sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, vx, vy));
     cost += sad;

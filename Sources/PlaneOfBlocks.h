@@ -488,7 +488,7 @@ private:
   template<typename pixel_t>
   MV_FORCEINLINE void CheckMV0(WorkingArea &workarea, int vx, int vy);
   template<typename pixel_t>
-  MV_FORCEINLINE void CheckMV0_SO2(WorkingArea& workarea, int vx, int vy);
+  MV_FORCEINLINE void CheckMV0_SO2(WorkingArea& workarea, int vx, int vy, sad_t cost);
   template<typename pixel_t>
   MV_FORCEINLINE void CheckMV(WorkingArea &workarea, int vx, int vy);
   template<typename pixel_t>
