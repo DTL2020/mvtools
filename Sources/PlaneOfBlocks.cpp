@@ -1489,13 +1489,14 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
 #endif	// ALLOW_DCT
 
   // We treat zero alone
-  // Do we bias zero with not taking into account distorsion ?
-  workarea.bestMV.x = zeroMVfieldShifted.x;
-  workarea.bestMV.y = zeroMVfieldShifted.y;
-  saduv = (chroma) ? 
+// Do we bias zero with not taking into account distorsion ?
+  workarea.bestMV.x = 0;
+  workarea.bestMV.y = 0;
+  saduv = (chroma) ?
     ScaleSadChroma(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, 0, 0), nRefPitch[1])
-    + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, 0, 0), nRefPitch[2]), effective_chromaSADscale) : 0;
-  sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, 0, zeroMVfieldShifted.y));
+      + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, 0, 0), nRefPitch[2]), effective_chromaSADscale) : 0;
+  sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, 0, 0));
+  
   sad += saduv;
   workarea.bestMV.sad = sad;
   workarea.nMinCost = sad + ((penaltyZero*(safe_sad_t)sad) >> 8); // v.1.11.0.2
@@ -1943,15 +1944,18 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea)
 
   sad_t sad;
 
-  // We treat zero alone
+  workarea.bestMV = zeroMV;
+  workarea.nMinCost = INT_MAX; 
+
+/*  // We treat zero alone
   // Do we bias zero with not taking into account distorsion ?
   workarea.bestMV.x = zeroMVfieldShifted.x;
   workarea.bestMV.y = zeroMVfieldShifted.y;
   sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, 0, zeroMVfieldShifted.y));
   workarea.bestMV.sad = sad;
   workarea.nMinCost = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2
-
-  // Global MV predictor  - added by Fizick
+  */
+ // Global MV predictor  - added by Fizick
   workarea.globalMVPredictor = ClipMV_SO2(workarea, workarea.globalMVPredictor);
 
 
@@ -1980,10 +1984,15 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea)
     workarea.bestMV.sad = sad;
     workarea.nMinCost = cost;
   }
-
+  
   // then, we refine, 
   // sp = 1 for level=0 (finest) sp = 2 for other levels
   (this->*ExhaustiveSearch8x8_avx2)(workarea, workarea.bestMV.x, workarea.bestMV.y);
+
+  if (nSearchParam == 1) // finest level 0 - test for better denoise
+  {
+    workarea.bestMV.sad = workarea.predictor.sad; // use previous level sad
+  }
 
   // we store the result
   vectors[workarea.blkIdx] = workarea.bestMV;
