@@ -413,6 +413,9 @@ private:
   template<typename pixel_t>
   void PseudoEPZSearch_optSO2_no_pred(WorkingArea& workarea); // no predictors, planes = 1 recommended, optSearchOption = 2 set of params
 
+   /* performs an epz search */
+  template<typename pixel_t>
+  void PseudoEPZSearch_optSO3_no_pred(WorkingArea& workarea, int* pBlkData); // no predictors, planes = 1 recommended, optSearchOption = 3 set of params
 
   //	void PhaseShiftSearch(int vx, int vy);
 
@@ -430,7 +433,8 @@ private:
   void ExhaustiveSearch8x8_uint8_sp1_c(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy);
-
+  void ExhaustiveSearch8x8_uint8_4Blks_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy, int* pBlkData);
+  
   // 8x8 esa search radius 2
   void ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
@@ -512,6 +516,9 @@ private:
 
   template<typename pixel_t>
   void	search_mv_slice_SO2(Slicer::TaskData& td); // with optSearchOption = 2 set of params
+
+  template<typename pixel_t>
+  void	search_mv_slice_SO3(Slicer::TaskData& td); // with optSearchOption = 3 set of params, multi-blocks search
 
   template<typename pixel_t>
   void	recalculate_mv_slice(Slicer::TaskData &td);
