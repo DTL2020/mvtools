@@ -1489,17 +1489,16 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
 #endif	// ALLOW_DCT
 
   // We treat zero alone
-// Do we bias zero with not taking into account distorsion ?
-  workarea.bestMV.x = 0;
-  workarea.bestMV.y = 0;
+  // Do we bias zero with not taking into account distorsion ?
+  workarea.bestMV.x = zeroMVfieldShifted.x;
+  workarea.bestMV.y = zeroMVfieldShifted.y;
   saduv = (chroma) ?
     ScaleSadChroma(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, 0, 0), nRefPitch[1])
       + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, 0, 0), nRefPitch[2]), effective_chromaSADscale) : 0;
-  sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, 0, 0));
-  
+  sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, 0, zeroMVfieldShifted.y));
   sad += saduv;
   workarea.bestMV.sad = sad;
-  workarea.nMinCost = sad + ((penaltyZero*(safe_sad_t)sad) >> 8); // v.1.11.0.2
+  workarea.nMinCost = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2
 
   VECTOR bestMVMany[8];
   int nMinCostMany[8];
