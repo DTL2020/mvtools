@@ -390,22 +390,25 @@ void PlaneOfBlocks::SearchMVs(
   LSAD = _lsad;    // SAD limit for lambda using
 
   Slicer			slicer(_mt_flag); // fixme: mt bug
-  if(bits_per_pixel == 8)
+  if (bits_per_pixel == 8)
+  {
     if (optSearchOption == 2)
     {
       slicer.start(nBlkY, *this, &PlaneOfBlocks::search_mv_slice_SO2<uint8_t>, 4);
     }
     else
     if (optSearchOption == 3)
-     {
-       slicer.start(nBlkY, *this, &PlaneOfBlocks::search_mv_slice_SO3<uint8_t>, 4);
-     }
+    {
+      slicer.start(nBlkY, *this, &PlaneOfBlocks::search_mv_slice_SO3<uint8_t>, 4);
+    }
     else
     {
       slicer.start(nBlkY, *this, &PlaneOfBlocks::search_mv_slice<uint8_t>, 4);
     }
+  }
   else
     slicer.start(nBlkY, *this, &PlaneOfBlocks::search_mv_slice<uint16_t>, 4);
+
   slicer.wait();
 
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -1735,6 +1738,41 @@ void PlaneOfBlocks::PseudoEPZSearch_no_pred(WorkingArea& workarea) // no new pre
 
 // DTL test
 template<typename pixel_t>
+void PlaneOfBlocks::PseudoEPZSearch_no_refine(WorkingArea& workarea) // no refine - only predictor check
+{
+  typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
+
+  sad_t sad;
+
+  if (smallestPlane) // never get here - normal use is sequence of params with 'real' search like optPredictorsType="3,x" where x < 3.
+  {
+    workarea.bestMV = zeroMV;
+    workarea.nMinCost = INT_MAX;
+  }
+  else
+  {
+    workarea.bestMV = workarea.predictor; // already ClipMV() processed in the search_mv_slice
+    // only recalculate sad for interpolated predictor to be compatible with old/typical thSAD setting in MDegrain
+      sad_t sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.bestMV.x, workarea.bestMV.y));
+      sad_t saduv = (chroma) ? ScaleSadChroma(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.bestMV.x, workarea.bestMV.y), nRefPitch[1])
+        + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.bestMV.x, workarea.bestMV.y), nRefPitch[2]), effective_chromaSADscale) : 0;
+      workarea.bestMV.sad = sad + saduv;
+  }
+
+  // only recalculate sad for interpolated predictor to be compatible with old/typical thSAD setting in MDegrain
+//  CheckMV0<pixel_t>(workarea, workarea.predictor.x, workarea.predictor.y);
+
+  // we store the result
+  vectors[workarea.blkIdx].x = workarea.bestMV.x;
+  vectors[workarea.blkIdx].y = workarea.bestMV.y;
+  vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
+
+  workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
+}
+
+
+// DTL test
+template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
 {
     typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
@@ -1805,6 +1843,14 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
     
     // then, we refine, according to the search type
     Refine<pixel_t>(workarea);
+
+#ifdef RETURN_PREV_LEVEL_SAD_AT_LEVEL_0
+    // special feature, disable in the standard release !!!
+    if (nSearchParam == 1) // finest level 0 - test for better denoise 
+    {
+      workarea.bestMV.sad = workarea.predictor.sad; // use previous level sad
+    }
+#endif  
 
     // we store the result
     vectors[workarea.blkIdx].x = workarea.bestMV.x;
@@ -1988,10 +2034,13 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea)
   // sp = 1 for level=0 (finest) sp = 2 for other levels
   (this->*ExhaustiveSearch8x8_avx2)(workarea, workarea.bestMV.x, workarea.bestMV.y);
 
-  if (nSearchParam == 1) // finest level 0 - test for better denoise
+#ifdef RETURN_PREV_LEVEL_SAD_AT_LEVEL_0
+  // special feature, disable in the standard release !!!
+  if (nSearchParam == 1) // finest level 0 - test for better denoise 
   {
     workarea.bestMV.sad = workarea.predictor.sad; // use previous level sad
   }
+#endif  
 
   // we store the result
   vectors[workarea.blkIdx] = workarea.bestMV;
@@ -2027,6 +2076,31 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_no_pred(WorkingArea& workarea)
 
   workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
 }
+
+template<typename pixel_t>
+void PlaneOfBlocks::PseudoEPZSearch_optSO2_no_refine(WorkingArea& workarea)
+{
+  typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
+
+  sad_t sad;
+
+  if (smallestPlane) // do not use it with levels=1 - it will not denoise at all.
+  {
+    workarea.bestMV = zeroMV;
+    workarea.nMinCost = INT_MAX;
+  }
+  else
+  {
+    workarea.bestMV = workarea.predictor;
+    workarea.bestMV.sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.bestMV.x, workarea.bestMV.y));
+  }
+
+  // we store the result
+  vectors[workarea.blkIdx] = workarea.bestMV;
+
+  workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
+}
+
 
 template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch_optSO3_no_pred(WorkingArea& workarea, int* pBlkData)
@@ -3983,146 +4057,176 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
       }
     }
 
-    for (int iblkx = 0; iblkx < nBlkX; iblkx++)
+    if (_predictorType != 4)
     {
-      workarea.blkx = blkxStart + iblkx*workarea.blkScanDir;
-      workarea.blkIdx = workarea.blky*nBlkX + workarea.blkx;
-      workarea.iter = 0;
-      //			DebugPrintf("BlkIdx = %d \n", workarea.blkIdx);
-      PROFILE_START(MOTION_PROFILE_ME);
+      for (int iblkx = 0; iblkx < nBlkX; iblkx++)
+      {
+        workarea.blkx = blkxStart + iblkx * workarea.blkScanDir;
+        workarea.blkIdx = workarea.blky * nBlkX + workarea.blkx;
+        workarea.iter = 0;
+        //			DebugPrintf("BlkIdx = %d \n", workarea.blkIdx);
+        PROFILE_START(MOTION_PROFILE_ME);
 
-      // Resets the global predictor (it may have been clipped during the
-      // previous block scan)
+        // Resets the global predictor (it may have been clipped during the
+        // previous block scan)
 
-      // fixme: why recalc is resetting only outside, why, maybe recalc is not using that at all?
-      workarea.globalMVPredictor = _glob_mv_pred_def;
+        // fixme: why recalc is resetting only outside, why, maybe recalc is not using that at all?
+        workarea.globalMVPredictor = _glob_mv_pred_def;
 
 #if (ALIGN_SOURCEBLOCK > 1)
-      //store the pitch
-      const BYTE *pY = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
-      //create aligned copy
-      BLITLUMA(workarea.pSrc_temp[0], nSrcPitch[0], pY, nSrcPitch_plane[0]);
-      //set the to the aligned copy
-      workarea.pSrc[0] = workarea.pSrc_temp[0];
-      if (chroma)
-      {
-        workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
-        BLITCHROMA(workarea.pSrc_temp[1], nSrcPitch[1], workarea.pSrc[1], nSrcPitch_plane[1]);
-        workarea.pSrc[1] = workarea.pSrc_temp[1];
-        workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
-        BLITCHROMA(workarea.pSrc_temp[2], nSrcPitch[2], workarea.pSrc[2], nSrcPitch_plane[2]);
-        workarea.pSrc[2] = workarea.pSrc_temp[2];
-      }
+        //store the pitch
+        const BYTE* pY = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
+        //create aligned copy
+        BLITLUMA(workarea.pSrc_temp[0], nSrcPitch[0], pY, nSrcPitch_plane[0]);
+        //set the to the aligned copy
+        workarea.pSrc[0] = workarea.pSrc_temp[0];
+        if (chroma)
+        {
+          workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
+          BLITCHROMA(workarea.pSrc_temp[1], nSrcPitch[1], workarea.pSrc[1], nSrcPitch_plane[1]);
+          workarea.pSrc[1] = workarea.pSrc_temp[1];
+          workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
+          BLITCHROMA(workarea.pSrc_temp[2], nSrcPitch[2], workarea.pSrc[2], nSrcPitch_plane[2]);
+          workarea.pSrc[2] = workarea.pSrc_temp[2];
+        }
 #else	// ALIGN_SOURCEBLOCK
-      workarea.pSrc[0] = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
-      if (chroma)
-      {
-        workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
-        workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
-      }
+        workarea.pSrc[0] = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
+        if (chroma)
+        {
+          workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
+          workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
+        }
 #endif	// ALIGN_SOURCEBLOCK
 
-      // fixme note:
-      // MAnalyze mt-inconsistency reason #3
-      // this is _not_ internal mt friendly
-      // because workarea.nLambda is set to 0 differently:
-      // In vertically sliced multithreaded case it happens an _each_ top of the sliced block
-      // In non-mt: only for the most top blocks
+        // fixme note:
+        // MAnalyze mt-inconsistency reason #3
+        // this is _not_ internal mt friendly
+        // because workarea.nLambda is set to 0 differently:
+        // In vertically sliced multithreaded case it happens an _each_ top of the sliced block
+        // In non-mt: only for the most top blocks
 
-      if (workarea.blky == workarea.blky_beg)
+        if (workarea.blky == workarea.blky_beg)
+        {
+          workarea.nLambda = 0;
+        }
+        else
+        {
+          workarea.nLambda = _lambda_level;
+        }
+
+        // fixme:
+        // not exacly nice, but works
+        // different threads are writing, but the are the same always and come from parameters _pnew, _lsad
+        penaltyNew = _pnew; // penalty for new vector
+        LSAD = _lsad;    // SAD limit for lambda using
+        // may be they must be scaled by nPel ?
+
+        // decreased padding of coarse levels
+        int nHPaddingScaled = pSrcFrame->GetPlane(YPLANE)->GetHPadding() >> nLogScale;
+        int nVPaddingScaled = pSrcFrame->GetPlane(YPLANE)->GetVPadding() >> nLogScale;
+        /* computes search boundaries */
+        workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
+        workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
+        workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
+        workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
+
+        /* search the mv */
+        workarea.predictor = ClipMV(workarea, vectors[workarea.blkIdx]);
+        if (temporal)
+        {
+          workarea.predictors[4] = ClipMV(workarea, *reinterpret_cast<VECTOR*>(&_vecPrev[workarea.blkIdx * N_PER_BLOCK])); // temporal predictor
+        }
+        else
+        {
+          workarea.predictors[4] = ClipMV(workarea, zeroMV);
+        }
+
+        // Possible point of placement selection of 'predictors control'
+        if (_predictorType == 0)
+          PseudoEPZSearch<pixel_t>(workarea); // all predictors (original)
+        else if (_predictorType == 1) // DTL: partial predictors
+          PseudoEPZSearch_glob_med_pred<pixel_t>(workarea);
+        else if (_predictorType == 2) // DTL: no predictiors
+          PseudoEPZSearch_no_pred<pixel_t>(workarea);
+        else // DTL: no refine (at level = 0 typically)
+          PseudoEPZSearch_no_refine<pixel_t>(workarea);
+
+        // workarea.bestMV = zeroMV; // debug
+
+        if (outfilebuf != NULL) // write vector to outfile
+        {
+          outfilebuf[workarea.blkx * 4 + 0] = workarea.bestMV.x;
+          outfilebuf[workarea.blkx * 4 + 1] = workarea.bestMV.y;
+          outfilebuf[workarea.blkx * 4 + 2] = (*(uint32_t*)(&workarea.bestMV.sad) & 0x0000ffff); // low word
+          outfilebuf[workarea.blkx * 4 + 3] = (*(uint32_t*)(&workarea.bestMV.sad) >> 16);     // high word, usually null
+        }
+
+        /* write the results */
+        pBlkData[workarea.blkx * N_PER_BLOCK + 0] = workarea.bestMV.x;
+        pBlkData[workarea.blkx * N_PER_BLOCK + 1] = workarea.bestMV.y;
+        pBlkData[workarea.blkx * N_PER_BLOCK + 2] = *(uint32_t*)(&workarea.bestMV.sad);
+
+        PROFILE_STOP(MOTION_PROFILE_ME);
+
+
+        if (smallestPlane)
+        {
+          /*
+          int64_t i64_1 = 0;
+          int64_t i64_2 = 0;
+          int32_t i32 = 0;
+          unsigned int a1 = 200;
+          unsigned int a2 = 201;
+
+          i64_1 += a1 - a2; // 0x00000000 FFFFFFFF   !!!!!
+          i64_2 = i64_2 + a1 - a2; // 0xFFFFFFFF FFFFFFFF O.K.!
+          i32 += a1 - a2; // 0xFFFFFFFF
+          */
+
+          // int64_t += uint32_t - uint32_t is not ok, if diff would be negative
+          // LUMA diff can be negative! we should cast from uint32_t
+          // 64 bit cast or else: int64_t += uint32t - uint32_t results in int64_t += (uint32_t)(uint32t - uint32_t)
+          // which is baaaad 0x00000000 FFFFFFFF instead of 0xFFFFFFFF FFFFFFFF
+
+          // 161204 todo check: why is it not abs(lumadiff)?
+          typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
+          workarea.sumLumaChange += (safe_sad_t)LUMA(GetRefBlock(workarea, 0, 0), nRefPitch[0]) - (safe_sad_t)LUMA(workarea.pSrc[0], nSrcPitch[0]);
+        }
+
+        /* increment indexes & pointers */
+        if (iblkx < nBlkX - 1)
+        {
+          workarea.x[0] += nBlkSizeX_Ovr[0] * workarea.blkScanDir;
+          workarea.x[1] += nBlkSizeX_Ovr[1] * workarea.blkScanDir;
+          workarea.x[2] += nBlkSizeX_Ovr[2] * workarea.blkScanDir;
+        }
+      }	// for iblkx
+    }// if predictorType != 4
+    else
+    {
+      for (int iblkx = 0; iblkx < nBlkX; iblkx++)
       {
-        workarea.nLambda = 0;
-      }
-      else
-      {
-        workarea.nLambda = _lambda_level;
-      }
+        workarea.blkx = iblkx; 
+        workarea.blkIdx = workarea.blky * nBlkX + workarea.blkx;
 
-      // fixme:
-      // not exacly nice, but works
-      // different threads are writing, but the are the same always and come from parameters _pnew, _lsad
-      penaltyNew = _pnew; // penalty for new vector
-      LSAD = _lsad;    // SAD limit for lambda using
-      // may be they must be scaled by nPel ?
+        workarea.bestMV = vectors[workarea.blkIdx]; // may be not safe somewhere in MDegrain without clipping ??
 
-      // decreased padding of coarse levels
-      int nHPaddingScaled = pSrcFrame->GetPlane(YPLANE)->GetHPadding() >> nLogScale;
-      int nVPaddingScaled = pSrcFrame->GetPlane(YPLANE)->GetVPadding() >> nLogScale;
-      /* computes search boundaries */
-      workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
-      workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
-      workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
-      workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
+        if (outfilebuf != NULL) // write vector to outfile
+        {
+          outfilebuf[workarea.blkx * 4 + 0] = workarea.bestMV.x;
+          outfilebuf[workarea.blkx * 4 + 1] = workarea.bestMV.y;
+          outfilebuf[workarea.blkx * 4 + 2] = (*(uint32_t*)(&workarea.bestMV.sad) & 0x0000ffff); // low word
+          outfilebuf[workarea.blkx * 4 + 3] = (*(uint32_t*)(&workarea.bestMV.sad) >> 16);     // high word, usually null
+        }
 
-      /* search the mv */
-      workarea.predictor = ClipMV(workarea, vectors[workarea.blkIdx]);
-      if (temporal)
-      {
-        workarea.predictors[4] = ClipMV(workarea, *reinterpret_cast<VECTOR*>(&_vecPrev[workarea.blkIdx*N_PER_BLOCK])); // temporal predictor
-      }
-      else
-      {
-        workarea.predictors[4] = ClipMV(workarea, zeroMV);
-      }
+        /* write the results */
+        pBlkData[workarea.blkx * N_PER_BLOCK + 0] = workarea.bestMV.x;
+        pBlkData[workarea.blkx * N_PER_BLOCK + 1] = workarea.bestMV.y;
+        pBlkData[workarea.blkx * N_PER_BLOCK + 2] = *(uint32_t*)(&workarea.bestMV.sad);
 
-      // Possible point of placement selection of 'predictors control'
-      if (_predictorType == 0)
-        PseudoEPZSearch<pixel_t>(workarea); // all predictors (original)
-      else if (_predictorType == 1) // DTL: partial predictors
-        PseudoEPZSearch_glob_med_pred<pixel_t>(workarea);
-      else // if (_predictorType == 2) // DTL: no predictiors
-        PseudoEPZSearch_no_pred<pixel_t>(workarea);
+      }	// for iblkx
 
-      // workarea.bestMV = zeroMV; // debug
-
-      if (outfilebuf != NULL) // write vector to outfile
-      {
-        outfilebuf[workarea.blkx * 4 + 0] = workarea.bestMV.x;
-        outfilebuf[workarea.blkx * 4 + 1] = workarea.bestMV.y;
-        outfilebuf[workarea.blkx * 4 + 2] = (*(uint32_t *)(&workarea.bestMV.sad) & 0x0000ffff); // low word
-        outfilebuf[workarea.blkx * 4 + 3] = (*(uint32_t *)(&workarea.bestMV.sad) >> 16);     // high word, usually null
-      }
-
-      /* write the results */
-      pBlkData[workarea.blkx*N_PER_BLOCK + 0] = workarea.bestMV.x;
-      pBlkData[workarea.blkx*N_PER_BLOCK + 1] = workarea.bestMV.y;
-      pBlkData[workarea.blkx*N_PER_BLOCK + 2] = *(uint32_t *)(&workarea.bestMV.sad);
-
-      PROFILE_STOP(MOTION_PROFILE_ME);
-
-
-      if (smallestPlane)
-      {
-        /*
-        int64_t i64_1 = 0;
-        int64_t i64_2 = 0;
-        int32_t i32 = 0;
-        unsigned int a1 = 200;
-        unsigned int a2 = 201;
-
-        i64_1 += a1 - a2; // 0x00000000 FFFFFFFF   !!!!!
-        i64_2 = i64_2 + a1 - a2; // 0xFFFFFFFF FFFFFFFF O.K.!
-        i32 += a1 - a2; // 0xFFFFFFFF
-        */
-
-        // int64_t += uint32_t - uint32_t is not ok, if diff would be negative
-        // LUMA diff can be negative! we should cast from uint32_t
-        // 64 bit cast or else: int64_t += uint32t - uint32_t results in int64_t += (uint32_t)(uint32t - uint32_t)
-        // which is baaaad 0x00000000 FFFFFFFF instead of 0xFFFFFFFF FFFFFFFF
-
-        // 161204 todo check: why is it not abs(lumadiff)?
-        typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
-        workarea.sumLumaChange += (safe_sad_t)LUMA(GetRefBlock(workarea, 0, 0), nRefPitch[0]) - (safe_sad_t)LUMA(workarea.pSrc[0], nSrcPitch[0]);
-      }
-
-      /* increment indexes & pointers */
-      if (iblkx < nBlkX - 1)
-      {
-        workarea.x[0] += nBlkSizeX_Ovr[0]*workarea.blkScanDir;
-        workarea.x[1] += nBlkSizeX_Ovr[1]*workarea.blkScanDir;
-        workarea.x[2] += nBlkSizeX_Ovr[2]*workarea.blkScanDir;
-      }
-    }	// for iblkx
+    } // opt_predictorType=4
 
     pBlkData += nBlkX*N_PER_BLOCK;
     if (outfilebuf != NULL) // write vector to outfile
@@ -4155,7 +4259,6 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
 
   _workarea_pool.return_obj(workarea);
 } // search_mv_slice
-
 
 template<typename pixel_t>
 void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
@@ -4235,139 +4338,171 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
       workarea.x[0] = iY_H_Padding /*pSrcFrame->GetPlane(YPLANE)->GetHPadding()*/ + nBlkSizeX_Ovr[0] * (nBlkX - 1);
     }
 
-    for (int iblkx = 0; iblkx < nBlkX; iblkx++)
+    if(_predictorType != 4)
     {
-      bInterframeH = ((iblkx > 0) && (iblkx < (nBlkX - 1)));
+      for (int iblkx = 0; iblkx < nBlkX; iblkx++)
+      {
+        bInterframeH = ((iblkx > 0) && (iblkx < (nBlkX - 1)));
 
-      workarea.blkx = blkxStart + iblkx * workarea.blkScanDir;
-      workarea.blkIdx = workarea.blky * nBlkX + workarea.blkx;
-      workarea.iter = 0;
-      //			DebugPrintf("BlkIdx = %d \n", workarea.blkIdx);
-      PROFILE_START(MOTION_PROFILE_ME);
+        workarea.blkx = blkxStart + iblkx * workarea.blkScanDir;
+        workarea.blkIdx = workarea.blky * nBlkX + workarea.blkx;
+        workarea.iter = 0;
+        //			DebugPrintf("BlkIdx = %d \n", workarea.blkIdx);
+        PROFILE_START(MOTION_PROFILE_ME);
 
-      // Resets the global predictor (it may have been clipped during the
-      // previous block scan)
+        // Resets the global predictor (it may have been clipped during the
+        // previous block scan)
 
-      // fixme: why recalc is resetting only outside, why, maybe recalc is not using that at all?
-      workarea.globalMVPredictor = _glob_mv_pred_def;
+        // fixme: why recalc is resetting only outside, why, maybe recalc is not using that at all?
+        workarea.globalMVPredictor = _glob_mv_pred_def;
 
 #if (ALIGN_SOURCEBLOCK > 1)
-      //store the pitch
-      const BYTE* pY = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
-      //create aligned copy
-      BLITLUMA(workarea.pSrc_temp[0], nSrcPitch[0], pY, nSrcPitch_plane[0]);
-      //set the to the aligned copy
-      workarea.pSrc[0] = workarea.pSrc_temp[0];
-      if (chroma)
-      {
-        workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
-        BLITCHROMA(workarea.pSrc_temp[1], nSrcPitch[1], workarea.pSrc[1], nSrcPitch_plane[1]);
-        workarea.pSrc[1] = workarea.pSrc_temp[1];
-        workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
-        BLITCHROMA(workarea.pSrc_temp[2], nSrcPitch[2], workarea.pSrc[2], nSrcPitch_plane[2]);
-        workarea.pSrc[2] = workarea.pSrc_temp[2];
-      }
+        //store the pitch
+        const BYTE* pY = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
+        //create aligned copy
+        BLITLUMA(workarea.pSrc_temp[0], nSrcPitch[0], pY, nSrcPitch_plane[0]);
+        //set the to the aligned copy
+        workarea.pSrc[0] = workarea.pSrc_temp[0];
+        if (chroma)
+        {
+          workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
+          BLITCHROMA(workarea.pSrc_temp[1], nSrcPitch[1], workarea.pSrc[1], nSrcPitch_plane[1]);
+          workarea.pSrc[1] = workarea.pSrc_temp[1];
+          workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
+          BLITCHROMA(workarea.pSrc_temp[2], nSrcPitch[2], workarea.pSrc[2], nSrcPitch_plane[2]);
+          workarea.pSrc[2] = workarea.pSrc_temp[2];
+        }
 #else	// ALIGN_SOURCEBLOCK
-      workarea.pSrc[0] = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
-      if (chroma)
-      {
-        workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
-        workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
-      }
+        workarea.pSrc[0] = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
+        if (chroma)
+        {
+          workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
+          workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
+        }
 #endif	// ALIGN_SOURCEBLOCK
 
-      // fixme note:
-      // MAnalyze mt-inconsistency reason #3
-      // this is _not_ internal mt friendly
-      // because workarea.nLambda is set to 0 differently:
-      // In vertically sliced multithreaded case it happens an _each_ top of the sliced block
-      // In non-mt: only for the most top blocks
+        // fixme note:
+        // MAnalyze mt-inconsistency reason #3
+        // this is _not_ internal mt friendly
+        // because workarea.nLambda is set to 0 differently:
+        // In vertically sliced multithreaded case it happens an _each_ top of the sliced block
+        // In non-mt: only for the most top blocks
 
-      if (workarea.blky == workarea.blky_beg)
+        if (workarea.blky == workarea.blky_beg)
+        {
+          workarea.nLambda = 0;
+        }
+        else
+        {
+          workarea.nLambda = _lambda_level;
+        }
+
+        // fixme:
+        // not exacly nice, but works
+        // different threads are writing, but the are the same always and come from parameters _pnew, _lsad
+        penaltyNew = _pnew; // penalty for new vector
+        LSAD = _lsad;    // SAD limit for lambda using
+        // may be they must be scaled by nPel ?
+
+        // decreased padding of coarse levels
+        int nHPaddingScaled = iY_H_Padding /*pSrcFrame->GetPlane(YPLANE)->GetHPadding()*/ >> nLogScale;
+        int nVPaddingScaled = iY_V_Padding /*pSrcFrame->GetPlane(YPLANE)->GetVPadding()*/ >> nLogScale;
+        /* computes search boundaries */
+  /*    workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
+        workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
+        workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
+        workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);*/
+        workarea.nDxMax = nPel * (iY_Ext_Width - workarea.x[0] - nBlkSizeX - iY_H_Padding + nHPaddingScaled);
+        workarea.nDyMax = nPel * (iY_Ext_Height - workarea.y[0] - nBlkSizeY - iY_V_Padding + nVPaddingScaled - nSearchParam);
+        workarea.nDxMin = -nPel * (workarea.x[0] - iY_H_Padding + nHPaddingScaled);
+        workarea.nDyMin = -nPel * (workarea.y[0] - iY_V_Padding + nVPaddingScaled - nSearchParam); // if (- nSearchParam) not helps - need to think more.
+
+        /* search the mv */
+        workarea.predictor = ClipMV_SO2(workarea, vectors[workarea.blkIdx]);
+
+        workarea.predictors[4] = ClipMV_SO2(workarea, zeroMV);
+
+        workarea.bIntraframe = bInterframeH && bInterframeV;
+
+        if (_predictorType == 0)
+          PseudoEPZSearch_optSO2<pixel_t>(workarea); // all predictors (original)
+        else if (_predictorType == 1)
+          PseudoEPZSearch_optSO2_glob_med_pred<pixel_t>(workarea);
+        else if (_predictorType == 2)// _predictorType == 2
+          PseudoEPZSearch_optSO2_no_pred<pixel_t>(workarea);
+        else // _predictorType == 3
+          PseudoEPZSearch_optSO2_no_refine<pixel_t>(workarea);
+
+  //      (this->*Sel_Pseudo_EPZ_search_SO2)(workarea); // still not works - maybe possible to fix ?
+
+        // workarea.bestMV = zeroMV; // debug
+
+        /* write the results */
+        pBlkData[workarea.blkx * N_PER_BLOCK + 0] = workarea.bestMV.x;
+        pBlkData[workarea.blkx * N_PER_BLOCK + 1] = workarea.bestMV.y;
+        pBlkData[workarea.blkx * N_PER_BLOCK + 2] = *(uint32_t*)(&workarea.bestMV.sad);
+
+        PROFILE_STOP(MOTION_PROFILE_ME);
+
+        if (smallestPlane)
+        {
+          /*
+          int64_t i64_1 = 0;
+          int64_t i64_2 = 0;
+          int32_t i32 = 0;
+          unsigned int a1 = 200;
+          unsigned int a2 = 201;
+
+          i64_1 += a1 - a2; // 0x00000000 FFFFFFFF   !!!!!
+          i64_2 = i64_2 + a1 - a2; // 0xFFFFFFFF FFFFFFFF O.K.!
+          i32 += a1 - a2; // 0xFFFFFFFF
+          */
+
+          // int64_t += uint32_t - uint32_t is not ok, if diff would be negative
+          // LUMA diff can be negative! we should cast from uint32_t
+          // 64 bit cast or else: int64_t += uint32t - uint32_t results in int64_t += (uint32_t)(uint32t - uint32_t)
+          // which is baaaad 0x00000000 FFFFFFFF instead of 0xFFFFFFFF FFFFFFFF
+
+          // 161204 todo check: why is it not abs(lumadiff)?
+          typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
+          workarea.sumLumaChange += (safe_sad_t)LUMA(GetRefBlock(workarea, 0, 0), nRefPitch[0]) - (safe_sad_t)LUMA(workarea.pSrc[0], nSrcPitch[0]);
+        }
+
+        /* increment indexes & pointers */
+        if (iblkx < nBlkX - 1)
+        {
+          workarea.x[0] += nBlkSizeX_Ovr[0] * workarea.blkScanDir;
+          workarea.x[1] += nBlkSizeX_Ovr[1] * workarea.blkScanDir;
+          workarea.x[2] += nBlkSizeX_Ovr[2] * workarea.blkScanDir;
+        }
+      }	// for iblkx
+    }// if predictorType != 4
+    else
+    {
+      for (int iblkx = 0; iblkx < nBlkX; iblkx++)
       {
-        workarea.nLambda = 0;
-      }
-      else
-      {
-        workarea.nLambda = _lambda_level;
-      }
+        workarea.blkx = iblkx;
+        workarea.blkIdx = workarea.blky * nBlkX + workarea.blkx;
 
-      // fixme:
-      // not exacly nice, but works
-      // different threads are writing, but the are the same always and come from parameters _pnew, _lsad
-      penaltyNew = _pnew; // penalty for new vector
-      LSAD = _lsad;    // SAD limit for lambda using
-      // may be they must be scaled by nPel ?
+        workarea.bestMV = vectors[workarea.blkIdx]; // may be not safe somewhere in MDegrain without clipping ??
 
-      // decreased padding of coarse levels
-      int nHPaddingScaled = iY_H_Padding /*pSrcFrame->GetPlane(YPLANE)->GetHPadding()*/ >> nLogScale;
-      int nVPaddingScaled = iY_V_Padding /*pSrcFrame->GetPlane(YPLANE)->GetVPadding()*/ >> nLogScale;
-      /* computes search boundaries */
-/*    workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
-      workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
-      workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
-      workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);*/
-      workarea.nDxMax = nPel * (iY_Ext_Width - workarea.x[0] - nBlkSizeX - iY_H_Padding + nHPaddingScaled);
-      workarea.nDyMax = nPel * (iY_Ext_Height - workarea.y[0] - nBlkSizeY - iY_V_Padding + nVPaddingScaled - nSearchParam);
-      workarea.nDxMin = -nPel * (workarea.x[0] - iY_H_Padding + nHPaddingScaled);
-      workarea.nDyMin = -nPel * (workarea.y[0] - iY_V_Padding + nVPaddingScaled - nSearchParam); // if (- nSearchParam) not helps - need to think more.
+        if (outfilebuf != NULL) // write vector to outfile
+        {
+          outfilebuf[workarea.blkx * 4 + 0] = workarea.bestMV.x;
+          outfilebuf[workarea.blkx * 4 + 1] = workarea.bestMV.y;
+          outfilebuf[workarea.blkx * 4 + 2] = (*(uint32_t*)(&workarea.bestMV.sad) & 0x0000ffff); // low word
+          outfilebuf[workarea.blkx * 4 + 3] = (*(uint32_t*)(&workarea.bestMV.sad) >> 16);     // high word, usually null
+        }
 
-      /* search the mv */
-      workarea.predictor = ClipMV_SO2(workarea, vectors[workarea.blkIdx]);
+        /* write the results */
+        pBlkData[workarea.blkx * N_PER_BLOCK + 0] = workarea.bestMV.x;
+        pBlkData[workarea.blkx * N_PER_BLOCK + 1] = workarea.bestMV.y;
+        pBlkData[workarea.blkx * N_PER_BLOCK + 2] = *(uint32_t*)(&workarea.bestMV.sad);
 
-      workarea.predictors[4] = ClipMV_SO2(workarea, zeroMV);
+      }	// for iblkx
 
-      workarea.bIntraframe = bInterframeH && bInterframeV;
+    } // opt_predictorType=4
 
-      if (_predictorType == 0)
-        PseudoEPZSearch_optSO2<pixel_t>(workarea); // all predictors (original)
-      else if (_predictorType == 1)
-        PseudoEPZSearch_optSO2_glob_med_pred<pixel_t>(workarea);
-      else // _predictorType == 2
-        PseudoEPZSearch_optSO2_no_pred<pixel_t>(workarea);
-//      (this->*Sel_Pseudo_EPZ_search_SO2)(workarea); // still not works - maybe possible to fix ?
-
-      // workarea.bestMV = zeroMV; // debug
-
-      /* write the results */
-      pBlkData[workarea.blkx * N_PER_BLOCK + 0] = workarea.bestMV.x;
-      pBlkData[workarea.blkx * N_PER_BLOCK + 1] = workarea.bestMV.y;
-      pBlkData[workarea.blkx * N_PER_BLOCK + 2] = *(uint32_t*)(&workarea.bestMV.sad);
-
-      PROFILE_STOP(MOTION_PROFILE_ME);
-
-      if (smallestPlane)
-      {
-        /*
-        int64_t i64_1 = 0;
-        int64_t i64_2 = 0;
-        int32_t i32 = 0;
-        unsigned int a1 = 200;
-        unsigned int a2 = 201;
-
-        i64_1 += a1 - a2; // 0x00000000 FFFFFFFF   !!!!!
-        i64_2 = i64_2 + a1 - a2; // 0xFFFFFFFF FFFFFFFF O.K.!
-        i32 += a1 - a2; // 0xFFFFFFFF
-        */
-
-        // int64_t += uint32_t - uint32_t is not ok, if diff would be negative
-        // LUMA diff can be negative! we should cast from uint32_t
-        // 64 bit cast or else: int64_t += uint32t - uint32_t results in int64_t += (uint32_t)(uint32t - uint32_t)
-        // which is baaaad 0x00000000 FFFFFFFF instead of 0xFFFFFFFF FFFFFFFF
-
-        // 161204 todo check: why is it not abs(lumadiff)?
-        typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
-        workarea.sumLumaChange += (safe_sad_t)LUMA(GetRefBlock(workarea, 0, 0), nRefPitch[0]) - (safe_sad_t)LUMA(workarea.pSrc[0], nSrcPitch[0]);
-      }
-
-      /* increment indexes & pointers */
-      if (iblkx < nBlkX - 1)
-      {
-        workarea.x[0] += nBlkSizeX_Ovr[0] * workarea.blkScanDir;
-        workarea.x[1] += nBlkSizeX_Ovr[1] * workarea.blkScanDir;
-        workarea.x[2] += nBlkSizeX_Ovr[2] * workarea.blkScanDir;
-      }
-    }	// for iblkx
 
     pBlkData += nBlkX * N_PER_BLOCK;
 

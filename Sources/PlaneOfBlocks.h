@@ -399,19 +399,27 @@ private:
 
   /* performs an epz search */
   template<typename pixel_t>
-  void PseudoEPZSearch_no_pred(WorkingArea& workarea); // planes = 1 recommended
+  void PseudoEPZSearch_glob_med_pred(WorkingArea& workarea); // planes >=2 recommended (optPredictorType=1)
 
   /* performs an epz search */
   template<typename pixel_t>
-  void PseudoEPZSearch_glob_med_pred(WorkingArea& workarea); // planes >=2 recommended
+  void PseudoEPZSearch_no_pred(WorkingArea& workarea); // only interpolated predictor (optPredictorType=2)
+
+  /* performs an epz search */
+  template<typename pixel_t>
+  void PseudoEPZSearch_no_refine(WorkingArea& workarea); // no refining mode - faster (optPredictorType=3)
 
   /* performs an epz search */
   template<typename pixel_t>
   void PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea); // global and median predictors, optSearchOption = 2 set of params
 
-    /* performs an epz search */
+  /* performs an epz search */
   template<typename pixel_t>
-  void PseudoEPZSearch_optSO2_no_pred(WorkingArea& workarea); // no predictors, planes = 1 recommended, optSearchOption = 2 set of params
+  void PseudoEPZSearch_optSO2_no_pred(WorkingArea& workarea); // no predictors, optSearchOption = 2 set of params
+
+  /* performs an epz search */
+  template<typename pixel_t>
+  void PseudoEPZSearch_optSO2_no_refine(WorkingArea& workarea); // no predictors, optSearchOption = 2 optPredictorType = 3 set of params
 
    /* performs an epz search */
   template<typename pixel_t>

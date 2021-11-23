@@ -91,9 +91,9 @@ MVAnalyse::MVAnalyse(
     env->ThrowError("MAnalyse: Clip must be YUV or YUY2");
   }
 
-  if (_optPredictorType != 0 && _optPredictorType != 1 && _optPredictorType != 2)
+  if (_optPredictorType < 0 || _optPredictorType > 4)
   {
-    env->ThrowError("MAnalyse: parameter 'optPredictorType' must be 0, 1 or 2");
+    env->ThrowError("MAnalyse: parameter 'optPredictorType' must be from 0 to 4");
   }
 
 #ifdef _WIN32

@@ -118,6 +118,33 @@ void	GroupOfPlanes::SearchMVs(
 {
   nFlags |= flags;
 
+  // temporal untill no 'array' of arguments for optPredictorType:
+  bool bDoPT3search = false;
+  if (optPredictorType == 3)
+  {
+    if (nLevelCount == 1)
+    {
+      throw std::runtime_error(
+        "MVTools: MAnalyse: optPredictorType=3 require levels > 1"
+      );
+    }
+    bDoPT3search = true;
+    // switch predictor type for all levels except finest to 1:
+    optPredictorType = 1;
+  }
+  bool bDoPT4search = false;
+  if (optPredictorType == 4)
+  {
+    if (nLevelCount == 1)
+    {
+      throw std::runtime_error(
+        "MVTools: MAnalyse: optPredictorType=4 require levels > 1"
+      );
+    }    bDoPT4search = true;
+    // switch predictor type for all levels except finest to 1:
+    optPredictorType = 1;
+  }
+
   // write group's size
   out[0] = GetArraySize();
 
@@ -224,6 +251,13 @@ void	GroupOfPlanes::SearchMVs(
     fieldShiftCur = (i == 0) ? fieldShift : 0; // may be non zero for finest level only
 //		DebugPrintf("SearchMV level %i", i);
     tryManyLevel = (tryMany && i > 0); // not for finest level to not decrease speed
+
+    // temp: sequence of params optPredictorType="3,1"
+    if ((bDoPT3search == true) && (i == 0)) optPredictorType = 3;
+
+    // temp: sequence of params optPredictorType="4,1"
+    if ((bDoPT4search == true) && (i == 0)) optPredictorType = 4;
+    
     planes[i]->SearchMVs(
       pSrcGOF->GetFrame(i),
       pRefGOF->GetFrame(i),
