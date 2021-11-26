@@ -649,29 +649,17 @@ void PlaneOfBlocks::InterpolatePrediction(PlaneOfBlocks& pob)
       iout_y = (iout_y >> normFactor) << mulFactor;
       iout_sad = (sad_t)(tmp_sad >> 4);
 
-      if (sse2)
-      {
-        _mm_stream_si32(&vectors[index].x, iout_x);
-        _mm_stream_si32(&vectors[index].y, iout_y);
-        _mm_stream_si32(&vectors[index].sad, iout_sad);
-      }
-      else
-      {
-        vectors[index].x = iout_x;
-        vectors[index].y = iout_y;
-        vectors[index].sad = iout_sad;
-      }
+      // non-temporal store require better arrangement to 64bytes - to do.
+      vectors[index].x = iout_x;
+      vectors[index].y = iout_y;
+      vectors[index].sad = iout_sad;
+
 #if 0
       if (vectors[index].sad < 0)
         _RPT1(0, "Vector and SAD Interpolate Problem: possible SAD overflow: %d\n", vectors[index].sad);
 #endif
     }	// for k < nBlkX
   }	// for l < nBlkY
-
-  if (sse2)
-  {
-    _mm_sfence();
-  }
 
 }
 
