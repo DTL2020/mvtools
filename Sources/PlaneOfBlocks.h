@@ -440,7 +440,9 @@ private:
   // 8x8 esa search radius 1
   void ExhaustiveSearch8x8_uint8_sp1_c(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy);
+  void ExhaustiveSearch8x8_uint8_np1_sp1_mpsadbw_avx2(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy);
+  void ExhaustiveSearch8x8_uint8_SO2_np1_sp1_mpsadbw_avx2(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_4Blks_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy, int* pBlkData);
   
   // 8x8 esa search radius 2
