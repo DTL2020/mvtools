@@ -1447,8 +1447,8 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp1_mpsadbw_avx2(WorkingArea& 
 // SO2 versions witout IsVectorOK check
 void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp1_mpsadbw_avx2(WorkingArea& workarea, int mvx, int mvy)
 {
-  const uint8_t* pucRef = GetRefBlock(workarea, mvx - 1, mvy - 1); // upper left corner
-  const uint8_t* pucCurr = workarea.pSrc[0];
+  const long long* pucRef = (long long*)GetRefBlock(workarea, mvx - 1, mvy - 1); // upper left corner
+  const long long* pucCurr = (long long*)workarea.pSrc[0];
 
   __m256i ymm0_Ref_01, ymm1_Ref_23, ymm2_Ref_45, ymm3_Ref_67; // require buf padding to allow 16bytes reads to xmm
   __m256i ymm4_Src_01, ymm5_Src_23, ymm6_Src_45, ymm7_Src_67; // require buf padding to allow 16bytes reads to xmm
@@ -1460,29 +1460,38 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp1_mpsadbw_avx2(WorkingAr
   __m256i ymm_block_ress;
 
   // load src as low 8bytes to each 128bit lane of 256
-  ymm4_Src_01 = _mm256_set_m128i(_mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 1)), _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 0)));
+/*  ymm4_Src_01 = _mm256_set_m128i(_mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 1)), _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 0)));
   ymm5_Src_23 = _mm256_set_m128i(_mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 3)), _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 2)));
   ymm6_Src_45 = _mm256_set_m128i(_mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 5)), _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 4)));
-  ymm7_Src_67 = _mm256_set_m128i(_mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 7)), _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 6)));
+  ymm7_Src_67 = _mm256_set_m128i(_mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 7)), _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 6)));*/
+  __m256i ymm_Src0123 = _mm256_i64gather_epi64(pucCurr, _mm256_set_epi64x(nSrcPitch[0] * 3, nSrcPitch[0] * 2, nSrcPitch[0] * 1, nSrcPitch[0] * 0), 1);
+  __m256i ymm_Src4567 = _mm256_i64gather_epi64(pucCurr, _mm256_set_epi64x(nSrcPitch[0] * 7, nSrcPitch[0] * 6, nSrcPitch[0] * 5, nSrcPitch[0] * 4), 1);
+
+  ymm4_Src_01 = _mm256_permute4x64_epi64(ymm_Src0123, 80);
+  ymm5_Src_23 = _mm256_permute4x64_epi64(ymm_Src0123, 250);
+  ymm6_Src_45 = _mm256_permute4x64_epi64(ymm_Src4567, 80);
+  ymm7_Src_67 = _mm256_permute4x64_epi64(ymm_Src4567, 250);
 
   // 1st row
-  ymm0_Ref_01 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 1), (__m128i*)(pucRef));
+/*  ymm0_Ref_01 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 1), (__m128i*)(pucRef));
   ymm1_Ref_23 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 3), (__m128i*)(pucRef + nRefPitch[0] * 2));
   ymm2_Ref_45 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 5), (__m128i*)(pucRef + nRefPitch[0] * 4));
-  ymm3_Ref_67 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 7), (__m128i*)(pucRef + nRefPitch[0] * 6));
+  ymm3_Ref_67 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 7), (__m128i*)(pucRef + nRefPitch[0] * 6));*/
+  ymm0_Ref_01 = _mm256_i64gather_epi64(pucRef, _mm256_set_epi64x((nRefPitch[0] * 1) + 8, (nRefPitch[0] * 1) + 0, 8, 0), 1);
+  ymm1_Ref_23 = _mm256_i64gather_epi64(pucRef, _mm256_set_epi64x((nRefPitch[0] * 3) + 8, (nRefPitch[0] * 3) + 0, (nRefPitch[0] * 2) + 8, (nRefPitch[0] * 2) + 0), 1);
+  ymm2_Ref_45 = _mm256_i64gather_epi64(pucRef, _mm256_set_epi64x((nRefPitch[0] * 5) + 8, (nRefPitch[0] * 5) + 0, (nRefPitch[0] * 4) + 8, (nRefPitch[0] * 4) + 0), 1);
+  ymm3_Ref_67 = _mm256_i64gather_epi64(pucRef, _mm256_set_epi64x((nRefPitch[0] * 7) + 8, (nRefPitch[0] * 7) + 0, (nRefPitch[0] * 6) + 8, (nRefPitch[0] * 6) + 0), 1);
 
   Sads_block_8x8
   ymm10_sads_r0 = ymm_block_ress;
 
   // 2nd row
   Push_Ref_8x8_row(8)
-
   Sads_block_8x8
   ymm11_sads_r1 = ymm_block_ress;
 
   // 3rd row
   Push_Ref_8x8_row(9)
-
   Sads_block_8x8
   ymm12_sads_r2 = ymm_block_ress;
 
@@ -1537,8 +1546,8 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp1_mpsadbw_avx2(WorkingAr
 void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp2_mpsadbw_avx2(WorkingArea& workarea, int mvx, int mvy)
 {
 
-  const uint8_t* pucRef = GetRefBlock(workarea, mvx - 2, mvy - 2); // upper left corner
-  const uint8_t* pucCurr = workarea.pSrc[0];
+  const long long* pucRef = (long long*)GetRefBlock(workarea, mvx - 2, mvy - 2); // upper left corner
+  const long long* pucCurr = (long long*)workarea.pSrc[0];
 
   __m256i ymm0_Ref_01, ymm1_Ref_23, ymm2_Ref_45, ymm3_Ref_67; // require buf padding to allow 16bytes reads to xmm
   __m256i ymm4_Src_01, ymm5_Src_23, ymm6_Src_45, ymm7_Src_67; // require buf padding to allow 16bytes reads to xmm
@@ -1550,44 +1559,51 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp2_mpsadbw_avx2(WorkingAr
   __m256i ymm_block_ress;
 
   // load src as low 8bytes to each 128bit lane of 256
-  ymm4_Src_01 = _mm256_set_m128i(_mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 1)), _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 0)));
+/*  ymm4_Src_01 = _mm256_set_m128i(_mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 1)), _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 0)));
   ymm5_Src_23 = _mm256_set_m128i(_mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 3)), _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 2)));
   ymm6_Src_45 = _mm256_set_m128i(_mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 5)), _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 4)));
-  ymm7_Src_67 = _mm256_set_m128i(_mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 7)), _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 6)));
+  ymm7_Src_67 = _mm256_set_m128i(_mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 7)), _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 6)));*/
+  __m256i ymm_Src0123 = _mm256_i64gather_epi64(pucCurr, _mm256_set_epi64x(nSrcPitch[0] * 3, nSrcPitch[0] * 2, nSrcPitch[0] * 1, nSrcPitch[0] * 0), 1);
+  __m256i ymm_Src4567 = _mm256_i64gather_epi64(pucCurr, _mm256_set_epi64x(nSrcPitch[0] * 7, nSrcPitch[0] * 6, nSrcPitch[0] * 5, nSrcPitch[0] * 4), 1);
+
+  ymm4_Src_01 = _mm256_permute4x64_epi64(ymm_Src0123, 80);
+  ymm5_Src_23 = _mm256_permute4x64_epi64(ymm_Src0123, 250);
+  ymm6_Src_45 = _mm256_permute4x64_epi64(ymm_Src4567, 80);
+  ymm7_Src_67 = _mm256_permute4x64_epi64(ymm_Src4567, 250);
 
   // 1st row
   // gathering should be faster on Skylake and newer ?
-  ymm0_Ref_01 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 1), (__m128i*)(pucRef));
+/*  ymm0_Ref_01 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 1), (__m128i*)(pucRef));
   ymm1_Ref_23 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 3), (__m128i*)(pucRef + nRefPitch[0] * 2));
   ymm2_Ref_45 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 5), (__m128i*)(pucRef + nRefPitch[0] * 4));
-  ymm3_Ref_67 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 7), (__m128i*)(pucRef + nRefPitch[0] * 6));
+  ymm3_Ref_67 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 7), (__m128i*)(pucRef + nRefPitch[0] * 6));*/
+  ymm0_Ref_01 = _mm256_i64gather_epi64(pucRef, _mm256_set_epi64x((nRefPitch[0] * 1) + 8, (nRefPitch[0] * 1) + 0, 8, 0), 1);
+  ymm1_Ref_23 = _mm256_i64gather_epi64(pucRef, _mm256_set_epi64x((nRefPitch[0] * 3) + 8, (nRefPitch[0] * 3) + 0, (nRefPitch[0] * 2) + 8, (nRefPitch[0] * 2) + 0), 1);
+  ymm2_Ref_45 = _mm256_i64gather_epi64(pucRef, _mm256_set_epi64x((nRefPitch[0] * 5) + 8, (nRefPitch[0] * 5) + 0, (nRefPitch[0] * 4) + 8, (nRefPitch[0] * 4) + 0), 1);
+  ymm3_Ref_67 = _mm256_i64gather_epi64(pucRef, _mm256_set_epi64x((nRefPitch[0] * 7) + 8, (nRefPitch[0] * 7) + 0, (nRefPitch[0] * 6) + 8, (nRefPitch[0] * 6) + 0), 1);
 
   Sads_block_8x8
-    ymm10_sads_r0 = ymm_block_ress;
+  ymm10_sads_r0 = ymm_block_ress;
 
   // 2nd row
   Push_Ref_8x8_row(8)
-
   Sads_block_8x8
-    ymm11_sads_r1 = ymm_block_ress;
+  ymm11_sads_r1 = ymm_block_ress;
 
   // 3rd row
   Push_Ref_8x8_row(9)
-
   Sads_block_8x8
-    ymm12_sads_r2 = ymm_block_ress;
+  ymm12_sads_r2 = ymm_block_ress;
 
   // 4th row
   Push_Ref_8x8_row(10)
-
   Sads_block_8x8
-    ymm13_sads_r3 = ymm_block_ress;
+  ymm13_sads_r3 = ymm_block_ress;
 
   // 5th row
   Push_Ref_8x8_row(11)
-
   Sads_block_8x8
-    ymm14_sads_r4 = ymm_block_ress;
+  ymm14_sads_r4 = ymm_block_ress;
 
   // set high sads, leave only 4,3,2,1,0
   ymm10_sads_r0 = _mm256_blend_epi16(ymm10_sads_r0, ymm13_all_ones, 224);
