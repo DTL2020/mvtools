@@ -5400,13 +5400,17 @@ PlaneOfBlocks::ExhaustiveSearchFunction_t PlaneOfBlocks::get_ExhaustiveSearchFun
 
   // SearchParam 1 or 2 or 4 is supported at the moment
   func_fn[std::make_tuple(8, 8, 1, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp1_avx2;
-  func_fn[std::make_tuple(8, 8, 1, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp1_c;
+  func_fn[std::make_tuple(8, 8, 1, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch_uint8_sp1_c;
+  func_fn[std::make_tuple(16, 16, 1, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch16x16_uint8_np1_sp1_avx2;
+  func_fn[std::make_tuple(16, 16, 1, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch_uint8_sp1_c;
   func_fn[std::make_tuple(8, 8, 2, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp2_avx2;
-  func_fn[std::make_tuple(8, 8, 2, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp2_c;
+  func_fn[std::make_tuple(8, 8, 2, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch_uint8_sp2_c;
+  func_fn[std::make_tuple(16, 16, 2, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch16x16_uint8_np1_sp2_avx2;
+  func_fn[std::make_tuple(16, 16, 2, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch_uint8_sp2_c;
   func_fn[std::make_tuple(8, 8, 3, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp3_avx2;
-  func_fn[std::make_tuple(8, 8, 3, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp3_c;
+  func_fn[std::make_tuple(8, 8, 3, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch_uint8_sp3_c;
   func_fn[std::make_tuple(8, 8, 4, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp4_avx2;
-  func_fn[std::make_tuple(8, 8, 4, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c;
+  func_fn[std::make_tuple(8, 8, 4, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch_uint8_sp4_c;
 
   ExhaustiveSearchFunction_t result = nullptr;
   arch_t archlist[] = { USE_AVX2, USE_AVX, USE_SSE41, USE_SSE2, NO_SIMD };
@@ -5425,7 +5429,7 @@ PlaneOfBlocks::ExhaustiveSearchFunction_t PlaneOfBlocks::get_ExhaustiveSearchFun
 }
 
 
-void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int mvx, int mvy) // 8x8 esa search radius 4
+void PlaneOfBlocks::ExhaustiveSearch_uint8_sp4_c(WorkingArea& workarea, int mvx, int mvy) // exa search radius 4
 {
   // debug check !
   // idea - may be not 4 checks are required - only upper left corner (starting addresses of buffer) and lower right (to not over-run atfer end of buffer - need check/test)
@@ -5437,15 +5441,6 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int m
   {
     return;
   }
-  /*	if (!workarea.IsVectorOK(mvx - 4, mvy + 3))
-      {
-          return;
-      }
-      if (!workarea.IsVectorOK(mvx + 3, mvy - 4))
-      {
-          return;
-      }
-      */
   unsigned short minsad = 65535;
   int x_minsad = 0;
   int y_minsad = 0;
@@ -5474,7 +5469,7 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int m
 }
 
 // Dispatcher for DTL tests
-void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp3_c(WorkingArea& workarea, int mvx, int mvy) // 8x8 esa search radius 3,  works for any nPel !.
+void PlaneOfBlocks::ExhaustiveSearch_uint8_sp3_c(WorkingArea& workarea, int mvx, int mvy) // exa search radius 3,  works for any nPel !.
 {
   // debug check !
   // idea - may be not 4 checks are required - only upper left corner (starting addresses of buffer) and lower right (to not over-run atfer end of buffer - need check/test)
@@ -5515,7 +5510,7 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp3_c(WorkingArea& workarea, int m
 }
 
 
-void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy) // 8x8 esa search radius 2,  works for any nPel !.
+void PlaneOfBlocks::ExhaustiveSearch_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy) // exa search radius 2,  works for any nPel !.
 {
   // debug check !
   // idea - may be not 4 checks are required - only upper left corner (starting addresses of buffer) and lower right (to not over-run atfer end of buffer - need check/test)
@@ -5555,7 +5550,7 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int m
 
 }
 
-void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_sp1_c(WorkingArea& workarea, int mvx, int mvy) // 8x8 esa search radius 1, works for any nPel !
+void PlaneOfBlocks::ExhaustiveSearch_uint8_sp1_c(WorkingArea& workarea, int mvx, int mvy) // exa search radius 1, works for any nPel !, and any block size
 {
   // debug check !
   // idea - may be not 4 checks are required - only upper left corner (starting addresses of buffer) and lower right (to not over-run atfer end of buffer - need check/test)

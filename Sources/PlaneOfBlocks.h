@@ -431,32 +431,43 @@ private:
   template<typename pixel_t>
   void ExpandingSearch(WorkingArea &workarea, int radius, int step, int mvx, int mvy); // diameter = 2*radius + 1
 
-  // DTL test function, 8x8 block, 8 bit only
-  // 8x8 esa search radius 4
-  void ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int mvx, int mvy);
-  void ExhaustiveSearch8x8_uint8_np1_sp4_avx2(WorkingArea& workarea, int mvx, int mvy);
-  //void ExhaustiveSearch8x8_uint8_sp4_avx2_2(WorkingArea& workarea, int mvx, int mvy);
+  // DTL test function, 8x8 and 16x16 block, 8 bit only
 
-  // 8x8 esa search radius 1
-  void ExhaustiveSearch8x8_uint8_sp1_c(WorkingArea& workarea, int mvx, int mvy);
+  // C-versions
+  void ExhaustiveSearch_uint8_sp1_c(WorkingArea& workarea, int mvx, int mvy); // for any nPel and blocksize (SAD() is selected for blocksize)
+  void ExhaustiveSearch_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy);
+  void ExhaustiveSearch_uint8_sp3_c(WorkingArea& workarea, int mvx, int mvy);
+  void ExhaustiveSearch_uint8_sp4_c(WorkingArea& workarea, int mvx, int mvy);
+
+  // 8x8 exa search radius 4
+  void ExhaustiveSearch8x8_uint8_np1_sp4_avx2(WorkingArea& workarea, int mvx, int mvy);
+
+  // 8x8 exa search radius 1
   void ExhaustiveSearch8x8_uint8_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp1_mpsadbw_avx2(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_SO2_np1_sp1_mpsadbw_avx2(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_4Blks_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy, int* pBlkData);
-  
-  // 8x8 esa search radius 2
-  void ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy);
+   
+  // 8x8 exa search radius 2
+
   void ExhaustiveSearch8x8_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_SO2_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp2_mpsadbw_avx2(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_SO2_np1_sp2_mpsadbw_avx2(WorkingArea& workarea, int mvx, int mvy);
-
-
-
-  // 8x8 esa search radius 3
-  void ExhaustiveSearch8x8_uint8_sp3_c(WorkingArea& workarea, int mvx, int mvy);
+  
+  // 8x8 exa search radius 3
   void ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea, int mvx, int mvy);
+
+  // 16x16 exa search radius 1
+  void ExhaustiveSearch16x16_uint8_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy); // minsadbw only version
+  void ExhaustiveSearch16x16_uint8_SO2_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy); // minsadbw only version
+
+  // 16x16 exa search radius 2
+  void ExhaustiveSearch16x16_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy); // minsadbw only version
+  void ExhaustiveSearch16x16_uint8_SO2_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy); // minsadbw only version
+
+
   // END OF DTL test function
 
   template<typename pixel_t>
