@@ -449,6 +449,10 @@ private:
   void ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_SO2_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
+  void ExhaustiveSearch8x8_uint8_np1_sp2_mpsadbw_avx2(WorkingArea& workarea, int mvx, int mvy);
+  void ExhaustiveSearch8x8_uint8_SO2_np1_sp2_mpsadbw_avx2(WorkingArea& workarea, int mvx, int mvy);
+
+
 
   // 8x8 esa search radius 3
   void ExhaustiveSearch8x8_uint8_sp3_c(WorkingArea& workarea, int mvx, int mvy);
