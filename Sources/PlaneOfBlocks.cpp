@@ -111,6 +111,7 @@ PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSi
   sse41 = (bool)(nFlags & CPU_SSE4);
   avx = (bool)(nFlags & CPU_AVX);
   avx2 = (bool)(nFlags & CPU_AVX2);
+  avx512 = (bool)(nFlags & CPU_AVX512);
 //  bool ssd = (bool)(nFlags & MOTION_USE_SSD);
 //  bool satd = (bool)(nFlags & MOTION_USE_SATD);
 
@@ -158,7 +159,9 @@ PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSi
                      // OverlapsFunction
                      // in M(V)DegrainX: DenoiseXFunction
   arch_t arch;
-  if (isse && avx2)
+  if (isse && avx512)
+    arch = USE_AVX512;
+  else if (isse && avx2)
     arch = USE_AVX2;
   else if (isse && avx)
     arch = USE_AVX;
@@ -5401,6 +5404,7 @@ PlaneOfBlocks::ExhaustiveSearchFunction_t PlaneOfBlocks::get_ExhaustiveSearchFun
   // SearchParam 1 or 2 or 4 is supported at the moment
   func_fn[std::make_tuple(8, 8, 1, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp1_avx2;
   func_fn[std::make_tuple(8, 8, 1, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch_uint8_sp1_c;
+  func_fn[std::make_tuple(16, 16, 1, 8, USE_AVX512)] = &PlaneOfBlocks::ExhaustiveSearch16x16_uint8_np1_sp1_avx512;
   func_fn[std::make_tuple(16, 16, 1, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch16x16_uint8_np1_sp1_avx2;
   func_fn[std::make_tuple(16, 16, 1, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch_uint8_sp1_c;
   func_fn[std::make_tuple(8, 8, 2, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp2_avx2;

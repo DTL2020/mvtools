@@ -40,6 +40,7 @@ int conv_cpuf_flags_to_cpu(int avscpu)
   if (avscpu & CPUF_SSE4_2) acpu |= CPU_SSE42;
   if (avscpu & CPUF_AVX) acpu |= CPU_AVX;
   if (avscpu & CPUF_AVX2) acpu |= CPU_AVX2;
+  if (avscpu & CPUF_AVX512F) acpu |= CPU_AVX512; // no selection for F/BW/VL/... ?
   return acpu;
 }
 

@@ -55,7 +55,10 @@ enum AnaFlags
 
   // force MVAnalyse to use a different function for SAD / SADCHROMA (debug)
 	MOTION_USE_SSD             = 0x08000000,
-	MOTION_USE_SATD            = 0x10000000
+	MOTION_USE_SATD            = 0x10000000,
+
+  // AVX512 (no selection to F/BW/VL/... ?
+  CPU_AVX512                 = 0x20000000, 
 };
 
 

@@ -190,6 +190,7 @@ private:
   bool sse41;
   bool avx;
   bool avx2;
+  bool avx512;
 
 
   int dctpitch;
@@ -461,7 +462,9 @@ private:
 
   // 16x16 exa search radius 1
   void ExhaustiveSearch16x16_uint8_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy); // minsadbw only version
+  void ExhaustiveSearch16x16_uint8_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy); 
   void ExhaustiveSearch16x16_uint8_SO2_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy); // minsadbw only version
+  void ExhaustiveSearch16x16_uint8_SO2_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy); // minsadbw only version
 
   // 16x16 exa search radius 2
   void ExhaustiveSearch16x16_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy); // minsadbw only version

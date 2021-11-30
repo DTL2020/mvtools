@@ -36,7 +36,8 @@ enum arch_t {
     USE_SSE41,
     USE_SSE42,
     USE_AVX,
-    USE_AVX2
+    USE_AVX2,
+    USE_AVX512
 };
 
 typedef uint8_t BYTE;

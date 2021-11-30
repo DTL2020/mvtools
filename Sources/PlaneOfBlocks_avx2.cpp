@@ -3237,3 +3237,277 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_4Blks_np1_sp1_avx2(WorkingArea& wo
 
 }
 
+////////////// To file PlaneofBlocks_avx512.cpp
+#define _mm512_gather16x16_src(r2, r1) \
+			_mm512_permutexvar_epi32(idx_set_src, _mm512_i64gather_epi64(_mm512_set_epi64( \
+				nSrcPitch[0] * r2 + 8, nSrcPitch[0] * r2 + 8, nSrcPitch[0] * r2 + 0, nSrcPitch[0] * r2 + 0, \
+				nSrcPitch[0] * r1 + 8, nSrcPitch[0] * r1 + 8, nSrcPitch[0] * r1 + 0, nSrcPitch[0] * r1 + 0), pucCurr, 1))
+
+#define Sad_16x16_avx512 \
+	zmm16_sad01 = _mm512_dbsad_epu8(zmm8_Src01, zmm0_Ref01, 148); \
+	zmm17_sad23 = _mm512_dbsad_epu8(zmm9_Src23, zmm1_Ref23, 148); \
+	zmm18_sad45 = _mm512_dbsad_epu8(zmm10_Src45, zmm2_Ref45, 148); \
+	zmm19_sad67 = _mm512_dbsad_epu8(zmm11_Src67, zmm3_Ref67, 148); \
+	zmm20_sad89 = _mm512_dbsad_epu8(zmm12_Src89, zmm4_Ref89, 148); \
+	zmm21_sad1011 = _mm512_dbsad_epu8(zmm13_Src1011, zmm5_Ref1011, 148); \
+	zmm22_sad1213 = _mm512_dbsad_epu8(zmm14_Src1213, zmm6_Ref1213, 148); \
+	zmm23_sad1415 = _mm512_dbsad_epu8(zmm15_Src1415, zmm7_Ref1415, 148); \
+	zmm16_sad01 = _mm512_adds_epu16(zmm16_sad01, zmm17_sad23); \
+	zmm18_sad45 = _mm512_adds_epu16(zmm18_sad45, zmm19_sad67); \
+	zmm20_sad89 = _mm512_adds_epu16(zmm20_sad89, zmm21_sad1011); \
+	zmm22_sad1213 = _mm512_adds_epu16(zmm22_sad1213, zmm23_sad1415); \
+	zmm16_sad01 = _mm512_adds_epu16(zmm16_sad01, zmm18_sad45); \
+	zmm20_sad89 = _mm512_adds_epu16(zmm20_sad89, zmm22_sad1213); \
+	zmm16_sad01 = _mm512_adds_epu16(zmm16_sad01, zmm20_sad89); \
+	zmm16_sad01 = _mm512_adds_epu16(zmm16_sad01, _mm512_permutexvar_epi64(_mm512_set_epi64(7, 7, 7, 7, 7, 6, 5, 4), zmm16_sad01)); \
+	zmm16_sad01 = _mm512_adds_epu16(zmm16_sad01, _mm512_permutexvar_epi64(_mm512_set_epi64(7, 7, 7, 7, 7, 7, 3, 2), zmm16_sad01)); \
+	xmm_sad_ress = _mm512_castsi512_si128(zmm16_sad01); \
+	xmm_sad_ress = _mm_adds_epi16(xmm_sad_ress, _mm_srli_si128(xmm_sad_ress, 8));
+
+
+
+void PlaneOfBlocks::ExhaustiveSearch16x16_uint8_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy)
+{
+  // debug check !! need to fix caller to now allow illegal vectors 
+  // idea - may be not 4 checks are required - only upper left corner (starting addresses of buffer) and lower right (to not over-run atfer end of buffer - need check/test)
+  if (!workarea.IsVectorOK(mvx - 1, mvy - 1))
+  {
+    return;
+  }
+  if (!workarea.IsVectorOK(mvx + 1, mvy + 1))
+  {
+    return;
+  }
+
+  const uint8_t* pucRef = GetRefBlock(workarea, mvx - 1, mvy - 1); // upper left corner
+  const uint8_t* pucCurr = workarea.pSrc[0];
+
+  __m512i zmm0_Ref01, zmm1_Ref23, zmm2_Ref45, zmm3_Ref67, zmm4_Ref89, zmm5_Ref1011, zmm6_Ref1213, zmm7_Ref1415;
+  __m512i zmm8_Src01, zmm9_Src23, zmm10_Src45, zmm11_Src67, zmm12_Src89, zmm13_Src1011, zmm14_Src1213, zmm15_Src1415;
+
+  __m512i zmm16_sad01, zmm17_sad23, zmm18_sad45, zmm19_sad67, zmm20_sad89, zmm21_sad1011, zmm22_sad1213, zmm23_sad1415;
+
+  __m128i xmm_sad_ress;
+  __m256i ymm_sads_R0, ymm_sads_R1, ymm_sads_R2;
+
+  __m256i ymm_all_ones = _mm256_cmpeq_epi64(_mm256_setzero_si256(), _mm256_setzero_si256());
+
+  const __m512i idx_set_src = _mm512_set_epi32(13, 13, 12, 12, 9, 9, 8, 8, 5, 5, 4, 4, 1, 1, 0, 0);
+  const __m512i imm_shift_insert_rows = _mm512_set_epi32(21, 20, 19, 18, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8);
+  const __m512i imm_vshift_rows = _mm512_set_epi64(11, 10, 9, 8, 7, 6, 5, 4);
+
+  // src
+  zmm8_Src01 = _mm512_gather16x16_src(1, 0);
+  zmm9_Src23 = _mm512_gather16x16_src(3, 2);
+  zmm10_Src45 = _mm512_gather16x16_src(5, 4);
+  zmm11_Src67 = _mm512_gather16x16_src(7, 6);
+  zmm12_Src89 = _mm512_gather16x16_src(9, 8);
+  zmm13_Src1011 = _mm512_gather16x16_src(11, 10);
+  zmm14_Src1213 = _mm512_gather16x16_src(13, 12);
+  zmm15_Src1415 = _mm512_gather16x16_src(15, 14);
+
+  // ref 
+  zmm0_Ref01 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 1 + 16, nRefPitch[0] * 1 + 8, nRefPitch[0] * 1 + 8, nRefPitch[0] * 1 + 0, nRefPitch[0] * 0 + 16, nRefPitch[0] * 0 + 8, nRefPitch[0] * 0 + 8, nRefPitch[0] * 0 + 0), pucRef, 1);
+  zmm1_Ref23 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 3 + 16, nRefPitch[0] * 3 + 8, nRefPitch[0] * 3 + 8, nRefPitch[0] * 3 + 0, nRefPitch[0] * 2 + 16, nRefPitch[0] * 2 + 8, nRefPitch[0] * 2 + 8, nRefPitch[0] * 2 + 0), pucRef, 1);
+  zmm2_Ref45 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 5 + 16, nRefPitch[0] * 5 + 8, nRefPitch[0] * 5 + 8, nRefPitch[0] * 5 + 0, nRefPitch[0] * 4 + 16, nRefPitch[0] * 4 + 8, nRefPitch[0] * 4 + 8, nRefPitch[0] * 4 + 0), pucRef, 1);
+  zmm3_Ref67 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 7 + 16, nRefPitch[0] * 7 + 8, nRefPitch[0] * 7 + 8, nRefPitch[0] * 7 + 0, nRefPitch[0] * 6 + 16, nRefPitch[0] * 6 + 8, nRefPitch[0] * 6 + 8, nRefPitch[0] * 6 + 0), pucRef, 1);
+  zmm4_Ref89 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 9 + 16, nRefPitch[0] * 9 + 8, nRefPitch[0] * 9 + 8, nRefPitch[0] * 9 + 0, nRefPitch[0] * 8 + 16, nRefPitch[0] * 8 + 8, nRefPitch[0] * 8 + 8, nRefPitch[0] * 8 + 0), pucRef, 1);
+  zmm5_Ref1011 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 11 + 16, nRefPitch[0] * 11 + 8, nRefPitch[0] * 11 + 8, nRefPitch[0] * 11 + 0, nRefPitch[0] * 10 + 16, nRefPitch[0] * 10 + 8, nRefPitch[0] * 10 + 8, nRefPitch[0] * 10 + 0), pucRef, 1);
+  zmm6_Ref1213 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 13 + 16, nRefPitch[0] * 13 + 8, nRefPitch[0] * 13 + 8, nRefPitch[0] * 13 + 0, nRefPitch[0] * 12 + 16, nRefPitch[0] * 12 + 8, nRefPitch[0] * 12 + 8, nRefPitch[0] * 12 + 0), pucRef, 1);
+  zmm7_Ref1415 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 15 + 16, nRefPitch[0] * 15 + 8, nRefPitch[0] * 15 + 8, nRefPitch[0] * 15 + 0, nRefPitch[0] * 14 + 16, nRefPitch[0] * 14 + 8, nRefPitch[0] * 14 + 8, nRefPitch[0] * 14 + 0), pucRef, 1);
+
+  Sad_16x16_avx512
+  ymm_sads_R0 = _mm256_castsi128_si256(xmm_sad_ress);
+
+  // shift 1 row
+  zmm0_Ref01 = _mm512_permutex2var_epi64(zmm0_Ref01, imm_vshift_rows, zmm1_Ref23);
+  zmm1_Ref23 = _mm512_permutex2var_epi64(zmm1_Ref23, imm_vshift_rows, zmm2_Ref45);
+  zmm2_Ref45 = _mm512_permutex2var_epi64(zmm2_Ref45, imm_vshift_rows, zmm3_Ref67);
+  zmm3_Ref67 = _mm512_permutex2var_epi64(zmm3_Ref67, imm_vshift_rows, zmm4_Ref89);
+  zmm4_Ref89 = _mm512_permutex2var_epi64(zmm4_Ref89, imm_vshift_rows, zmm5_Ref1011);
+  zmm5_Ref1011 = _mm512_permutex2var_epi64(zmm5_Ref1011, imm_vshift_rows, zmm6_Ref1213);
+  zmm6_Ref1213 = _mm512_permutex2var_epi64(zmm6_Ref1213, imm_vshift_rows, zmm7_Ref1415);
+  // ref need to be padded to allow 32bytes loads ?
+  zmm7_Ref1415 = _mm512_permutex2var_epi32(zmm7_Ref1415, imm_shift_insert_rows, _mm512_castsi256_si512(_mm256_loadu_si256((__m256i*)(pucRef + nRefPitch[0] * 16))));
+
+  Sad_16x16_avx512
+  ymm_sads_R1 = _mm256_castsi128_si256(xmm_sad_ress);
+
+  // shift 1 row
+  zmm0_Ref01 = _mm512_permutex2var_epi64(zmm0_Ref01, imm_vshift_rows, zmm1_Ref23);
+  zmm1_Ref23 = _mm512_permutex2var_epi64(zmm1_Ref23, imm_vshift_rows, zmm2_Ref45);
+  zmm2_Ref45 = _mm512_permutex2var_epi64(zmm2_Ref45, imm_vshift_rows, zmm3_Ref67);
+  zmm3_Ref67 = _mm512_permutex2var_epi64(zmm3_Ref67, imm_vshift_rows, zmm4_Ref89);
+  zmm4_Ref89 = _mm512_permutex2var_epi64(zmm4_Ref89, imm_vshift_rows, zmm5_Ref1011);
+  zmm5_Ref1011 = _mm512_permutex2var_epi64(zmm5_Ref1011, imm_vshift_rows, zmm6_Ref1213);
+  zmm6_Ref1213 = _mm512_permutex2var_epi64(zmm6_Ref1213, imm_vshift_rows, zmm7_Ref1415);
+  // ref need to be padded to allow 32bytes loads ?
+  zmm7_Ref1415 = _mm512_permutex2var_epi32(zmm7_Ref1415, imm_shift_insert_rows, _mm512_castsi256_si512(_mm256_loadu_si256((__m256i*)(pucRef + nRefPitch[0] * 17))));
+
+  Sad_16x16_avx512
+  ymm_sads_R2 = _mm256_castsi128_si256(xmm_sad_ress);
+
+  // set high sads, leave only 2,1,0
+  ymm_sads_R0 = _mm256_blend_epi16(ymm_sads_R0, ymm_all_ones, 248);
+  ymm_sads_R1 = _mm256_blend_epi16(ymm_sads_R1, ymm_all_ones, 248);
+  ymm_sads_R2 = _mm256_blend_epi16(ymm_sads_R2, ymm_all_ones, 248);
+
+  unsigned int uiRes_R0 = _mm_cvtsi128_si32(_mm_minpos_epu16(_mm256_castsi256_si128(ymm_sads_R0)));
+  unsigned int uiRes_R1 = _mm_cvtsi128_si32(_mm_minpos_epu16(_mm256_castsi256_si128(ymm_sads_R1)));
+  unsigned int uiRes_R2 = _mm_cvtsi128_si32(_mm_minpos_epu16(_mm256_castsi256_si128(ymm_sads_R2)));
+
+  int dx_minsad, dy_minsad, minsad;
+
+  if ((unsigned short)uiRes_R0 < (unsigned short)uiRes_R1)
+  {
+    minsad = (unsigned short)uiRes_R0;
+    dy_minsad = -1;
+    dx_minsad = (uiRes_R0 >> 16) - 1;
+  }
+  else // minsad r1 >= minsad r0
+  {
+    minsad = (unsigned short)uiRes_R1;
+    dy_minsad = 0;
+    dx_minsad = (uiRes_R1 >> 16) - 1;
+  }
+
+  if ((unsigned short)uiRes_R2 < (unsigned short)uiRes_R1)
+  {
+    minsad = (unsigned short)uiRes_R2;
+    dy_minsad = 1;
+    dx_minsad = (uiRes_R2 >> 16) - 1;
+  }
+
+  sad_t cost = minsad + ((penaltyNew * minsad) >> 8);
+  if (cost >= workarea.nMinCost)
+  {
+    _mm256_zeroupper();
+    return;
+  }
+
+  workarea.bestMV.x = mvx + dx_minsad;
+  workarea.bestMV.y = mvy + dy_minsad;
+  workarea.nMinCost = cost;
+  workarea.bestMV.sad = minsad;
+
+  _mm256_zeroupper();
+
+}
+
+void PlaneOfBlocks::ExhaustiveSearch16x16_uint8_SO2_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy)
+{
+  const uint8_t* pucRef = GetRefBlock(workarea, mvx - 1, mvy - 1); // upper left corner
+  const uint8_t* pucCurr = workarea.pSrc[0];
+
+  __m512i zmm0_Ref01, zmm1_Ref23, zmm2_Ref45, zmm3_Ref67, zmm4_Ref89, zmm5_Ref1011, zmm6_Ref1213, zmm7_Ref1415;
+  __m512i zmm8_Src01, zmm9_Src23, zmm10_Src45, zmm11_Src67, zmm12_Src89, zmm13_Src1011, zmm14_Src1213, zmm15_Src1415;
+
+  __m512i zmm16_sad01, zmm17_sad23, zmm18_sad45, zmm19_sad67, zmm20_sad89, zmm21_sad1011, zmm22_sad1213, zmm23_sad1415;
+
+  __m128i xmm_sad_ress;
+  __m256i ymm_sads_R0, ymm_sads_R1, ymm_sads_R2;
+
+  __m256i ymm_all_ones = _mm256_cmpeq_epi64(_mm256_setzero_si256(), _mm256_setzero_si256());
+
+  const __m512i idx_set_src = _mm512_set_epi32(13, 13, 12, 12, 9, 9, 8, 8, 5, 5, 4, 4, 1, 1, 0, 0);
+  const __m512i imm_shift_insert_rows = _mm512_set_epi32(21, 20, 19, 18, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8);
+  const __m512i imm_vshift_rows = _mm512_set_epi64(11, 10, 9, 8, 7, 6, 5, 4);
+
+  // src
+  zmm8_Src01 = _mm512_gather16x16_src(1, 0);
+  zmm9_Src23 = _mm512_gather16x16_src(3, 2);
+  zmm10_Src45 = _mm512_gather16x16_src(5, 4);
+  zmm11_Src67 = _mm512_gather16x16_src(7, 6);
+  zmm12_Src89 = _mm512_gather16x16_src(9, 8);
+  zmm13_Src1011 = _mm512_gather16x16_src(11, 10);
+  zmm14_Src1213 = _mm512_gather16x16_src(13, 12);
+  zmm15_Src1415 = _mm512_gather16x16_src(15, 14);
+
+  // ref 
+  zmm0_Ref01 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 1 + 16, nRefPitch[0] * 1 + 8, nRefPitch[0] * 1 + 8, nRefPitch[0] * 1 + 0, nRefPitch[0] * 0 + 16, nRefPitch[0] * 0 + 8, nRefPitch[0] * 0 + 8, nRefPitch[0] * 0 + 0), pucRef, 1);
+  zmm1_Ref23 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 3 + 16, nRefPitch[0] * 3 + 8, nRefPitch[0] * 3 + 8, nRefPitch[0] * 3 + 0, nRefPitch[0] * 2 + 16, nRefPitch[0] * 2 + 8, nRefPitch[0] * 2 + 8, nRefPitch[0] * 2 + 0), pucRef, 1);
+  zmm2_Ref45 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 5 + 16, nRefPitch[0] * 5 + 8, nRefPitch[0] * 5 + 8, nRefPitch[0] * 5 + 0, nRefPitch[0] * 4 + 16, nRefPitch[0] * 4 + 8, nRefPitch[0] * 4 + 8, nRefPitch[0] * 4 + 0), pucRef, 1);
+  zmm3_Ref67 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 7 + 16, nRefPitch[0] * 7 + 8, nRefPitch[0] * 7 + 8, nRefPitch[0] * 7 + 0, nRefPitch[0] * 6 + 16, nRefPitch[0] * 6 + 8, nRefPitch[0] * 6 + 8, nRefPitch[0] * 6 + 0), pucRef, 1);
+  zmm4_Ref89 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 9 + 16, nRefPitch[0] * 9 + 8, nRefPitch[0] * 9 + 8, nRefPitch[0] * 9 + 0, nRefPitch[0] * 8 + 16, nRefPitch[0] * 8 + 8, nRefPitch[0] * 8 + 8, nRefPitch[0] * 8 + 0), pucRef, 1);
+  zmm5_Ref1011 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 11 + 16, nRefPitch[0] * 11 + 8, nRefPitch[0] * 11 + 8, nRefPitch[0] * 11 + 0, nRefPitch[0] * 10 + 16, nRefPitch[0] * 10 + 8, nRefPitch[0] * 10 + 8, nRefPitch[0] * 10 + 0), pucRef, 1);
+  zmm6_Ref1213 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 13 + 16, nRefPitch[0] * 13 + 8, nRefPitch[0] * 13 + 8, nRefPitch[0] * 13 + 0, nRefPitch[0] * 12 + 16, nRefPitch[0] * 12 + 8, nRefPitch[0] * 12 + 8, nRefPitch[0] * 12 + 0), pucRef, 1);
+  zmm7_Ref1415 = _mm512_i64gather_epi64(_mm512_set_epi64(nRefPitch[0] * 15 + 16, nRefPitch[0] * 15 + 8, nRefPitch[0] * 15 + 8, nRefPitch[0] * 15 + 0, nRefPitch[0] * 14 + 16, nRefPitch[0] * 14 + 8, nRefPitch[0] * 14 + 8, nRefPitch[0] * 14 + 0), pucRef, 1);
+
+  Sad_16x16_avx512
+    ymm_sads_R0 = _mm256_castsi128_si256(xmm_sad_ress);
+
+  // shift 1 row
+  zmm0_Ref01 = _mm512_permutex2var_epi64(zmm0_Ref01, imm_vshift_rows, zmm1_Ref23);
+  zmm1_Ref23 = _mm512_permutex2var_epi64(zmm1_Ref23, imm_vshift_rows, zmm2_Ref45);
+  zmm2_Ref45 = _mm512_permutex2var_epi64(zmm2_Ref45, imm_vshift_rows, zmm3_Ref67);
+  zmm3_Ref67 = _mm512_permutex2var_epi64(zmm3_Ref67, imm_vshift_rows, zmm4_Ref89);
+  zmm4_Ref89 = _mm512_permutex2var_epi64(zmm4_Ref89, imm_vshift_rows, zmm5_Ref1011);
+  zmm5_Ref1011 = _mm512_permutex2var_epi64(zmm5_Ref1011, imm_vshift_rows, zmm6_Ref1213);
+  zmm6_Ref1213 = _mm512_permutex2var_epi64(zmm6_Ref1213, imm_vshift_rows, zmm7_Ref1415);
+  // ref need to be padded to allow 32bytes loads ?
+  zmm7_Ref1415 = _mm512_permutex2var_epi32(zmm7_Ref1415, imm_shift_insert_rows, _mm512_castsi256_si512(_mm256_loadu_si256((__m256i*)(pucRef + nRefPitch[0] * 16))));
+
+  Sad_16x16_avx512
+    ymm_sads_R1 = _mm256_castsi128_si256(xmm_sad_ress);
+
+  // shift 1 row
+  zmm0_Ref01 = _mm512_permutex2var_epi64(zmm0_Ref01, imm_vshift_rows, zmm1_Ref23);
+  zmm1_Ref23 = _mm512_permutex2var_epi64(zmm1_Ref23, imm_vshift_rows, zmm2_Ref45);
+  zmm2_Ref45 = _mm512_permutex2var_epi64(zmm2_Ref45, imm_vshift_rows, zmm3_Ref67);
+  zmm3_Ref67 = _mm512_permutex2var_epi64(zmm3_Ref67, imm_vshift_rows, zmm4_Ref89);
+  zmm4_Ref89 = _mm512_permutex2var_epi64(zmm4_Ref89, imm_vshift_rows, zmm5_Ref1011);
+  zmm5_Ref1011 = _mm512_permutex2var_epi64(zmm5_Ref1011, imm_vshift_rows, zmm6_Ref1213);
+  zmm6_Ref1213 = _mm512_permutex2var_epi64(zmm6_Ref1213, imm_vshift_rows, zmm7_Ref1415);
+  // ref need to be padded to allow 32bytes loads ?
+  zmm7_Ref1415 = _mm512_permutex2var_epi32(zmm7_Ref1415, imm_shift_insert_rows, _mm512_castsi256_si512(_mm256_loadu_si256((__m256i*)(pucRef + nRefPitch[0] * 17))));
+
+  Sad_16x16_avx512
+    ymm_sads_R2 = _mm256_castsi128_si256(xmm_sad_ress);
+
+  // set high sads, leave only 2,1,0
+  ymm_sads_R0 = _mm256_blend_epi16(ymm_sads_R0, ymm_all_ones, 248);
+  ymm_sads_R1 = _mm256_blend_epi16(ymm_sads_R1, ymm_all_ones, 248);
+  ymm_sads_R2 = _mm256_blend_epi16(ymm_sads_R2, ymm_all_ones, 248);
+
+  unsigned int uiRes_R0 = _mm_cvtsi128_si32(_mm_minpos_epu16(_mm256_castsi256_si128(ymm_sads_R0)));
+  unsigned int uiRes_R1 = _mm_cvtsi128_si32(_mm_minpos_epu16(_mm256_castsi256_si128(ymm_sads_R1)));
+  unsigned int uiRes_R2 = _mm_cvtsi128_si32(_mm_minpos_epu16(_mm256_castsi256_si128(ymm_sads_R2)));
+
+  int dx_minsad, dy_minsad, minsad;
+
+  if ((unsigned short)uiRes_R0 < (unsigned short)uiRes_R1)
+  {
+    minsad = (unsigned short)uiRes_R0;
+    dy_minsad = -1;
+    dx_minsad = (uiRes_R0 >> 16) - 1;
+  }
+  else // minsad r1 >= minsad r0
+  {
+    minsad = (unsigned short)uiRes_R1;
+    dy_minsad = 0;
+    dx_minsad = (uiRes_R1 >> 16) - 1;
+  }
+
+  if ((unsigned short)uiRes_R2 < (unsigned short)uiRes_R1)
+  {
+    minsad = (unsigned short)uiRes_R2;
+    dy_minsad = 1;
+    dx_minsad = (uiRes_R2 >> 16) - 1;
+  }
+
+  sad_t cost = minsad + ((penaltyNew * minsad) >> 8);
+  if (cost >= workarea.nMinCost)
+  {
+    _mm256_zeroupper();
+    return;
+  }
+
+  workarea.bestMV.x = mvx + dx_minsad;
+  workarea.bestMV.y = mvy + dy_minsad;
+  workarea.nMinCost = cost;
+  workarea.bestMV.sad = minsad;
+
+  _mm256_zeroupper();
+
+}
+
