@@ -445,17 +445,14 @@ private:
 
   // 8x8 exa search radius 1
   void ExhaustiveSearch8x8_uint8_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy);
-  void ExhaustiveSearch8x8_uint8_np1_sp1_mpsadbw_avx2(WorkingArea& workarea, int mvx, int mvy);
+  void ExhaustiveSearch8x8_uint8_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy);
-  void ExhaustiveSearch8x8_uint8_SO2_np1_sp1_mpsadbw_avx2(WorkingArea& workarea, int mvx, int mvy);
+  void ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_4Blks_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy, int* pBlkData);
    
   // 8x8 exa search radius 2
-
   void ExhaustiveSearch8x8_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_SO2_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
-  void ExhaustiveSearch8x8_uint8_np1_sp2_mpsadbw_avx2(WorkingArea& workarea, int mvx, int mvy);
-  void ExhaustiveSearch8x8_uint8_SO2_np1_sp2_mpsadbw_avx2(WorkingArea& workarea, int mvx, int mvy);
   
   // 8x8 exa search radius 3
   void ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea, int mvx, int mvy);
@@ -553,7 +550,7 @@ private:
 
   void	estimate_global_mv_doubled_slice(Slicer::TaskData &td);
 
-  void(PlaneOfBlocks::* ExhaustiveSearch8x8_avx2)(WorkingArea& workarea, int mvx, int mvy); // selector for sp1 and sp2
+  void(PlaneOfBlocks::* ExhaustiveSearch_SO2)(WorkingArea& workarea, int mvx, int mvy); // selector for sp1 and sp2
 
 //  template<typename pixel_t> // this selector method do not works for some reason - need to found why
 //  void(PlaneOfBlocks::* Sel_Pseudo_EPZ_search_SO2)(WorkingArea& workarea); // selector for optPredictors 0,1

@@ -207,17 +207,17 @@ PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSi
     // block sizes and chroma remain the same
 
     // not implemented ones are nullptr
-    if (nBlkSizeX == 8 && nBlkSizeY == 8 && pixelsize == 1 && !chroma) {
+    if ((nBlkSizeX == 8 || nBlkSizeX == 16) && (nBlkSizeY == 8 || nBlkSizeY == 16) && pixelsize == 1 && !chroma) {
       for (int iSearchParam = 0; iSearchParam <= MAX_SUPPORTED_EXH_SEARCHPARAM; iSearchParam++)
         ExhaustiveSearchFunctions[iSearchParam] = get_ExhaustiveSearchFunction(nBlkSizeX, nBlkSizeY, iSearchParam, bits_per_pixel, arch);
     }
   }
 
-  if (optSearchOption == 2 && (arch != USE_AVX2 || nPel != 1))
+  if (optSearchOption == 2 && (/*arch != USE_AVX2 ||*/ nPel != 1)) // do not see at Rocket Lake ???
   {
     env->ThrowError("optSearchOption=2 require AVX2 or more CPU and pel=1");
   }
-
+  
 
   // for debug:
   //         SAD = x264_pixel_sad_4x4_mmx2;
@@ -1713,7 +1713,7 @@ void PlaneOfBlocks::PseudoEPZSearch_no_pred(WorkingArea& workarea) // no new pre
     {
       workarea.bestMV = workarea.predictor;
       sad = workarea.predictor.sad;
-      workarea.nMinCost = sad + ((penaltyNew * (safe_sad_t)sad) >> 8);
+      workarea.nMinCost = (sad * 2) + ((penaltyNew * (safe_sad_t)sad) >> 8); // *2 - typically sad from previous level is lower about 2 times. depend on noise/spectrum ?  
     }
 
     // then, we refine, according to the search type
@@ -1926,6 +1926,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2(WorkingArea& workarea)
   __m128i  xmm0_cost = _mm_srli_epi32(_mm_mullo_epi32(xmm_nLambda, _mm256_castsi256_si128(ymm_dist)), 8);
   __m128i xmm_mask = _mm_cmplt_epi32(xmm0_cost, _mm_set1_epi32(workarea.nMinCost));
     int iMask = _mm_movemask_epi8(xmm_mask);
+    _mm256_zeroupper(); // need ?
 
     // if ((iMask & 0x1111) == 0x1111) - use 4-predictors CheckMV0_avx2() - to do.
   // vectors were clipped in FetchPredictors - no new IsVectorOK() check ?
@@ -1954,7 +1955,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2(WorkingArea& workarea)
 
   // then, we refine, 
   // sp = 1 for level=0 (finest) sp = 2 for other levels
-  (this->*ExhaustiveSearch8x8_avx2)(workarea, workarea.bestMV.x, workarea.bestMV.y);
+  (this->*ExhaustiveSearch_SO2)(workarea, workarea.bestMV.x, workarea.bestMV.y);
 
   // we store the result
   vectors[workarea.blkIdx] = workarea.bestMV;
@@ -2023,7 +2024,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea)
   
   // then, we refine, 
   // sp = 1 for level=0 (finest) sp = 2 for other levels
-  (this->*ExhaustiveSearch8x8_avx2)(workarea, workarea.bestMV.x, workarea.bestMV.y);
+  (this->*ExhaustiveSearch_SO2)(workarea, workarea.bestMV.x, workarea.bestMV.y);
 
 #ifdef RETURN_PREV_LEVEL_SAD_AT_LEVEL_0
   // special feature, disable in the standard release !!!
@@ -2055,12 +2056,12 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_no_pred(WorkingArea& workarea)
   {
     workarea.bestMV = workarea.predictor;
     sad = workarea.predictor.sad;
-    workarea.nMinCost = sad + ((penaltyNew * (safe_sad_t)sad) >> 8);
+    workarea.nMinCost = (sad * 2) + ((penaltyNew * (safe_sad_t)sad) >> 8); // *2 - typically sad from previous level is lower about 2 times. depend on noise/spectrum ?
   }
 
   // then, we refine, 
   // sp = 1 for level=0 (finest) sp = 2 for other levels
-  (this->*ExhaustiveSearch8x8_avx2)(workarea, workarea.bestMV.x, workarea.bestMV.y);
+  (this->*ExhaustiveSearch_SO2)(workarea, workarea.bestMV.x, workarea.bestMV.y);
 
   // we store the result
   vectors[workarea.blkIdx] = workarea.bestMV;
@@ -2109,7 +2110,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO3_no_pred(WorkingArea& workarea, int* p
   {
     workarea.bestMV = workarea.predictor;
     sad = workarea.predictor.sad;
-    workarea.nMinCost = sad + ((penaltyNew * (safe_sad_t)sad) >> 8);
+    workarea.nMinCost = (sad * 2) + ((penaltyNew * (safe_sad_t)sad) >> 8); // *2 - typically sad from previous level is lower about 2 times. depend on noise/spectrum ?
   }
   
   // then, we refine, 
@@ -4270,11 +4271,25 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
 
   if (nSearchParam == 1)
   {
-    ExhaustiveSearch8x8_avx2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2;
+    if (nBlkSizeX == 8 && nBlkSizeX == 8)
+      if (USE_AVX512)
+        ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx512;
+      else
+        ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2;
+    else if (nBlkSizeX == 16 && nBlkSizeX == 16)
+    {
+      if (USE_AVX512)
+        ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch16x16_uint8_SO2_np1_sp1_avx512;
+      else
+        ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch16x16_uint8_SO2_np1_sp1_avx2;
+    }
   }
   else // sp = 2 at all levels except finest
   {
-    ExhaustiveSearch8x8_avx2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp2_avx2;
+    if (nBlkSizeX == 8 && nBlkSizeX == 8)
+    ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp2_avx2;
+    else if (nBlkSizeX == 16 && nBlkSizeX == 16)
+      ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch16x16_uint8_SO2_np1_sp2_avx2;
   }
   /*
   if (_predictorType == 0) // this selector method do not work not now - need to found why ???
@@ -4540,7 +4555,7 @@ void	PlaneOfBlocks::search_mv_slice_SO3(Slicer::TaskData& td) // multi-blocks se
   }
   else // sp = 2 at all levels except finest
   {
-    ExhaustiveSearch8x8_avx2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp2_avx2;
+    ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp2_avx2;
   }
   /*
   if (_predictorType == 0) // this selector method do not work not now - need to found why ???
@@ -5402,6 +5417,7 @@ PlaneOfBlocks::ExhaustiveSearchFunction_t PlaneOfBlocks::get_ExhaustiveSearchFun
   //TODO: add nPel here too ? It need separate functions for nPel=1 and other nPel.
 
   // SearchParam 1 or 2 or 4 is supported at the moment
+  func_fn[std::make_tuple(8, 8, 1, 8, USE_AVX512)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp1_avx512;
   func_fn[std::make_tuple(8, 8, 1, 8, USE_AVX2)] = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_np1_sp1_avx2;
   func_fn[std::make_tuple(8, 8, 1, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch_uint8_sp1_c;
   func_fn[std::make_tuple(16, 16, 1, 8, USE_AVX512)] = &PlaneOfBlocks::ExhaustiveSearch16x16_uint8_np1_sp1_avx512;
@@ -5417,7 +5433,7 @@ PlaneOfBlocks::ExhaustiveSearchFunction_t PlaneOfBlocks::get_ExhaustiveSearchFun
   func_fn[std::make_tuple(8, 8, 4, 8, NO_SIMD)] = &PlaneOfBlocks::ExhaustiveSearch_uint8_sp4_c;
 
   ExhaustiveSearchFunction_t result = nullptr;
-  arch_t archlist[] = { USE_AVX2, USE_AVX, USE_SSE41, USE_SSE2, NO_SIMD };
+  arch_t archlist[] = { USE_AVX512, USE_AVX2, USE_AVX, USE_SSE41, USE_SSE2, NO_SIMD };
   int index = 0;
   while (result == nullptr) {
     arch_t current_arch_try = archlist[index++];

@@ -17,8 +17,8 @@
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA, or visit
 // http://www.gnu.org/copyleft/gpl.html .
 
-#ifndef __PLAINOFBLOCKS_AVX2__
-#define __PLAINOFBLOCKS_AVX2__
+#ifndef __PLANEOFBLOCKS_AVX2__
+#define __PLANEOFBLOCKS_AVX2__
 
 // placeholder
 
