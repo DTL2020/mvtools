@@ -81,8 +81,8 @@
     *(pucRef + nRefPitch[0] * r1 + 16), *(pucRef + nRefPitch[0] * r1 + 8), *(pucRef + nRefPitch[0] * r1 + 8), *(pucRef + nRefPitch[0] * r1 + 0))
 
 #define Load_ref8x8(r4,r3,r2,r1) \
-    _mm512_inserti64x4(_mm512_castsi256_si512(_mm256_loadu2_m128i((__m128i*)(pucCurr + nSrcPitch[0] * r2), (__m128i*)(pucCurr + nSrcPitch[0] * r1))), \
-      _mm256_loadu2_m128i((__m128i*)(pucCurr + nSrcPitch[0] * r4), (__m128i*)(pucCurr + nSrcPitch[0] * r3)), 1)
+    _mm512_inserti64x4(_mm512_castsi256_si512(_mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * r2), (__m128i*)(pucRef + nRefPitch[0] * r1))), \
+      _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * r4), (__m128i*)(pucRef + nRefPitch[0] * r3)), 1)
 
 void PlaneOfBlocks::ExhaustiveSearch16x16_uint8_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy)
 {
