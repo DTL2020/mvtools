@@ -944,6 +944,10 @@ func_sad[make_tuple(x, y, 8, USE_SSE2)] = Sad_sse2<x,y>;
     func_sad[make_tuple(24, 12, 8, USE_SSE2)] = x264_pixel_sad_24x12_sse2;
     func_sad[make_tuple(24,  6, 8, USE_SSE2)] = x264_pixel_sad_24x6_sse2;
 
+    // AVX512
+    func_sad[make_tuple(16, 16, 8, USE_AVX512)] = mvt_pixel_sad_16x16_avx512; // 2.7.46;
+    func_sad[make_tuple(8, 8, 8, USE_AVX512)] = mvt_pixel_sad_8x8_avx512; 
+
     // Supported: 16x64, 16x32, 16x16, 16x12, 16x8, 16x4
     // SSE3
     func_sad[make_tuple(16, 64, 8, USE_SSE41)] = x264_pixel_sad_16x64_sse3;
@@ -1450,4 +1454,48 @@ SADFunction* get_satd_function(int BlockX, int BlockY, int pixelsize, arch_t arc
     return result;
 }
 
+unsigned int mvt_pixel_sad_8x8_avx512(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch)
+{
+  __m512i zmm_src = _mm512_set_epi64(*(pSrc + nSrcPitch * 7), *(pSrc + nSrcPitch * 6), *(pSrc + nSrcPitch * 5), *(pSrc + nSrcPitch * 4), \
+    * (pSrc + nSrcPitch * 3), *(pSrc + nSrcPitch * 2), *(pSrc + nSrcPitch * 1), *(pSrc + nSrcPitch * 0));
 
+  __m512i zmm_ref = _mm512_set_epi64(*(pRef + nRefPitch * 7), *(pRef + nRefPitch * 6), *(pRef + nRefPitch * 5), *(pRef + nRefPitch * 4), \
+    * (pRef + nRefPitch * 3), *(pRef + nRefPitch * 2), *(pRef + nRefPitch * 1), *(pRef + nRefPitch * 0));
+  
+  return _mm512_reduce_add_epi64(_mm512_sad_epu8(zmm_src, zmm_ref));
+
+}
+
+unsigned int mvt_pixel_sad_16x16_avx512(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch)
+{
+#define Load_ref16x4(r4,r3,r2,r1) \
+    _mm512_inserti64x4(_mm512_castsi256_si512(_mm256_loadu2_m128i((__m128i*)(pRef + nRefPitch * r2), (__m128i*)(pRef + nRefPitch * r1))), \
+      _mm256_loadu2_m128i((__m128i*)(pRef + nRefPitch * r4), (__m128i*)(pRef + nRefPitch * r3)), 1)
+
+#define Load_src16x4(r4,r3,r2,r1) \
+    _mm512_inserti64x4(_mm512_castsi256_si512(_mm256_loadu2_m128i((__m128i*)(pSrc + nSrcPitch * r2), (__m128i*)(pSrc + nSrcPitch * r1))), \
+      _mm256_loadu2_m128i((__m128i*)(pSrc + nSrcPitch * r4), (__m128i*)(pSrc + nSrcPitch * r3)), 1)
+
+  __m512i zmm_ref0123 = Load_ref16x4(3, 2, 1, 0);
+  __m512i zmm_ref4567 = Load_ref16x4(7, 6, 5, 4);
+  __m512i zmm_ref891011 = Load_ref16x4(11, 10, 9, 8);
+  __m512i zmm_ref12131415 = Load_ref16x4(15, 14, 13, 12);
+
+  __m512i zmm_src0123 = Load_src16x4(3, 2, 1, 0);
+  __m512i zmm_src4567 = Load_src16x4(7, 6, 5, 4);
+  __m512i zmm_src891011 = Load_src16x4(11, 10, 9, 8);
+  __m512i zmm_src12131415 = Load_src16x4(15, 14, 13, 12);
+
+  zmm_src0123 = _mm512_sad_epu8(zmm_src0123, zmm_ref0123);
+  zmm_src4567 = _mm512_sad_epu8(zmm_src4567, zmm_ref4567);
+  zmm_src891011 = _mm512_sad_epu8(zmm_src891011, zmm_ref891011);
+  zmm_src12131415 = _mm512_sad_epu8(zmm_src12131415, zmm_ref12131415);
+
+  zmm_src0123 = _mm512_add_epi32(zmm_src0123, zmm_src4567);
+  zmm_src891011 = _mm512_add_epi32(zmm_src891011, zmm_src12131415);
+
+  zmm_src0123 = _mm512_add_epi32(zmm_src0123, zmm_src891011);
+
+  return _mm512_reduce_add_epi64(zmm_src0123);
+
+}

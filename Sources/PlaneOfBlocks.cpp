@@ -4271,25 +4271,39 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
 
   if (nSearchParam == 1)
   {
-    if (nBlkSizeX == 8 && nBlkSizeX == 8)
-      if (USE_AVX512)
-        ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx512;
-      else
-        ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2;
-    else if (nBlkSizeX == 16 && nBlkSizeX == 16)
+    if (nBlkSizeX == 8 && nBlkSizeY == 8)
     {
       if (USE_AVX512)
-        ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch16x16_uint8_SO2_np1_sp1_avx512;
+      {
+        ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx512;
+      }
       else
+      {
+        ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2;
+      }
+    }
+    else if (nBlkSizeX == 16 && nBlkSizeY == 16)
+    {
+      if (USE_AVX512)
+      {
+        ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch16x16_uint8_SO2_np1_sp1_avx512;
+      }
+      else
+      {
         ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch16x16_uint8_SO2_np1_sp1_avx2;
+      }
     }
   }
   else // sp = 2 at all levels except finest
   {
-    if (nBlkSizeX == 8 && nBlkSizeX == 8)
-    ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp2_avx2;
-    else if (nBlkSizeX == 16 && nBlkSizeX == 16)
+    if (nBlkSizeX == 8 && nBlkSizeY == 8)
+    {
+      ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp2_avx2;
+    }
+    else if (nBlkSizeX == 16 && nBlkSizeY == 16)
+    {
       ExhaustiveSearch_SO2 = &PlaneOfBlocks::ExhaustiveSearch16x16_uint8_SO2_np1_sp2_avx2;
+    }
   }
   /*
   if (_predictorType == 0) // this selector method do not work not now - need to found why ???
