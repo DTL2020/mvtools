@@ -252,6 +252,9 @@ private:
   //  const VECTOR zeroMV = {0,0,(sad_t)-1};
   int _predictorType; // 2.7.46
 
+  uint64_t checked_mv_vectors[9]; // 2.7.46
+  int iNumCheckedVectors; // 2.7.46
+
   // Working area
   class WorkingArea
   {
@@ -532,6 +535,7 @@ private:
   // MV_FORCEINLINE static unsigned int SquareDifferenceNorm(const VECTOR& v1, const VECTOR& v2); // not used
   MV_FORCEINLINE static unsigned int SquareDifferenceNorm(const VECTOR& v1, const int v2x, const int v2y);
   MV_FORCEINLINE bool IsInFrame(int i);
+  MV_FORCEINLINE bool IsVectorChecked(uint64_t xy); // 2.7.46
 
   template<typename pixel_t>
   void Refine(WorkingArea &workarea);

@@ -135,6 +135,7 @@
     <ClCompile Include="SADFunctions_avx2.cpp" />
     <ClCompile Include="MVDegrain3_avx2.cpp" />
     <ClCompile Include="PlaneOfBlocks_avx2.cpp" />
+    <ClCompile Include="PlaneOfBlocks_avx512.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MDegrainN.h">

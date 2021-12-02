@@ -1156,8 +1156,7 @@
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
-      <EnableEnhancedInstructionSet>
-      </EnableEnhancedInstructionSet>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -1807,6 +1806,7 @@
       <UseProcessorExtensions Condition="'$(Configuration)|$(Platform)'=='ICX|Win32'">COMMON512</UseProcessorExtensions>
       <UseProcessorExtensions Condition="'$(Configuration)|$(Platform)'=='ICX|x64'">COMMON512</UseProcessorExtensions>
     </ClCompile>
+    <ClCompile Include="PlaneOfBlocks_avx512.cpp" />
     <ClCompile Include="SADFunctions.cpp" />
     <ClCompile Include="SADFunctions_avx2.cpp">
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">AdvancedVectorExtensions2</EnableEnhancedInstructionSet>

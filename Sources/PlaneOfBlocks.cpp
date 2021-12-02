@@ -1400,7 +1400,7 @@ void PlaneOfBlocks::Refine(WorkingArea &workarea)
     // one-pass Exa search by DTL
     // only for 8 bit, nPel==1, nSearchParam == 1 and 2 and 4 && nBlkSizeX == 8 && nBlkSizeY == 8 && !chroma
     // c or avx2. See function dispatcher
-    if (0 != optSearchOption && nPel == 1) { // keep compatibility - new addition - only for pel=1 now !! other will cause buggy x,y,sad output
+    if (0 != optSearchOption && nPel == 1 && avx2) { // keep compatibility - new addition - only for pel=1 now !! other will cause buggy x,y,sad output, only avx2 and later
       if (nSearchParam <= MAX_SUPPORTED_EXH_SEARCHPARAM) {
         // nSearchParam can change during the algorithm so we are choosing from prefilled function pointer table
         auto ExhaustiveSearchFunction = ExhaustiveSearchFunctions[nSearchParam];
@@ -1410,7 +1410,7 @@ void PlaneOfBlocks::Refine(WorkingArea &workarea)
         }
       }
     }
-
+    
     for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
     {
       ExpandingSearch<pixel_t>(workarea, i, 1, mvx, mvy);
@@ -1453,6 +1453,21 @@ void PlaneOfBlocks::Refine(WorkingArea &workarea)
   }
 }
 
+MV_FORCEINLINE bool PlaneOfBlocks::IsVectorChecked(uint64_t xy) // 2.7.46
+{
+  int i;
+  for (i = 0; i < iNumCheckedVectors; i++)
+  {
+    if (checked_mv_vectors[i] == xy) return true;
+  }
+
+  // record it to checked
+  checked_mv_vectors[iNumCheckedVectors] = xy;
+  iNumCheckedVectors++;
+
+  return false;
+}
+
 template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
 {
@@ -1464,8 +1479,12 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
   else
     FetchPredictors<pixel_t>(workarea);
 
+  iNumCheckedVectors = 0;
+
   sad_t sad;
+  sad_t cost;
   sad_t saduv;
+
 #ifdef ALLOW_DCT
   if (dctmode != 0) // DCT method (luma only - currently use normal spatial SAD chroma)
   {
@@ -1494,6 +1513,9 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
   workarea.bestMV.sad = sad;
   workarea.nMinCost = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2
 
+  checked_mv_vectors[iNumCheckedVectors] = 0;
+  iNumCheckedVectors++;
+
   VECTOR bestMVMany[8];
   int nMinCostMany[8];
 
@@ -1510,45 +1532,52 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
 
   //	if ( workarea.IsVectorOK(workarea.globalMVPredictor.x, workarea.globalMVPredictor.y ) )
   {
-    saduv = (chroma) ? 
-      ScaleSadChroma(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y), nRefPitch[1])
-      + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y), nRefPitch[2]), effective_chromaSADscale) : 0;
-    sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y));
-    sad += saduv;
-    sad_t cost = sad + ((pglobal*(safe_sad_t)sad) >> 8);
+    if (!IsVectorChecked(workarea.globalMVPredictor.x | (workarea.globalMVPredictor.y << 32)))
+    {
+      saduv = (chroma) ?
+        ScaleSadChroma(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y), nRefPitch[1])
+          + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y), nRefPitch[2]), effective_chromaSADscale) : 0;
+      sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y));
+      sad += saduv;
+      cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
 
-    if (cost < workarea.nMinCost || tryMany)
-    {
-      workarea.bestMV.x = workarea.globalMVPredictor.x;
-      workarea.bestMV.y = workarea.globalMVPredictor.y;
-      workarea.bestMV.sad = sad;
-      workarea.nMinCost = cost;
-    }
-    if (tryMany)
-    {
-      // refine around global
-      Refine<pixel_t>(workarea);    // reset bestMV
-      bestMVMany[1] = workarea.bestMV;    // save bestMV
-      nMinCostMany[1] = workarea.nMinCost;
+      if (cost < workarea.nMinCost || tryMany)
+      {
+        workarea.bestMV.x = workarea.globalMVPredictor.x;
+        workarea.bestMV.y = workarea.globalMVPredictor.y;
+        workarea.bestMV.sad = sad;
+        workarea.nMinCost = cost;
+      }
+      if (tryMany)
+      {
+        // refine around global
+        Refine<pixel_t>(workarea);    // reset bestMV
+        bestMVMany[1] = workarea.bestMV;    // save bestMV
+        nMinCostMany[1] = workarea.nMinCost;
+      }
     }
     //	}
     //	Then, the predictor :
     //	if (   (( workarea.predictor.x != zeroMVfieldShifted.x ) || ( workarea.predictor.y != zeroMVfieldShifted.y ))
     //	    && (( workarea.predictor.x != workarea.globalMVPredictor.x ) || ( workarea.predictor.y != workarea.globalMVPredictor.y )))
     //	{
-    saduv = (chroma) ? ScaleSadChroma(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[1])
-      + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[2]), effective_chromaSADscale) : 0;
-    sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
-    sad += saduv;
-    cost = sad;
-
-    if (cost < workarea.nMinCost || tryMany)
+    if (!IsVectorChecked(workarea.predictor.x | (workarea.predictor.y << 32)))
     {
-      workarea.bestMV.x = workarea.predictor.x;
-      workarea.bestMV.y = workarea.predictor.y;
-      workarea.bestMV.sad = sad;
-      workarea.nMinCost = cost;
+      saduv = (chroma) ? ScaleSadChroma(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[1])
+        + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[2]), effective_chromaSADscale) : 0;
+      sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
+      sad += saduv;
+      cost = sad;
+
+      if (cost < workarea.nMinCost || tryMany)
+      {
+        workarea.bestMV.x = workarea.predictor.x;
+        workarea.bestMV.y = workarea.predictor.y;
+        workarea.bestMV.sad = sad;
+        workarea.nMinCost = cost;
+      }
     }
+
   }
 
   if (tryMany)
@@ -1568,7 +1597,12 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
     {
       workarea.nMinCost = verybigSAD + 1;
     }
-    CheckMV0<pixel_t>(workarea, workarea.predictors[i].x, workarea.predictors[i].y);
+
+    if (!IsVectorChecked(workarea.predictors[i].x | (workarea.predictors[i].y << 32)))
+    {
+      CheckMV0<pixel_t>(workarea, workarea.predictors[i].x, workarea.predictors[i].y);
+    }
+
     if (tryMany)
     {
       // refine around predictor
@@ -1707,7 +1741,7 @@ void PlaneOfBlocks::PseudoEPZSearch_no_pred(WorkingArea& workarea) // no new pre
     if (smallestPlane)
     {
       workarea.bestMV = zeroMV;
-      workarea.nMinCost = INT_MAX;
+      workarea.nMinCost = verybigSAD + 1;
     }
     else
     {
@@ -1738,7 +1772,7 @@ void PlaneOfBlocks::PseudoEPZSearch_no_refine(WorkingArea& workarea) // no refin
   if (smallestPlane) // never get here - normal use is sequence of params with 'real' search like optPredictorsType="3,x" where x < 3.
   {
     workarea.bestMV = zeroMV;
-    workarea.nMinCost = INT_MAX;
+    workarea.nMinCost = verybigSAD + 1;
   }
   else
   {
@@ -1774,9 +1808,11 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
     else
       FetchPredictors<pixel_t>(workarea);
 
+    iNumCheckedVectors = 0;
+
     sad_t sad;
     sad_t saduv;
-
+    sad_t cost;
 
     // We treat zero alone
     // Do we bias zero with not taking into account distorsion ?
@@ -1790,46 +1826,50 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
     workarea.bestMV.sad = sad;
     workarea.nMinCost = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2
 
+    checked_mv_vectors[iNumCheckedVectors] = 0;
+    iNumCheckedVectors++;
 
    // Global MV predictor  - added by Fizick
     workarea.globalMVPredictor = ClipMV(workarea, workarea.globalMVPredictor);
 
-    //	if ( workarea.IsVectorOK(workarea.globalMVPredictor.x, workarea.globalMVPredictor.y ) )
+    if (!IsVectorChecked(workarea.globalMVPredictor.x | (workarea.globalMVPredictor.y << 32)))
     {
-        saduv = (chroma) ?
-            ScaleSadChroma(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y), nRefPitch[1])
-                + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y), nRefPitch[2]), effective_chromaSADscale) : 0;
+      saduv = (chroma) ?
+        ScaleSadChroma(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y), nRefPitch[1])
+          + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y), nRefPitch[2]), effective_chromaSADscale) : 0;
         sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y));
         sad += saduv;
         sad_t cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
 
         if (cost < workarea.nMinCost || tryMany)
         {
-            workarea.bestMV.x = workarea.globalMVPredictor.x;
-            workarea.bestMV.y = workarea.globalMVPredictor.y;
-            workarea.bestMV.sad = sad;
-            workarea.nMinCost = cost;
+          workarea.bestMV.x = workarea.globalMVPredictor.x;
+          workarea.bestMV.y = workarea.globalMVPredictor.y;
+          workarea.bestMV.sad = sad;
+          workarea.nMinCost = cost;
         }
+    }
 
-        //	}
-        //	Then, the predictor :
-        //	if (   (( workarea.predictor.x != zeroMVfieldShifted.x ) || ( workarea.predictor.y != zeroMVfieldShifted.y ))
-        //	    && (( workarea.predictor.x != workarea.globalMVPredictor.x ) || ( workarea.predictor.y != workarea.globalMVPredictor.y )))
-        //	{
-        saduv = (chroma) ? ScaleSadChroma(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[1])
-            + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[2]), effective_chromaSADscale) : 0;
+    //	}
+    //	Then, the predictor :
+    //	if (   (( workarea.predictor.x != zeroMVfieldShifted.x ) || ( workarea.predictor.y != zeroMVfieldShifted.y ))
+    //	    && (( workarea.predictor.x != workarea.globalMVPredictor.x ) || ( workarea.predictor.y != workarea.globalMVPredictor.y )))
+    //	{
+    if (!IsVectorChecked(workarea.predictor.x | (workarea.predictor.y << 32)))
+    {
+      saduv = (chroma) ? ScaleSadChroma(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[1])
+        + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[2]), effective_chromaSADscale) : 0;
         sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
         sad += saduv;
 
         cost = sad;
         if (cost < workarea.nMinCost || tryMany)
         {
-            workarea.bestMV.x = workarea.predictor.x;
+          workarea.bestMV.x = workarea.predictor.x;
             workarea.bestMV.y = workarea.predictor.y;
-            workarea.bestMV.sad = sad;
-            workarea.nMinCost = cost;
+          workarea.bestMV.sad = sad;
+          workarea.nMinCost = cost;
         }
-        
     }
     
     // then, we refine, according to the search type
@@ -1859,17 +1899,16 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2(WorkingArea& workarea)
 
   if (workarea.bIntraframe)
   {
-//    FetchPredictors_sse41_intraframe<pixel_t>(workarea);
     FetchPredictors_avx2_intraframe<pixel_t>(workarea); // faster
   }
   else
   {
     FetchPredictors_sse41<pixel_t>(workarea);
   }
-  
-//  FetchPredictors<pixel_t>(workarea);
+
 
   sad_t sad;
+  sad_t cost;
 
   // We treat zero alone
   // Do we bias zero with not taking into account distorsion ?
@@ -1879,36 +1918,54 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2(WorkingArea& workarea)
   workarea.bestMV.sad = sad;
   workarea.nMinCost = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2
 
+  iNumCheckedVectors = 0;
+  checked_mv_vectors[iNumCheckedVectors] = 0;
+  iNumCheckedVectors++;
+
+  /*    if (!IsVectorChecked(workarea.predictors[i].x | (workarea.predictors[i].y << 32)))
+      {
+        CheckMV0<pixel_t>(workarea, workarea.predictors[i].x, workarea.predictors[i].y);
+
+        checked_mv_vectors[iNumCheckedVectors] = workarea.predictors[i].x | (workarea.predictors[i].y << 32);
+        iNumCheckedVectors++;
+      }
+      */
+
+
   // Global MV predictor  - added by Fizick
   workarea.globalMVPredictor = ClipMV_SO2(workarea, workarea.globalMVPredictor);
 
-
-  sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y));
-  sad_t cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
-
-  if (cost < workarea.nMinCost)
+  if (!IsVectorChecked(workarea.globalMVPredictor.x | (workarea.globalMVPredictor.y << 32)))
   {
-    workarea.bestMV.x = workarea.globalMVPredictor.x;
-    workarea.bestMV.y = workarea.globalMVPredictor.y;
-    workarea.bestMV.sad = sad;
-    workarea.nMinCost = cost;
+    sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y));
+    cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
+
+    if (cost < workarea.nMinCost)
+    {
+      workarea.bestMV.x = workarea.globalMVPredictor.x;
+      workarea.bestMV.y = workarea.globalMVPredictor.y;
+      workarea.bestMV.sad = sad;
+      workarea.nMinCost = cost;
+    }
   }
   //	}
   //	Then, the predictor :
   //	if (   (( workarea.predictor.x != zeroMVfieldShifted.x ) || ( workarea.predictor.y != zeroMVfieldShifted.y ))
   //	    && (( workarea.predictor.x != workarea.globalMVPredictor.x ) || ( workarea.predictor.y != workarea.globalMVPredictor.y )))
   //	{
-  sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
-  cost = sad;
-
-  if (cost < workarea.nMinCost)
+  if (!IsVectorChecked(workarea.predictor.x | (workarea.predictor.y << 32)))
   {
-    workarea.bestMV.x = workarea.predictor.x;
-    workarea.bestMV.y = workarea.predictor.y;
-    workarea.bestMV.sad = sad;
-    workarea.nMinCost = cost;
-  }
+    sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
+    cost = sad;
 
+    if (cost < workarea.nMinCost)
+    {
+      workarea.bestMV.x = workarea.predictor.x;
+      workarea.bestMV.y = workarea.predictor.y;
+      workarea.bestMV.sad = sad;
+      workarea.nMinCost = cost;
+    }
+  }
   // then all the other predictors
   // compute checks on motion distortion first and skip MV if above cost:
 
@@ -1932,19 +1989,31 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2(WorkingArea& workarea)
   // vectors were clipped in FetchPredictors - no new IsVectorOK() check ?
   if ((iMask & 0x1) != 0)
   {
-    CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[0].x, workarea.predictors[0].y, _mm_extract_epi32(xmm0_cost, 0));
+    if (!IsVectorChecked(workarea.predictors[0].x | (workarea.predictors[0].y << 32)))
+    {
+      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[0].x, workarea.predictors[0].y, _mm_extract_epi32(xmm0_cost, 0));
+    }
   }
   if ((iMask & 0x10) != 0)
   {
-    CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[1].x, workarea.predictors[1].y, _mm_extract_epi32(xmm0_cost, 1));
+    if (!IsVectorChecked(workarea.predictors[1].x | (workarea.predictors[1].y << 32)))
+    {
+      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[1].x, workarea.predictors[1].y, _mm_extract_epi32(xmm0_cost, 1));
+    }
   }
   if ((iMask & 0x100) != 0)
   {
-    CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[2].x, workarea.predictors[2].y, _mm_extract_epi32(xmm0_cost, 2));
+    if (!IsVectorChecked(workarea.predictors[2].x | (workarea.predictors[2].y << 32)))
+    {
+      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[2].x, workarea.predictors[2].y, _mm_extract_epi32(xmm0_cost, 2));
+    }
   }
   if ((iMask & 0x1000) != 0)
   {
-    CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[3].x, workarea.predictors[3].y, _mm_extract_epi32(xmm0_cost, 3));
+    if (!IsVectorChecked(workarea.predictors[3].x | (workarea.predictors[3].y << 32)))
+    {
+      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[3].x, workarea.predictors[3].y, _mm_extract_epi32(xmm0_cost, 3));
+    }
   }
   /*
   CheckMV0<pixel_t>(workarea, workarea.predictors[0].x, workarea.predictors[0].y);
@@ -1962,7 +2031,6 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2(WorkingArea& workarea)
 
   workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
 }
-
 
 template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea)
@@ -1982,7 +2050,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea)
   sad_t sad;
 
   workarea.bestMV = zeroMV;
-  workarea.nMinCost = INT_MAX; 
+  workarea.nMinCost = verybigSAD + 1;
 
 /*  // We treat zero alone
   // Do we bias zero with not taking into account distorsion ?
@@ -1995,10 +2063,13 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea)
  // Global MV predictor  - added by Fizick
   workarea.globalMVPredictor = ClipMV_SO2(workarea, workarea.globalMVPredictor);
 
-
   sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y));
   sad_t cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
 
+  iNumCheckedVectors = 0;
+  checked_mv_vectors[iNumCheckedVectors] = workarea.globalMVPredictor.x | (workarea.globalMVPredictor.y << 32);
+  iNumCheckedVectors++;
+  
   if (cost < workarea.nMinCost)
   {
     workarea.bestMV.x = workarea.globalMVPredictor.x;
@@ -2011,15 +2082,18 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea)
   //	if (   (( workarea.predictor.x != zeroMVfieldShifted.x ) || ( workarea.predictor.y != zeroMVfieldShifted.y ))
   //	    && (( workarea.predictor.x != workarea.globalMVPredictor.x ) || ( workarea.predictor.y != workarea.globalMVPredictor.y )))
   //	{
-  sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
-  cost = sad;
-
-  if (cost < workarea.nMinCost)
+  if (!IsVectorChecked(workarea.predictor.x | (workarea.predictor.y << 32)))
   {
-    workarea.bestMV.x = workarea.predictor.x;
-    workarea.bestMV.y = workarea.predictor.y;
-    workarea.bestMV.sad = sad;
-    workarea.nMinCost = cost;
+    sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
+    cost = sad;
+
+    if (cost < workarea.nMinCost)
+    {
+      workarea.bestMV.x = workarea.predictor.x;
+      workarea.bestMV.y = workarea.predictor.y;
+      workarea.bestMV.sad = sad;
+      workarea.nMinCost = cost;
+    }
   }
   
   // then, we refine, 
@@ -2050,7 +2124,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_no_pred(WorkingArea& workarea)
   if (smallestPlane)
   {
     workarea.bestMV = zeroMV;
-    workarea.nMinCost = INT_MAX;
+    workarea.nMinCost = verybigSAD + 1;
   }
   else
   {
@@ -2079,7 +2153,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_no_refine(WorkingArea& workarea)
   if (smallestPlane) // do not use it with levels=1 - it will not denoise at all.
   {
     workarea.bestMV = zeroMV;
-    workarea.nMinCost = INT_MAX;
+    workarea.nMinCost = verybigSAD + 1;
   }
   else
   {
@@ -2104,7 +2178,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO3_no_pred(WorkingArea& workarea, int* p
   if (smallestPlane)
   {
     workarea.bestMV = zeroMV;
-    workarea.nMinCost = INT_MAX;
+    workarea.nMinCost = verybigSAD + 1;
   }
   else
   {
@@ -3876,22 +3950,6 @@ MV_FORCEINLINE VECTOR	PlaneOfBlocks::ClipMV(WorkingArea& workarea, VECTOR v)
 
   if (sse41 && optSearchOption > 0)
   {
-   /*   __m128i xmm0_x = _mm_cvtsi32_si128(v.x);
-      __m128i xmm1_y = _mm_cvtsi32_si128(v.y);
-
-      __m128i xmm2_DxMin = _mm_cvtsi32_si128(workarea.nDxMin);
-      __m128i xmm3_DxMax = _mm_cvtsi32_si128(workarea.nDxMax - 1);
-      __m128i xmm4_DyMin = _mm_cvtsi32_si128(workarea.nDyMin);
-      __m128i xmm5_DyMax = _mm_cvtsi32_si128(workarea.nDyMax - 1);
-
-      xmm0_x = _mm_max_epi32(xmm0_x, xmm2_DxMin); // SSE 4.1 !!
-      xmm1_y = _mm_max_epi32(xmm1_y, xmm4_DyMin);
-
-      xmm0_x = _mm_min_epi32(xmm0_x, xmm3_DxMax);
-      xmm1_y = _mm_min_epi32(xmm1_y, xmm5_DyMax); // no < and >= and -1 (?) for this version
-
-      v2.x = _mm_cvtsi128_si32(xmm0_x);
-      v2.y = _mm_cvtsi128_si32(xmm1_y);*/
     __m128i xmm0_yx = _mm_loadl_epi64((__m128i*)&v.x); // check is it faster ??
 
     xmm0_yx = _mm_min_epi32(xmm0_yx, _mm_set_epi32(0, 0, workarea.nDyMax - 1, workarea.nDxMax - 1));

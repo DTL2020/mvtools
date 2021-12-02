@@ -1315,7 +1315,7 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
 
     if (nOverlapX == 0 && nOverlapY == 0)
     {
-      if (nBlkSizeX == 8 && nBlkSizeY == 8 && (nBlkX % 8 == 0))
+/*      if (nBlkSizeX == 8 && nBlkSizeY == 8 && (nBlkX % 8 == 0))
       {
         slicer.start(
           nBlkY,
@@ -1332,7 +1332,7 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
           &MDegrainN::process_luma_normal_slice_16x16
         );
       }
-      else
+      else */
       {
         slicer.start(
           nBlkY,
