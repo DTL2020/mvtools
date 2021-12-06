@@ -422,10 +422,6 @@ private:
 
   /* performs an epz search */
   template<typename pixel_t>
-  void PseudoEPZSearch_optSO2_glob_med_pred_8x8_avx2(WorkingArea& workarea); // global and median predictors, optSearchOption = 2 set of params
-
-  /* performs an epz search */
-  template<typename pixel_t>
   void PseudoEPZSearch_optSO2_no_pred(WorkingArea& workarea); // no predictors, optSearchOption = 2 set of params
 
   /* performs an epz search */
