@@ -559,7 +559,6 @@ private:
 
   void(PlaneOfBlocks::* ExhaustiveSearch_SO2)(WorkingArea& workarea, int mvx, int mvy); // selector for sp1 and sp2
 
-//  template<typename pixel_t> // this selector method do not works for some reason - need to found why
 //  void(PlaneOfBlocks::* Sel_Pseudo_EPZ_search_SO2)(WorkingArea& workarea); // selector for optPredictors 0,1
 
 };

@@ -4502,16 +4502,51 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
 
         workarea.bIntraframe = bInterframeH && bInterframeV;
 
+        if ((workarea.blky == 6) && (iblkx == 1))
+        {
+          int idbr_22 = 0;
+        }
+        
+
+        PseudoEPZSearch_optSO2<pixel_t>(workarea); // all predictors (original)
+
+        VECTOR v_old;
+        v_old.x = workarea.bestMV.x;
+        v_old.y = workarea.bestMV.y;
+        v_old.sad = workarea.bestMV.sad;
+
+        
+        PseudoEPZSearch_optSO2_8x8_avx2<pixel_t>(workarea); // all predictors (original) 8x8 avx2
+
+        if (v_old.x != workarea.bestMV.x)
+        {
+          int idbr_x = 0;
+        }
+
+        if (v_old.y != workarea.bestMV.y)
+        {
+          int idbr_y = 0;
+        }
+
+        if (v_old.sad != workarea.bestMV.sad)
+        {
+          int idbr_sad = 0;
+        }
+/*
         if (_predictorType == 0)
-          PseudoEPZSearch_optSO2<pixel_t>(workarea); // all predictors (original)
-//          PseudoEPZSearch_optSO2_8x8_avx2<pixel_t>(workarea); // all predictors (original) 8x8 avx2
+        {
+          if (nBlkSizeX == 8 && nBlkSizeY == 8)
+            PseudoEPZSearch_optSO2_8x8_avx2<pixel_t>(workarea); // all predictors (original) 8x8 avx2
+          else
+            PseudoEPZSearch_optSO2<pixel_t>(workarea); // all predictors (original)
+        }
         else if (_predictorType == 1)
           PseudoEPZSearch_optSO2_glob_med_pred<pixel_t>(workarea);
         else if (_predictorType == 2)// _predictorType == 2
           PseudoEPZSearch_optSO2_no_pred<pixel_t>(workarea);
         else // _predictorType == 3
           PseudoEPZSearch_optSO2_no_refine<pixel_t>(workarea);
-
+          */
   //      (this->*Sel_Pseudo_EPZ_search_SO2)(workarea); // still not works - maybe possible to fix ?
 
         // workarea.bestMV = zeroMV; // debug
@@ -5798,18 +5833,35 @@ T& MVVector<T>::operator[](size_t index) // need to add something for 'const' to
   xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm10_Ref2); \
   xmm12_Ref4 = _mm_adds_epu16(xmm12_Ref4, xmm14_Ref6); \
   xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm12_Ref4);
+/* debug
+MV_FORCEINLINE unsigned int SADABS(int x) { return (x < 0) ? -x : x; }
+//inline unsigned int SADABS(int x) {	return ( x < -16 ) ? 16 : ( x < 0 ) ? -x : ( x > 16) ? 16 : x; }
 
+template<typename pixel_t>
+static unsigned int Sad_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef,
+  int nRefPitch)
+{
+  unsigned int sum = 0; // int is probably enough for 32x32
+  for (int y = 0; y < 8; y++)
+  {
+    for (int x = 0; x < 8; x++)
+      sum += SADABS(reinterpret_cast<const pixel_t*>(pSrc)[x] - reinterpret_cast<const pixel_t*>(pRef)[x]);
+    pSrc += nSrcPitch;
+    pRef += nRefPitch;
+  }
+  return sum;
+}
+*/
 template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
 {
   typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
 
-//  const __m128i xmm0_Src0, xmm1_Src1, xmm2_Src2, xmm3_Src3, xmm4_Src4, xmm5_Src5, xmm6_Src6, xmm7_Src7;
   __m128i xmm8_Ref0, xmm9_Ref1, xmm10_Ref2, xmm11_Ref3, xmm12_Ref4, xmm13_Ref5, xmm14_Ref6, xmm15_Ref7;
 
-  const long long* pucCurr = (long long*)workarea.pSrc[0];
+  const uint8_t* pucCurr = (uint8_t*)workarea.pSrc[0];
 
-  long long* pucRef;
+  uint8_t* pucRef;
 
   const __m128i xmm0_Src0 = _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 0));
   const __m128i xmm1_Src1 = _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 1));
@@ -5828,8 +5880,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
   {
     FetchPredictors_sse41<pixel_t>(workarea);
   }
-
-
+  
   sad_t sad;
   sad_t cost;
 
@@ -5837,8 +5888,8 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
   // Do we bias zero with not taking into account distorsion ?
   workarea.bestMV.x = zeroMVfieldShifted.x;
   workarea.bestMV.y = zeroMVfieldShifted.y;
-  //  sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, 0, zeroMVfieldShifted.y));
-  pucRef = (long long*)GetRefBlock(workarea, 0, zeroMVfieldShifted.y);
+//    sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, 0, zeroMVfieldShifted.y));
+  pucRef = (uint8_t*)GetRefBlock(workarea, 0, zeroMVfieldShifted.y);
   /*
   xmm8_Ref0 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 0));
   xmm9_Ref1 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 1));
@@ -5865,9 +5916,9 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
   xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm10_Ref2);
   xmm12_Ref4 = _mm_adds_epu16(xmm12_Ref4, xmm14_Ref6);
   xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm12_Ref4);
-  */
+*/
   sad_block_8x8
-    sad = _mm_cvtsi128_si32(xmm8_Ref0);
+  sad = _mm_cvtsi128_si32(xmm8_Ref0);
 
   workarea.bestMV.sad = sad;
   workarea.nMinCost = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2
@@ -5882,7 +5933,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
   if (!IsVectorChecked((uint64_t)workarea.globalMVPredictor.x | ((uint64_t)workarea.globalMVPredictor.y << 32)))
   {
     //    sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y));
-    pucRef = (long long*)GetRefBlock(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y);
+    pucRef = (uint8_t*)GetRefBlock(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y);
 
     sad_block_8x8
       sad = _mm_cvtsi128_si32(xmm8_Ref0);
@@ -5905,7 +5956,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
   if (!IsVectorChecked((uint64_t)workarea.predictor.x | ((uint64_t)workarea.predictor.y << 32)))
   {
     //    sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
-    pucRef = (long long*)GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y);
+    pucRef = (uint8_t*)GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y);
 
     sad_block_8x8
       cost = _mm_cvtsi128_si32(xmm8_Ref0);
@@ -5944,7 +5995,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
       //      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[0].x, workarea.predictors[0].y, _mm_extract_epi32(xmm0_cost, 0));
       cost = _mm_extract_epi32(xmm0_cost, 0);
 
-      pucRef = (long long*)GetRefBlock(workarea, workarea.predictors[0].x, workarea.predictors[0].y);
+      pucRef = (uint8_t*)GetRefBlock(workarea, workarea.predictors[0].x, workarea.predictors[0].y);
       sad_block_8x8
         sad = _mm_cvtsi128_si32(xmm8_Ref0);
 
@@ -5966,7 +6017,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
       //      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[1].x, workarea.predictors[1].y, _mm_extract_epi32(xmm0_cost, 1));
       cost = _mm_extract_epi32(xmm0_cost, 1);
 
-      pucRef = (long long*)GetRefBlock(workarea, workarea.predictors[1].x, workarea.predictors[1].y);
+      pucRef = (uint8_t*)GetRefBlock(workarea, workarea.predictors[1].x, workarea.predictors[1].y);
       sad_block_8x8
         sad = _mm_cvtsi128_si32(xmm8_Ref0);
 
@@ -5989,7 +6040,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
       //      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[2].x, workarea.predictors[2].y, _mm_extract_epi32(xmm0_cost, 2));
       cost = _mm_extract_epi32(xmm0_cost, 2);
 
-      pucRef = (long long*)GetRefBlock(workarea, workarea.predictors[2].x, workarea.predictors[2].y);
+      pucRef = (uint8_t*)GetRefBlock(workarea, workarea.predictors[2].x, workarea.predictors[2].y);
       sad_block_8x8
         sad = _mm_cvtsi128_si32(xmm8_Ref0);
 
@@ -5998,7 +6049,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
       if (cost < workarea.nMinCost)
       {
         workarea.bestMV.x = workarea.predictors[2].x;
-        workarea.bestMV.y = workarea.predictors[1].y;
+        workarea.bestMV.y = workarea.predictors[2].y;
         workarea.nMinCost = cost;
         workarea.bestMV.sad = sad;
       }
@@ -6012,7 +6063,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
       //      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[3].x, workarea.predictors[3].y, _mm_extract_epi32(xmm0_cost, 3));
       cost = _mm_extract_epi32(xmm0_cost, 3);
 
-      pucRef = (long long*)GetRefBlock(workarea, workarea.predictors[3].x, workarea.predictors[3].y);
+      pucRef = (uint8_t*)GetRefBlock(workarea, workarea.predictors[3].x, workarea.predictors[3].y);
       sad_block_8x8
         sad = _mm_cvtsi128_si32(xmm8_Ref0);
 
@@ -6040,12 +6091,6 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
 
 
   __m256i ymm0_Ref_01, ymm1_Ref_23, ymm2_Ref_45, ymm3_Ref_67; // require buf padding to allow 16bytes reads to xmm
-  // 1st row
-  ymm0_Ref_01 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 1), (__m128i*)(pucRef));
-  ymm1_Ref_23 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 3), (__m128i*)(pucRef + nRefPitch[0] * 2));
-  ymm2_Ref_45 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 5), (__m128i*)(pucRef + nRefPitch[0] * 4));
-  ymm3_Ref_67 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 7), (__m128i*)(pucRef + nRefPitch[0] * 6));
-
   __m256i ymm10_sads_r0, ymm11_sads_r1, ymm12_sads_r2, ymm13_sads_r3, ymm14_sads_r4;
 
   const __m256i ymm13_all_ones = _mm256_cmpeq_epi64(_mm256_setzero_si256(), _mm256_setzero_si256());
@@ -6054,7 +6099,13 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
 
   if (nSearchParam == 1)
   {
-    pucRef = (long long*)GetRefBlock(workarea, workarea.bestMV.x - 1, workarea.bestMV.y - 1); // upper left corner
+    pucRef = (uint8_t*)GetRefBlock(workarea, workarea.bestMV.x - 1, workarea.bestMV.y - 1); // upper left corner
+
+    // 1st row
+    ymm0_Ref_01 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 1), (__m128i*)(pucRef));
+    ymm1_Ref_23 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 3), (__m128i*)(pucRef + nRefPitch[0] * 2));
+    ymm2_Ref_45 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 5), (__m128i*)(pucRef + nRefPitch[0] * 4));
+    ymm3_Ref_67 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 7), (__m128i*)(pucRef + nRefPitch[0] * 6));
 
     Sads_block_8x8
       ymm10_sads_r0 = ymm_block_ress;
@@ -6113,8 +6164,14 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
   else if (nSearchParam == 2)
   {
     // sp2 here
-    pucRef = (long long*)GetRefBlock(workarea, workarea.bestMV.x - 2, workarea.bestMV.y - 2); // upper left corner
+    pucRef = (uint8_t*)GetRefBlock(workarea, workarea.bestMV.x - 2, workarea.bestMV.y - 2); // upper left corner
 
+    // 1st row
+    ymm0_Ref_01 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 1), (__m128i*)(pucRef));
+    ymm1_Ref_23 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 3), (__m128i*)(pucRef + nRefPitch[0] * 2));
+    ymm2_Ref_45 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 5), (__m128i*)(pucRef + nRefPitch[0] * 4));
+    ymm3_Ref_67 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 7), (__m128i*)(pucRef + nRefPitch[0] * 6));
+    
     Sads_block_8x8
       ymm10_sads_r0 = ymm_block_ress;
 
