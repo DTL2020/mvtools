@@ -4502,51 +4502,25 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
 
         workarea.bIntraframe = bInterframeH && bInterframeV;
 
-        if ((workarea.blky == 6) && (iblkx == 1))
-        {
-          int idbr_22 = 0;
-        }
-        
-
-        PseudoEPZSearch_optSO2<pixel_t>(workarea); // all predictors (original)
-
-        VECTOR v_old;
-        v_old.x = workarea.bestMV.x;
-        v_old.y = workarea.bestMV.y;
-        v_old.sad = workarea.bestMV.sad;
-
-        
-        PseudoEPZSearch_optSO2_8x8_avx2<pixel_t>(workarea); // all predictors (original) 8x8 avx2
-
-        if (v_old.x != workarea.bestMV.x)
-        {
-          int idbr_x = 0;
-        }
-
-        if (v_old.y != workarea.bestMV.y)
-        {
-          int idbr_y = 0;
-        }
-
-        if (v_old.sad != workarea.bestMV.sad)
-        {
-          int idbr_sad = 0;
-        }
-/*
         if (_predictorType == 0)
         {
           if (nBlkSizeX == 8 && nBlkSizeY == 8)
-            PseudoEPZSearch_optSO2_8x8_avx2<pixel_t>(workarea); // all predictors (original) 8x8 avx2
+            PseudoEPZSearch_optSO2_8x8_avx2<pixel_t>(workarea); // all predictors (original) 8x8 avx2, also predictor type 1
           else
-            PseudoEPZSearch_optSO2<pixel_t>(workarea); // all predictors (original)
+            PseudoEPZSearch_optSO2<pixel_t>(workarea); // all predictors (original), other block sizes
         }
         else if (_predictorType == 1)
-          PseudoEPZSearch_optSO2_glob_med_pred<pixel_t>(workarea);
+        {
+          if (nBlkSizeX == 8 && nBlkSizeY == 8)
+            PseudoEPZSearch_optSO2_8x8_avx2<pixel_t>(workarea); // all predictors (original) 8x8 avx2, also predictor type 1
+          else
+            PseudoEPZSearch_optSO2_glob_med_pred<pixel_t>(workarea); // other block sizes
+        }
         else if (_predictorType == 2)// _predictorType == 2
           PseudoEPZSearch_optSO2_no_pred<pixel_t>(workarea);
         else // _predictorType == 3
           PseudoEPZSearch_optSO2_no_refine<pixel_t>(workarea);
-          */
+          
   //      (this->*Sel_Pseudo_EPZ_search_SO2)(workarea); // still not works - maybe possible to fix ?
 
         // workarea.bestMV = zeroMV; // debug
@@ -5833,25 +5807,7 @@ T& MVVector<T>::operator[](size_t index) // need to add something for 'const' to
   xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm10_Ref2); \
   xmm12_Ref4 = _mm_adds_epu16(xmm12_Ref4, xmm14_Ref6); \
   xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm12_Ref4);
-/* debug
-MV_FORCEINLINE unsigned int SADABS(int x) { return (x < 0) ? -x : x; }
-//inline unsigned int SADABS(int x) {	return ( x < -16 ) ? 16 : ( x < 0 ) ? -x : ( x > 16) ? 16 : x; }
 
-template<typename pixel_t>
-static unsigned int Sad_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef,
-  int nRefPitch)
-{
-  unsigned int sum = 0; // int is probably enough for 32x32
-  for (int y = 0; y < 8; y++)
-  {
-    for (int x = 0; x < 8; x++)
-      sum += SADABS(reinterpret_cast<const pixel_t*>(pSrc)[x] - reinterpret_cast<const pixel_t*>(pRef)[x]);
-    pSrc += nSrcPitch;
-    pRef += nRefPitch;
-  }
-  return sum;
-}
-*/
 template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
 {
@@ -5971,114 +5927,116 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
   }
   // then all the other predictors
   // compute checks on motion distortion first and skip MV if above cost:
-
-  __m256i ymm2_yx_predictors = _mm256_set_epi32(workarea.predictors[3].y, workarea.predictors[3].x, workarea.predictors[2].y, workarea.predictors[2].x, \
-    workarea.predictors[1].y, workarea.predictors[1].x, workarea.predictors[0].y, workarea.predictors[0].x);
-  __m256i ymm3_predictor = _mm256_broadcastq_epi64(_mm_set_epi32(0, 0, workarea.predictor.y, workarea.predictor.x)); // hope movq + vpbroadcast
-
-  __m256i ymm_d1d2 = _mm256_sub_epi32(ymm3_predictor, ymm2_yx_predictors);
-  ymm_d1d2 = _mm256_add_epi32(_mm256_mullo_epi32(ymm_d1d2, ymm_d1d2), _mm256_srli_si256(ymm_d1d2, 4));
-
-  __m256i ymm_dist = _mm256_permutevar8x32_epi32(ymm_d1d2, _mm256_set_epi32(0, 0, 0, 0, 6, 4, 2, 0));
-  __m128i xmm_nLambda = _mm_set1_epi32(workarea.nLambda);
-  __m128i  xmm0_cost = _mm_srli_epi32(_mm_mullo_epi32(xmm_nLambda, _mm256_castsi256_si128(ymm_dist)), 8);
-  __m128i xmm_mask = _mm_cmplt_epi32(xmm0_cost, _mm_set1_epi32(workarea.nMinCost));
-  int iMask = _mm_movemask_epi8(xmm_mask);
-  _mm256_zeroupper(); // need ?
-
-  // if ((iMask & 0x1111) == 0x1111) - use 4-predictors CheckMV0_avx2() - to do.
-// vectors were clipped in FetchPredictors - no new IsVectorOK() check ?
-  if ((iMask & 0x1) != 0)
+  if (_predictorType == 0) // all predictors, combine PT=0 and PT=1 in one function, some minor performnce penalty ?
   {
-    if (!IsVectorChecked((uint64_t)workarea.predictors[0].x | ((uint64_t)workarea.predictors[0].y << 32)))
+    __m256i ymm2_yx_predictors = _mm256_set_epi32(workarea.predictors[3].y, workarea.predictors[3].x, workarea.predictors[2].y, workarea.predictors[2].x, \
+      workarea.predictors[1].y, workarea.predictors[1].x, workarea.predictors[0].y, workarea.predictors[0].x);
+    __m256i ymm3_predictor = _mm256_broadcastq_epi64(_mm_set_epi32(0, 0, workarea.predictor.y, workarea.predictor.x)); // hope movq + vpbroadcast
+
+    __m256i ymm_d1d2 = _mm256_sub_epi32(ymm3_predictor, ymm2_yx_predictors);
+    ymm_d1d2 = _mm256_add_epi32(_mm256_mullo_epi32(ymm_d1d2, ymm_d1d2), _mm256_srli_si256(ymm_d1d2, 4));
+
+    __m256i ymm_dist = _mm256_permutevar8x32_epi32(ymm_d1d2, _mm256_set_epi32(0, 0, 0, 0, 6, 4, 2, 0));
+    __m128i xmm_nLambda = _mm_set1_epi32(workarea.nLambda);
+    __m128i  xmm0_cost = _mm_srli_epi32(_mm_mullo_epi32(xmm_nLambda, _mm256_castsi256_si128(ymm_dist)), 8);
+    __m128i xmm_mask = _mm_cmplt_epi32(xmm0_cost, _mm_set1_epi32(workarea.nMinCost));
+    int iMask = _mm_movemask_epi8(xmm_mask);
+    _mm256_zeroupper(); // need ?
+
+    // if ((iMask & 0x1111) == 0x1111) - use 4-predictors CheckMV0_avx2() - to do.
+    // vectors were clipped in FetchPredictors - no new IsVectorOK() check ?
+    if ((iMask & 0x1) != 0)
     {
-      //      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[0].x, workarea.predictors[0].y, _mm_extract_epi32(xmm0_cost, 0));
-      cost = _mm_extract_epi32(xmm0_cost, 0);
-
-      pucRef = (uint8_t*)GetRefBlock(workarea, workarea.predictors[0].x, workarea.predictors[0].y);
-      sad_block_8x8
-        sad = _mm_cvtsi128_si32(xmm8_Ref0);
-
-      cost += sad;
-
-      if (cost < workarea.nMinCost)
+      if (!IsVectorChecked((uint64_t)workarea.predictors[0].x | ((uint64_t)workarea.predictors[0].y << 32)))
       {
-        workarea.bestMV.x = workarea.predictors[0].x;
-        workarea.bestMV.y = workarea.predictors[0].y;
-        workarea.nMinCost = cost;
-        workarea.bestMV.sad = sad;
+        //      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[0].x, workarea.predictors[0].y, _mm_extract_epi32(xmm0_cost, 0));
+        cost = _mm_extract_epi32(xmm0_cost, 0);
+
+        pucRef = (uint8_t*)GetRefBlock(workarea, workarea.predictors[0].x, workarea.predictors[0].y);
+        sad_block_8x8
+          sad = _mm_cvtsi128_si32(xmm8_Ref0);
+
+        cost += sad;
+
+        if (cost < workarea.nMinCost)
+        {
+          workarea.bestMV.x = workarea.predictors[0].x;
+          workarea.bestMV.y = workarea.predictors[0].y;
+          workarea.nMinCost = cost;
+          workarea.bestMV.sad = sad;
+        }
       }
     }
-  }
-  if ((iMask & 0x10) != 0)
-  {
-    if (!IsVectorChecked((uint64_t)workarea.predictors[1].x | ((uint64_t)workarea.predictors[1].y << 32)))
+    if ((iMask & 0x10) != 0)
     {
-      //      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[1].x, workarea.predictors[1].y, _mm_extract_epi32(xmm0_cost, 1));
-      cost = _mm_extract_epi32(xmm0_cost, 1);
-
-      pucRef = (uint8_t*)GetRefBlock(workarea, workarea.predictors[1].x, workarea.predictors[1].y);
-      sad_block_8x8
-        sad = _mm_cvtsi128_si32(xmm8_Ref0);
-
-      cost += sad;
-
-      if (cost < workarea.nMinCost)
+      if (!IsVectorChecked((uint64_t)workarea.predictors[1].x | ((uint64_t)workarea.predictors[1].y << 32)))
       {
-        workarea.bestMV.x = workarea.predictors[1].x;
-        workarea.bestMV.y = workarea.predictors[1].y;
-        workarea.nMinCost = cost;
-        workarea.bestMV.sad = sad;
-      }
+        //      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[1].x, workarea.predictors[1].y, _mm_extract_epi32(xmm0_cost, 1));
+        cost = _mm_extract_epi32(xmm0_cost, 1);
 
+        pucRef = (uint8_t*)GetRefBlock(workarea, workarea.predictors[1].x, workarea.predictors[1].y);
+        sad_block_8x8
+          sad = _mm_cvtsi128_si32(xmm8_Ref0);
+
+        cost += sad;
+
+        if (cost < workarea.nMinCost)
+        {
+          workarea.bestMV.x = workarea.predictors[1].x;
+          workarea.bestMV.y = workarea.predictors[1].y;
+          workarea.nMinCost = cost;
+          workarea.bestMV.sad = sad;
+        }
+
+      }
     }
-  }
-  if ((iMask & 0x100) != 0)
-  {
-    if (!IsVectorChecked((uint64_t)workarea.predictors[2].x | ((uint64_t)workarea.predictors[2].y << 32)))
+    if ((iMask & 0x100) != 0)
     {
-      //      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[2].x, workarea.predictors[2].y, _mm_extract_epi32(xmm0_cost, 2));
-      cost = _mm_extract_epi32(xmm0_cost, 2);
-
-      pucRef = (uint8_t*)GetRefBlock(workarea, workarea.predictors[2].x, workarea.predictors[2].y);
-      sad_block_8x8
-        sad = _mm_cvtsi128_si32(xmm8_Ref0);
-
-      cost += sad;
-
-      if (cost < workarea.nMinCost)
+      if (!IsVectorChecked((uint64_t)workarea.predictors[2].x | ((uint64_t)workarea.predictors[2].y << 32)))
       {
-        workarea.bestMV.x = workarea.predictors[2].x;
-        workarea.bestMV.y = workarea.predictors[2].y;
-        workarea.nMinCost = cost;
-        workarea.bestMV.sad = sad;
-      }
+        //      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[2].x, workarea.predictors[2].y, _mm_extract_epi32(xmm0_cost, 2));
+        cost = _mm_extract_epi32(xmm0_cost, 2);
 
+        pucRef = (uint8_t*)GetRefBlock(workarea, workarea.predictors[2].x, workarea.predictors[2].y);
+        sad_block_8x8
+          sad = _mm_cvtsi128_si32(xmm8_Ref0);
+
+        cost += sad;
+
+        if (cost < workarea.nMinCost)
+        {
+          workarea.bestMV.x = workarea.predictors[2].x;
+          workarea.bestMV.y = workarea.predictors[2].y;
+          workarea.nMinCost = cost;
+          workarea.bestMV.sad = sad;
+        }
+
+      }
     }
-  }
-  if ((iMask & 0x1000) != 0)
-  {
-    if (!IsVectorChecked((uint64_t)workarea.predictors[3].x | ((uint64_t)workarea.predictors[3].y << 32)))
+    if ((iMask & 0x1000) != 0)
     {
-      //      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[3].x, workarea.predictors[3].y, _mm_extract_epi32(xmm0_cost, 3));
-      cost = _mm_extract_epi32(xmm0_cost, 3);
-
-      pucRef = (uint8_t*)GetRefBlock(workarea, workarea.predictors[3].x, workarea.predictors[3].y);
-      sad_block_8x8
-        sad = _mm_cvtsi128_si32(xmm8_Ref0);
-
-      cost += sad;
-
-      if (cost < workarea.nMinCost)
+      if (!IsVectorChecked((uint64_t)workarea.predictors[3].x | ((uint64_t)workarea.predictors[3].y << 32)))
       {
-        workarea.bestMV.x = workarea.predictors[3].x;
-        workarea.bestMV.y = workarea.predictors[3].y;
-        workarea.nMinCost = cost;
-        workarea.bestMV.sad = sad;
-      }
+        //      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[3].x, workarea.predictors[3].y, _mm_extract_epi32(xmm0_cost, 3));
+        cost = _mm_extract_epi32(xmm0_cost, 3);
 
+        pucRef = (uint8_t*)GetRefBlock(workarea, workarea.predictors[3].x, workarea.predictors[3].y);
+        sad_block_8x8
+          sad = _mm_cvtsi128_si32(xmm8_Ref0);
+
+        cost += sad;
+
+        if (cost < workarea.nMinCost)
+        {
+          workarea.bestMV.x = workarea.predictors[3].x;
+          workarea.bestMV.y = workarea.predictors[3].y;
+          workarea.nMinCost = cost;
+          workarea.bestMV.sad = sad;
+        }
+
+      }
     }
-  }
+  } // if (_optPredictorType == 0)
 
   // then, we refine, 
   // sp = 1 for level=0 (finest) sp = 2 for other levels
