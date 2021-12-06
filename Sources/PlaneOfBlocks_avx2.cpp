@@ -101,6 +101,33 @@
 	ymm_half16x16_sads = _mm256_adds_epu16(_mm256_castsi128_si256(_mm256_extracti128_si256(ymm0_Ref0, 1)), ymm0_Ref0);
 
 
+#define sad_block_8x8 \
+  xmm8_Ref0 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 0)); \
+  xmm9_Ref1 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 1)); \
+  xmm10_Ref2 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 2)); \
+  xmm11_Ref3 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 3)); \
+  xmm12_Ref4 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 4)); \
+  xmm13_Ref5 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 5)); \
+  xmm14_Ref6 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 6)); \
+  xmm15_Ref7 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 7)); \
+ \
+  xmm8_Ref0 = _mm_sad_epu8(xmm8_Ref0, xmm0_Src0); \
+  xmm9_Ref1 = _mm_sad_epu8(xmm9_Ref1, xmm1_Src1); \
+  xmm10_Ref2 = _mm_sad_epu8(xmm10_Ref2, xmm2_Src2); \
+  xmm11_Ref3 = _mm_sad_epu8(xmm11_Ref3, xmm3_Src3); \
+  xmm12_Ref4 = _mm_sad_epu8(xmm12_Ref4, xmm4_Src4); \
+  xmm13_Ref5 = _mm_sad_epu8(xmm13_Ref5, xmm5_Src5); \
+  xmm14_Ref6 = _mm_sad_epu8(xmm14_Ref6, xmm6_Src6); \
+  xmm15_Ref7 = _mm_sad_epu8(xmm15_Ref7, xmm7_Src7); \
+ \
+  xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm9_Ref1); \
+  xmm10_Ref2 = _mm_adds_epu16(xmm10_Ref2, xmm11_Ref3); \
+  xmm12_Ref4 = _mm_adds_epu16(xmm12_Ref4, xmm13_Ref5); \
+  xmm14_Ref6 = _mm_adds_epu16(xmm14_Ref6, xmm15_Ref7); \
+  xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm10_Ref2); \
+  xmm12_Ref4 = _mm_adds_epu16(xmm12_Ref4, xmm14_Ref6); \
+  xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm12_Ref4);
+
 #include "PlaneOfBlocks.h"
 #include <map>
 #include <tuple>
@@ -1817,3 +1844,419 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_4Blks_np1_sp1_avx2(WorkingArea& wo
 
 }
 
+#if 0 // moved to PlaneOfBlocks.cpp to be seen by linker (temporarily?)
+template<typename pixel_t>
+void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
+{
+  typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
+
+  const __m128i xmm0_Src0, xmm1_Src1, xmm2_Src2, xmm3_Src3, xmm4_Src4, xmm5_Src5, xmm6_Src6, xmm7_Src7;
+  __m128i xmm8_Ref0, xmm9_Ref1, xmm10_Ref2, xmm11_Ref3, xmm12_Ref4, xmm13_Ref5, xmm14_Ref6, xmm15_Ref7;
+
+  const long long* pucCurr = (long long*)workarea.pSrc[0];
+
+  long long* pucRef;
+
+  xmm0_Src0 = _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 0));
+  xmm1_Src1 = _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 1));
+  xmm2_Src2 = _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 2));
+  xmm3_Src3 = _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 3));
+  xmm4_Src4 = _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 4));
+  xmm5_Src5 = _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 5));
+  xmm6_Src6 = _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 6));
+  xmm7_Src7 = _mm_loadl_epi64((__m128i*)(pucCurr + nSrcPitch[0] * 7));
+
+  if (workarea.bIntraframe)
+  {
+    FetchPredictors_avx2_intraframe<pixel_t>(workarea); // faster
+  }
+  else
+  {
+    FetchPredictors_sse41<pixel_t>(workarea);
+  }
+
+
+  sad_t sad;
+  sad_t cost;
+
+  // We treat zero alone
+  // Do we bias zero with not taking into account distorsion ?
+  workarea.bestMV.x = zeroMVfieldShifted.x;
+  workarea.bestMV.y = zeroMVfieldShifted.y;
+//  sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, 0, zeroMVfieldShifted.y));
+  pucRef = (long long*)GetRefBlock(workarea, 0, zeroMVfieldShifted.y);
+  /*
+  xmm8_Ref0 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 0));
+  xmm9_Ref1 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 1));
+  xmm10_Ref2 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 2));
+  xmm11_Ref3 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 3));
+  xmm12_Ref4 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 4));
+  xmm13_Ref5 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 5));
+  xmm14_Ref6 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 6));
+  xmm15_Ref7 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 7));
+
+  xmm8_Ref0 = _mm_sad_epu8(xmm8_Ref0, xmm0_Src0);
+  xmm9_Ref1 = _mm_sad_epu8(xmm9_Ref1, xmm1_Src1);
+  xmm10_Ref2 = _mm_sad_epu8(xmm10_Ref2, xmm2_Src2);
+  xmm11_Ref3 = _mm_sad_epu8(xmm11_Ref3, xmm3_Src3);
+  xmm12_Ref4 = _mm_sad_epu8(xmm12_Ref4, xmm4_Src4);
+  xmm13_Ref5 = _mm_sad_epu8(xmm13_Ref5, xmm5_Src5);
+  xmm14_Ref6 = _mm_sad_epu8(xmm14_Ref6, xmm6_Src6);
+  xmm15_Ref7 = _mm_sad_epu8(xmm15_Ref7, xmm7_Src7);
+
+  xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm9_Ref1);
+  xmm10_Ref2 = _mm_adds_epu16(xmm10_Ref2, xmm11_Ref3);
+  xmm12_Ref4 = _mm_adds_epu16(xmm12_Ref4, xmm13_Ref5);
+  xmm14_Ref6 = _mm_adds_epu16(xmm14_Ref6, xmm15_Ref7);
+  xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm10_Ref2);
+  xmm12_Ref4 = _mm_adds_epu16(xmm12_Ref4, xmm14_Ref6);
+  xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm12_Ref4);
+  */
+  sad_block_8x8
+  sad = _mm_cvtsi128_si32(xmm8_Ref0);
+
+  workarea.bestMV.sad = sad;
+  workarea.nMinCost = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2
+
+  iNumCheckedVectors = 0;
+  checked_mv_vectors[iNumCheckedVectors] = 0;
+  iNumCheckedVectors++;
+
+  // Global MV predictor  - added by Fizick
+  workarea.globalMVPredictor = ClipMV_SO2(workarea, workarea.globalMVPredictor);
+
+  if (!IsVectorChecked((uint64_t)workarea.globalMVPredictor.x | ((uint64_t)workarea.globalMVPredictor.y << 32)))
+  {
+//    sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y));
+    pucRef = (long long*)GetRefBlock(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y);
+
+    sad_block_8x8
+    sad = _mm_cvtsi128_si32(xmm8_Ref0);
+
+    cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
+
+    if (cost < workarea.nMinCost)
+    {
+      workarea.bestMV.x = workarea.globalMVPredictor.x;
+      workarea.bestMV.y = workarea.globalMVPredictor.y;
+      workarea.bestMV.sad = sad;
+      workarea.nMinCost = cost;
+    }
+  }
+  //	}
+  //	Then, the predictor :
+  //	if (   (( workarea.predictor.x != zeroMVfieldShifted.x ) || ( workarea.predictor.y != zeroMVfieldShifted.y ))
+  //	    && (( workarea.predictor.x != workarea.globalMVPredictor.x ) || ( workarea.predictor.y != workarea.globalMVPredictor.y )))
+  //	{
+  if (!IsVectorChecked((uint64_t)workarea.predictor.x | ((uint64_t)workarea.predictor.y << 32)))
+  {
+//    sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
+    pucRef = (long long*)GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y);
+
+    sad_block_8x8
+    cost = _mm_cvtsi128_si32(xmm8_Ref0);
+    
+    if (cost < workarea.nMinCost)
+    {
+      workarea.bestMV.x = workarea.predictor.x;
+      workarea.bestMV.y = workarea.predictor.y;
+      workarea.bestMV.sad = cost;
+      workarea.nMinCost = cost;
+    }
+  }
+  // then all the other predictors
+  // compute checks on motion distortion first and skip MV if above cost:
+
+  __m256i ymm2_yx_predictors = _mm256_set_epi32(workarea.predictors[3].y, workarea.predictors[3].x, workarea.predictors[2].y, workarea.predictors[2].x, \
+    workarea.predictors[1].y, workarea.predictors[1].x, workarea.predictors[0].y, workarea.predictors[0].x);
+  __m256i ymm3_predictor = _mm256_broadcastq_epi64(_mm_set_epi32(0, 0, workarea.predictor.y, workarea.predictor.x)); // hope movq + vpbroadcast
+
+  __m256i ymm_d1d2 = _mm256_sub_epi32(ymm3_predictor, ymm2_yx_predictors);
+  ymm_d1d2 = _mm256_add_epi32(_mm256_mullo_epi32(ymm_d1d2, ymm_d1d2), _mm256_srli_si256(ymm_d1d2, 4));
+
+  __m256i ymm_dist = _mm256_permutevar8x32_epi32(ymm_d1d2, _mm256_set_epi32(0, 0, 0, 0, 6, 4, 2, 0));
+  __m128i xmm_nLambda = _mm_set1_epi32(workarea.nLambda);
+  __m128i  xmm0_cost = _mm_srli_epi32(_mm_mullo_epi32(xmm_nLambda, _mm256_castsi256_si128(ymm_dist)), 8);
+  __m128i xmm_mask = _mm_cmplt_epi32(xmm0_cost, _mm_set1_epi32(workarea.nMinCost));
+  int iMask = _mm_movemask_epi8(xmm_mask);
+  _mm256_zeroupper(); // need ?
+
+  // if ((iMask & 0x1111) == 0x1111) - use 4-predictors CheckMV0_avx2() - to do.
+// vectors were clipped in FetchPredictors - no new IsVectorOK() check ?
+  if ((iMask & 0x1) != 0)
+  {
+    if (!IsVectorChecked((uint64_t)workarea.predictors[0].x | ((uint64_t)workarea.predictors[0].y << 32)))
+    {
+//      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[0].x, workarea.predictors[0].y, _mm_extract_epi32(xmm0_cost, 0));
+      cost = _mm_extract_epi32(xmm0_cost, 0);
+
+      pucRef = (long long*)GetRefBlock(workarea, workarea.predictors[0].x, workarea.predictors[0].y);
+      sad_block_8x8
+      sad = _mm_cvtsi128_si32(xmm8_Ref0);
+
+      cost += sad;
+
+      if (cost < workarea.nMinCost)
+      {
+        workarea.bestMV.x = workarea.predictors[0].x;
+        workarea.bestMV.y = workarea.predictors[0].y;
+        workarea.nMinCost = cost;
+        workarea.bestMV.sad = sad;
+      }
+    }
+  }
+  if ((iMask & 0x10) != 0)
+  {
+    if (!IsVectorChecked((uint64_t)workarea.predictors[1].x | ((uint64_t)workarea.predictors[1].y << 32)))
+    {
+//      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[1].x, workarea.predictors[1].y, _mm_extract_epi32(xmm0_cost, 1));
+      cost = _mm_extract_epi32(xmm0_cost, 1);
+
+      pucRef = (long long*)GetRefBlock(workarea, workarea.predictors[1].x, workarea.predictors[1].y);
+      sad_block_8x8
+      sad = _mm_cvtsi128_si32(xmm8_Ref0);
+
+      cost += sad;
+
+      if (cost < workarea.nMinCost)
+      {
+        workarea.bestMV.x = workarea.predictors[1].x;
+        workarea.bestMV.y = workarea.predictors[1].y;
+        workarea.nMinCost = cost;
+        workarea.bestMV.sad = sad;
+      }
+
+    }
+  }
+  if ((iMask & 0x100) != 0)
+  {
+    if (!IsVectorChecked((uint64_t)workarea.predictors[2].x | ((uint64_t)workarea.predictors[2].y << 32)))
+    {
+//      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[2].x, workarea.predictors[2].y, _mm_extract_epi32(xmm0_cost, 2));
+      cost = _mm_extract_epi32(xmm0_cost, 2);
+
+      pucRef = (long long*)GetRefBlock(workarea, workarea.predictors[2].x, workarea.predictors[2].y);
+      sad_block_8x8
+      sad = _mm_cvtsi128_si32(xmm8_Ref0);
+
+      cost += sad;
+
+      if (cost < workarea.nMinCost)
+      {
+        workarea.bestMV.x = workarea.predictors[2].x;
+        workarea.bestMV.y = workarea.predictors[1].y;
+        workarea.nMinCost = cost;
+        workarea.bestMV.sad = sad;
+      }
+
+    }
+  }
+  if ((iMask & 0x1000) != 0)
+  {
+    if (!IsVectorChecked((uint64_t)workarea.predictors[3].x | ((uint64_t)workarea.predictors[3].y << 32)))
+    {
+//      CheckMV0_SO2<pixel_t>(workarea, workarea.predictors[3].x, workarea.predictors[3].y, _mm_extract_epi32(xmm0_cost, 3));
+      cost = _mm_extract_epi32(xmm0_cost, 3);
+
+      pucRef = (long long*)GetRefBlock(workarea, workarea.predictors[3].x, workarea.predictors[3].y);
+      sad_block_8x8
+      sad = _mm_cvtsi128_si32(xmm8_Ref0);
+
+      cost += sad;
+
+      if (cost < workarea.nMinCost)
+      {
+        workarea.bestMV.x = workarea.predictors[3].x;
+        workarea.bestMV.y = workarea.predictors[3].y;
+        workarea.nMinCost = cost;
+        workarea.bestMV.sad = sad;
+      }
+
+    }
+  }
+
+  // then, we refine, 
+  // sp = 1 for level=0 (finest) sp = 2 for other levels
+//  (this->*ExhaustiveSearch_SO2)(workarea, workarea.bestMV.x, workarea.bestMV.y);
+  const __m256i ymm4_Src_01, ymm5_Src_23, ymm6_Src_45, ymm7_Src_67;
+  ymm4_Src_01 = _mm256_set_m128i(xmm1_Src1, xmm0_Src0);
+  ymm5_Src_23 = _mm256_set_m128i(xmm3_Src3, xmm2_Src2);
+  ymm6_Src_45 = _mm256_set_m128i(xmm5_Src5, xmm4_Src4);
+  ymm7_Src_67 = _mm256_set_m128i(xmm7_Src7, xmm6_Src6);
+
+
+  __m256i ymm0_Ref_01, ymm1_Ref_23, ymm2_Ref_45, ymm3_Ref_67; // require buf padding to allow 16bytes reads to xmm
+  // 1st row
+  ymm0_Ref_01 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 1), (__m128i*)(pucRef));
+  ymm1_Ref_23 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 3), (__m128i*)(pucRef + nRefPitch[0] * 2));
+  ymm2_Ref_45 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 5), (__m128i*)(pucRef + nRefPitch[0] * 4));
+  ymm3_Ref_67 = _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * 7), (__m128i*)(pucRef + nRefPitch[0] * 6));
+
+  __m256i ymm10_sads_r0, ymm11_sads_r1, ymm12_sads_r2, ymm13_sads_r3, ymm14_sads_r4;
+
+  const __m256i ymm13_all_ones = _mm256_cmpeq_epi64(_mm256_setzero_si256(), _mm256_setzero_si256());
+
+  __m256i ymm_block_ress;
+
+  if (nSearchParam == 1)
+  {
+    pucRef = (long long*)GetRefBlock(workarea, workarea.bestMV.x - 1, workarea.bestMV.y - 1); // upper left corner
+
+    Sads_block_8x8
+      ymm10_sads_r0 = ymm_block_ress;
+
+    // 2nd row
+    Push_Ref_8x8_row(8)
+      Sads_block_8x8
+      ymm11_sads_r1 = ymm_block_ress;
+
+    // 3rd row
+    Push_Ref_8x8_row(9)
+      Sads_block_8x8
+      ymm12_sads_r2 = ymm_block_ress;
+
+    // set high sads, leave only 2,1,0
+    ymm10_sads_r0 = _mm256_blend_epi16(ymm10_sads_r0, ymm13_all_ones, 248);
+    ymm11_sads_r1 = _mm256_blend_epi16(ymm11_sads_r1, ymm13_all_ones, 248);
+    ymm12_sads_r2 = _mm256_blend_epi16(ymm12_sads_r2, ymm13_all_ones, 248);
+
+    unsigned int uiRes_R0 = _mm_cvtsi128_si32(_mm_minpos_epu16(_mm256_castsi256_si128(ymm10_sads_r0)));
+    unsigned int uiRes_R1 = _mm_cvtsi128_si32(_mm_minpos_epu16(_mm256_castsi256_si128(ymm11_sads_r1)));
+    unsigned int uiRes_R2 = _mm_cvtsi128_si32(_mm_minpos_epu16(_mm256_castsi256_si128(ymm12_sads_r2)));
+
+    int dx_minsad, dy_minsad, minsad;
+
+    if ((unsigned short)uiRes_R0 < (unsigned short)uiRes_R1)
+    {
+      minsad = (unsigned short)uiRes_R0;
+      dy_minsad = -1;
+      dx_minsad = (uiRes_R0 >> 16) - 1;
+    }
+    else // minsad r1 >= minsad r0
+    {
+      minsad = (unsigned short)uiRes_R1;
+      dy_minsad = 0;
+      dx_minsad = (uiRes_R1 >> 16) - 1;
+    }
+
+    if ((unsigned short)uiRes_R2 < (unsigned short)uiRes_R1)
+    {
+      minsad = (unsigned short)uiRes_R2;
+      dy_minsad = 1;
+      dx_minsad = (uiRes_R2 >> 16) - 1;
+    }
+
+    sad_t cost = minsad + ((penaltyNew * minsad) >> 8);
+    if (cost < workarea.nMinCost)
+    {
+      workarea.bestMV.x += dx_minsad;
+      workarea.bestMV.y += dy_minsad;
+      workarea.nMinCost = cost;
+      workarea.bestMV.sad = minsad;
+    }
+
+  }
+  else if (nSearchParam == 2)
+  {
+    // sp2 here
+    pucRef = (long long*)GetRefBlock(workarea, workarea.bestMV.x - 2, workarea.bestMV.y - 2); // upper left corner
+
+    Sads_block_8x8
+      ymm10_sads_r0 = ymm_block_ress;
+
+    // 2nd row
+    Push_Ref_8x8_row(8)
+      Sads_block_8x8
+      ymm11_sads_r1 = ymm_block_ress;
+
+    // 3rd row
+    Push_Ref_8x8_row(9)
+      Sads_block_8x8
+      ymm12_sads_r2 = ymm_block_ress;
+
+    // 4th row
+    Push_Ref_8x8_row(10)
+      Sads_block_8x8
+      ymm13_sads_r3 = ymm_block_ress;
+
+    // 5th row
+    Push_Ref_8x8_row(11)
+      Sads_block_8x8
+      ymm14_sads_r4 = ymm_block_ress;
+
+    // set high sads, leave only 4,3,2,1,0
+    ymm10_sads_r0 = _mm256_blend_epi16(ymm10_sads_r0, ymm13_all_ones, 224);
+    ymm11_sads_r1 = _mm256_blend_epi16(ymm11_sads_r1, ymm13_all_ones, 224);
+    ymm12_sads_r2 = _mm256_blend_epi16(ymm12_sads_r2, ymm13_all_ones, 224);
+    ymm13_sads_r3 = _mm256_blend_epi16(ymm13_sads_r3, ymm13_all_ones, 224);
+    ymm14_sads_r4 = _mm256_blend_epi16(ymm14_sads_r4, ymm13_all_ones, 224);
+
+    __m128i xmm_res_R0 = _mm_minpos_epu16(_mm256_castsi256_si128(ymm10_sads_r0));
+    __m128i xmm_res_R1 = _mm_minpos_epu16(_mm256_castsi256_si128(ymm11_sads_r1));
+    __m128i xmm_res_R2 = _mm_minpos_epu16(_mm256_castsi256_si128(ymm12_sads_r2));
+    __m128i xmm_res_R3 = _mm_minpos_epu16(_mm256_castsi256_si128(ymm13_sads_r3));
+    __m128i xmm_res_R4 = _mm_minpos_epu16(_mm256_castsi256_si128(ymm14_sads_r4));
+
+    __m128i xmm_res_R0_R4 = _mm256_castsi256_si128(ymm13_all_ones);
+    xmm_res_R0_R4 = _mm_blend_epi16(xmm_res_R0_R4, xmm_res_R0, 1);
+    xmm_res_R0_R4 = _mm_blend_epi16(xmm_res_R0_R4, _mm_slli_si128(xmm_res_R1, 2), 2);
+    xmm_res_R0_R4 = _mm_blend_epi16(xmm_res_R0_R4, _mm_slli_si128(xmm_res_R2, 4), 4);
+    xmm_res_R0_R4 = _mm_blend_epi16(xmm_res_R0_R4, _mm_slli_si128(xmm_res_R3, 6), 8);
+    xmm_res_R0_R4 = _mm_blend_epi16(xmm_res_R0_R4, _mm_slli_si128(xmm_res_R4, 8), 16);
+
+    unsigned int uiRes_R0_R4 = _mm_cvtsi128_si32(_mm_minpos_epu16(xmm_res_R0_R4));
+
+    int dx_minsad, dy_minsad, minsad;
+
+    minsad = (unsigned short)uiRes_R0_R4;
+
+    sad_t cost = minsad + ((penaltyNew * minsad) >> 8);
+    if (cost < workarea.nMinCost)
+    {
+
+      int iRow_minsad = (uiRes_R0_R4 >> 16);
+
+      switch (iRow_minsad)
+      {
+      case 0:
+        dy_minsad = -2;
+        dx_minsad = (_mm_cvtsi128_si32(xmm_res_R0) >> 16) - 2;
+        break;
+
+      case 1:
+        dy_minsad = -1;
+        dx_minsad = (_mm_cvtsi128_si32(xmm_res_R1) >> 16) - 2;
+        break;
+
+      case 2:
+        dy_minsad = 0;
+        dx_minsad = (_mm_cvtsi128_si32(xmm_res_R2) >> 16) - 2;
+        break;
+
+      case 3:
+        dy_minsad = 1;
+        dx_minsad = (_mm_cvtsi128_si32(xmm_res_R3) >> 16) - 2;
+        break;
+
+      case 4:
+        dy_minsad = 2;
+        dx_minsad = (_mm_cvtsi128_si32(xmm_res_R4) >> 16) - 2;
+        break;
+      }
+
+      workarea.bestMV.x += dx_minsad;
+      workarea.bestMV.y += dy_minsad;
+      workarea.nMinCost = cost;
+      workarea.bestMV.sad = minsad;
+
+    }
+  }
+
+  // we store the result
+  vectors[workarea.blkIdx] = workarea.bestMV;
+
+  workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
+  
+  _mm256_zeroupper();
+}
+#endif

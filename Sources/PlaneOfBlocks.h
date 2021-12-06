@@ -401,6 +401,9 @@ private:
   template<typename pixel_t>
   void PseudoEPZSearch_optSO2(WorkingArea& workarea); // full predictors, optSearchOption = 2 set of params
 
+  template<typename pixel_t>
+  void PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea); // full predictors, optSearchOption = 2 set of params, avx2 version of SADs and search
+ 
   /* performs an epz search */
   template<typename pixel_t>
   void PseudoEPZSearch_glob_med_pred(WorkingArea& workarea); // planes >=2 recommended (optPredictorType=1)
