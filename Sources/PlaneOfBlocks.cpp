@@ -5808,8 +5808,29 @@ T& MVVector<T>::operator[](size_t index) // need to add something for 'const' to
   xmm12_Ref4 = _mm_adds_epu16(xmm12_Ref4, xmm14_Ref6); \
   xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm12_Ref4);
 
+// test of AVX2 IsVectorChecked - for future inlining 
+/*MV_FORCEINLINE bool PlaneOfBlocks::IsVectorChecked_avx2(uint32_t xy)
+{
+  const __m256i ymm_shift_4 = _mm256_set_epi32(6, 5, 4, 3, 2, 1, 0, 0);
+
+  __m256i ymm_to_check = _mm256_broadcastd_epi32(_mm_cvtsi32_si128(xy));
+
+  int iCmp_res = _mm256_movemask_epi8(_mm256_cmpeq_epi32(ymm_checked_mv_vectors, ymm_to_check));
+  if (iCmp_res != 0)
+  {
+    return true;
+  }
+
+  // add new xy
+  ymm_checked_mv_vectors = _mm256_permutevar8x32_epi32(ymm_checked_mv_vectors, ymm_shift_4);
+  ymm_checked_mv_vectors = _mm256_blend_epi32(ymm_checked_mv_vectors, ymm_to_check, 1);
+
+}*/
+
+
+
 template<typename pixel_t>
-void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
+void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea) // + predictorType=1
 {
   typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
 
@@ -5846,33 +5867,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
   workarea.bestMV.y = zeroMVfieldShifted.y;
 //    sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, 0, zeroMVfieldShifted.y));
   pucRef = (uint8_t*)GetRefBlock(workarea, 0, zeroMVfieldShifted.y);
-  /*
-  xmm8_Ref0 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 0));
-  xmm9_Ref1 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 1));
-  xmm10_Ref2 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 2));
-  xmm11_Ref3 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 3));
-  xmm12_Ref4 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 4));
-  xmm13_Ref5 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 5));
-  xmm14_Ref6 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 6));
-  xmm15_Ref7 = _mm_loadl_epi64((__m128i*)(pucRef + nRefPitch[0] * 7));
 
-  xmm8_Ref0 = _mm_sad_epu8(xmm8_Ref0, xmm0_Src0);
-  xmm9_Ref1 = _mm_sad_epu8(xmm9_Ref1, xmm1_Src1);
-  xmm10_Ref2 = _mm_sad_epu8(xmm10_Ref2, xmm2_Src2);
-  xmm11_Ref3 = _mm_sad_epu8(xmm11_Ref3, xmm3_Src3);
-  xmm12_Ref4 = _mm_sad_epu8(xmm12_Ref4, xmm4_Src4);
-  xmm13_Ref5 = _mm_sad_epu8(xmm13_Ref5, xmm5_Src5);
-  xmm14_Ref6 = _mm_sad_epu8(xmm14_Ref6, xmm6_Src6);
-  xmm15_Ref7 = _mm_sad_epu8(xmm15_Ref7, xmm7_Src7);
-
-  xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm9_Ref1);
-  xmm10_Ref2 = _mm_adds_epu16(xmm10_Ref2, xmm11_Ref3);
-  xmm12_Ref4 = _mm_adds_epu16(xmm12_Ref4, xmm13_Ref5);
-  xmm14_Ref6 = _mm_adds_epu16(xmm14_Ref6, xmm15_Ref7);
-  xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm10_Ref2);
-  xmm12_Ref4 = _mm_adds_epu16(xmm12_Ref4, xmm14_Ref6);
-  xmm8_Ref0 = _mm_adds_epu16(xmm8_Ref0, xmm12_Ref4);
-*/
   sad_block_8x8
   sad = _mm_cvtsi128_si32(xmm8_Ref0);
 
@@ -5929,6 +5924,7 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
   // compute checks on motion distortion first and skip MV if above cost:
   if (_predictorType == 0) // all predictors, combine PT=0 and PT=1 in one function, some minor performnce penalty ?
   {
+    // MotionDistortion SIMD calculation for all 4 predictors
     __m256i ymm2_yx_predictors = _mm256_set_epi32(workarea.predictors[3].y, workarea.predictors[3].x, workarea.predictors[2].y, workarea.predictors[2].x, \
       workarea.predictors[1].y, workarea.predictors[1].x, workarea.predictors[0].y, workarea.predictors[0].x);
     __m256i ymm3_predictor = _mm256_broadcastq_epi64(_mm_set_epi32(0, 0, workarea.predictor.y, workarea.predictor.x)); // hope movq + vpbroadcast
@@ -6226,5 +6222,5 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea)
 
   workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
 
-  _mm256_zeroupper();
+  _mm256_zeroupper(); // may be not needed ?
 }
