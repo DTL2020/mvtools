@@ -50,7 +50,14 @@
 // right now 5 should be enough (TSchniede)
 #define MAX_PREDICTOR (20)
 
+#define MAX_MULTI_BLOCKS_8x8_AVX2 4
+#define MAX_MULTI_BLOCKS_8x8_AVX512 16
 
+struct VECTOR_XY
+{
+  int x;
+  int y;
+};
 
 class DCTClass;
 class MVClip;
@@ -285,7 +292,9 @@ private:
     const uint8_t* pSrc[3];     // the alignment of this array is important for speed for some reason (cacheline?)
 
     VECTOR bestMV;              /* best vector found so far during the search */
+    VECTOR bestMV_multi[MAX_MULTI_BLOCKS_8x8_AVX512]; // 2.7.46
     sad_t nMinCost;               /* minimum cost ( sad + mv cost ) found so far */
+    sad_t nMinCost_multi[MAX_MULTI_BLOCKS_8x8_AVX512]; // 2.7.46
     VECTOR predictor;           /* best predictor for the current vector */
     VECTOR predictors[MAX_PREDICTOR];   /* set of predictors for the current block */
 
@@ -428,9 +437,13 @@ private:
   template<typename pixel_t>
   void PseudoEPZSearch_optSO2_no_refine(WorkingArea& workarea); // no predictors, optSearchOption = 2 optPredictorType = 3 set of params
 
-   /* performs an epz search */
+  /* performs an epz search */
   template<typename pixel_t>
-  void PseudoEPZSearch_optSO3_no_pred(WorkingArea& workarea, int* pBlkData); // no predictors, planes = 1 recommended, optSearchOption = 3 set of params
+  void PseudoEPZSearch_optSO3_no_pred(WorkingArea& workarea, int* pBlkData); // no predictors, multi-block search AVX2
+
+  /* performs an epz search */
+  template<typename pixel_t>
+  void PseudoEPZSearch_optSO3_glob_pred_avx2(WorkingArea& workarea, int* pBlkData); // zero and global predictor, multi-block search AVX2
 
   //	void PhaseShiftSearch(int vx, int vy);
 
@@ -455,6 +468,7 @@ private:
   void ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_4Blks_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy, int* pBlkData);
+  void ExhaustiveSearch8x8_uint8_4Blks_Z_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy, int* pBlkData); // + zero pos
    
   // 8x8 exa search radius 2
   void ExhaustiveSearch8x8_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
@@ -539,6 +553,7 @@ private:
   MV_FORCEINLINE static unsigned int SquareDifferenceNorm(const VECTOR& v1, const int v2x, const int v2y);
   MV_FORCEINLINE bool IsInFrame(int i);
   MV_FORCEINLINE bool IsVectorChecked(uint64_t xy); // 2.7.46
+  MV_FORCEINLINE bool IsVectorsCoherent(VECTOR_XY* vectors_coh_check, int cnt);
 
   template<typename pixel_t>
   void Refine(WorkingArea &workarea);

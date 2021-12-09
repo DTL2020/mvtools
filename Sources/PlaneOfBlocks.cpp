@@ -2168,12 +2168,30 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_no_refine(WorkingArea& workarea)
 }
 
 
+MV_FORCEINLINE bool PlaneOfBlocks::IsVectorsCoherent(VECTOR_XY* vectors_coh_check, int cnt)
+{
+  VECTOR_XY v1;
+
+  v1.x = vectors_coh_check[0].x;
+  v1.y = vectors_coh_check[0].y;
+
+  for (int i = 1; i < cnt; i++)
+  {
+    if ((vectors_coh_check[i].x != v1.x) || (vectors_coh_check[i].y != v1.y))
+      return false;
+  }
+
+  return true;
+}
+
 template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch_optSO3_no_pred(WorkingArea& workarea, int* pBlkData)
 {
   typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
 
   sad_t sad;
+
+  VECTOR_XY vectors_coh_check[MAX_MULTI_BLOCKS_8x8_AVX2];
 
   if (smallestPlane)
   {
@@ -2186,20 +2204,55 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO3_no_pred(WorkingArea& workarea, int* p
     sad = workarea.predictor.sad;
     workarea.nMinCost = (sad * 2) + ((penaltyNew * (safe_sad_t)sad) >> 8); // *2 - typically sad from previous level is lower about 2 times. depend on noise/spectrum ?
   }
-  
-  // then, we refine, 
-  // sp = 1 for level=0 (finest) sp = 2 for other levels
-//  (this->*ExhaustiveSearch8x8_avx2)(workarea, workarea.bestMV.x, workarea.bestMV.y);
-  // level 0 only here
-  ExhaustiveSearch8x8_uint8_4Blks_np1_sp1_avx2(workarea, workarea.bestMV.x, workarea.bestMV.y, pBlkData);
 
+  // check 4 blocks prev level predictor coherency
+  vectors_coh_check[0].x = workarea.predictor.x;
+  vectors_coh_check[0].y = workarea.predictor.y;
+
+  for (int i = 1; i < MAX_MULTI_BLOCKS_8x8_AVX2; i++)
+  {
+    VECTOR predictor_next = ClipMV_SO2(workarea, vectors[workarea.blkIdx + i]); // need update dy/dx max min to 4 blocks advance ?
+    vectors_coh_check[i].x = predictor_next.x;
+    vectors_coh_check[i].y = predictor_next.y;
+  }
+  
+  if (IsVectorsCoherent(vectors_coh_check, MAX_MULTI_BLOCKS_8x8_AVX2))
+  {
+    // level 0 only here
+    ExhaustiveSearch8x8_uint8_4Blks_Z_np1_sp1_avx2(workarea, workarea.bestMV.x, workarea.bestMV.y, pBlkData); // + center (zero shift pos)
+  }
+  else // predictors for next 3 blocks not coherent - perform standart per block search
+  {
+    ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2(workarea, workarea.bestMV.x, workarea.bestMV.y);
+
+    for (int iBlkNum = 1; iBlkNum < 4; iBlkNum++)
+    {
+      if (smallestPlane)
+      {
+        workarea.bestMV = zeroMV;
+        workarea.nMinCost = verybigSAD + 1;
+      }
+      else
+      {
+        workarea.bestMV = ClipMV_SO2(workarea, vectors[workarea.blkIdx + iBlkNum]);
+        sad = workarea.predictor.sad;
+        workarea.nMinCost = (sad * 2) + ((penaltyNew * (safe_sad_t)sad) >> 8); // *2 - typically sad from previous level is lower about 2 times. depend on noise/spectrum ?
+      }
+
+      ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2(workarea, workarea.bestMV.x, workarea.bestMV.y);
+
+      pBlkData[(workarea.blkx + iBlkNum) * N_PER_BLOCK + 0] = workarea.bestMV.x;
+      pBlkData[(workarea.blkx + iBlkNum) * N_PER_BLOCK + 1] = workarea.bestMV.y;
+      pBlkData[(workarea.blkx + iBlkNum) * N_PER_BLOCK + 2] = workarea.bestMV.sad;
+
+    }
+  }
   // we store the result
-//  vectors[workarea.blkIdx] = workarea.bestMV;
+//  vectors[workarea.blkIdx] = workarea.bestMV; - no need to store back because no analyse local level predictors in this type of search
   // stored internally in Exa_search()
 
   workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
 }
-
 
 template<typename pixel_t>
 void PlaneOfBlocks::DiamondSearch(WorkingArea &workarea, int length)
@@ -4615,7 +4668,7 @@ void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)
 template<typename pixel_t>
 void	PlaneOfBlocks::search_mv_slice_SO3(Slicer::TaskData& td) // multi-blocks search finally
 {
-#define NUM_BLOCKS_PER_SEARCH 4
+//#define NUM_BLOCKS_PER_SEARCH 4
 
   assert(&td != 0);
 
@@ -4692,11 +4745,11 @@ void	PlaneOfBlocks::search_mv_slice_SO3(Slicer::TaskData& td) // multi-blocks se
       workarea.x[0] = iY_H_Padding /*pSrcFrame->GetPlane(YPLANE)->GetHPadding()*/ + nBlkSizeX_Ovr[0] * (nBlkX - 1);
     }
 
-//    if (nSearchParam == 2) // std search
-    if (nSearchParam == 1) // 4bl search
+    if (nSearchParam == 2) // std search
+//    if (nSearchParam == 1) // 4bl search
     {
-//      for (int iblkx = 0; iblkx < nBlkX; iblkx++)
-      for (int iblkx = 0; iblkx < nBlkX; iblkx += NUM_BLOCKS_PER_SEARCH)
+      for (int iblkx = 0; iblkx < nBlkX; iblkx++)
+//      for (int iblkx = 0; iblkx < nBlkX; iblkx += MAX_MULTI_BLOCKS_8x8_AVX2)
       {
         bInterframeH = ((iblkx > 0) && (iblkx < (nBlkX - 1)));
 
@@ -4769,8 +4822,8 @@ void	PlaneOfBlocks::search_mv_slice_SO3(Slicer::TaskData& td) // multi-blocks se
         workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
         workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);*/
 
-        //        workarea.nDxMax = nPel * (iY_Ext_Width - workarea.x[0] - nBlkSizeX - iY_H_Padding + nHPaddingScaled);
-        workarea.nDxMax = nPel * (iY_Ext_Width - workarea.x[0] - (nBlkSizeX * NUM_BLOCKS_PER_SEARCH) - iY_H_Padding + nHPaddingScaled);
+        workarea.nDxMax = nPel * (iY_Ext_Width - workarea.x[0] - nBlkSizeX - iY_H_Padding + nHPaddingScaled);
+//        workarea.nDxMax = nPel * (iY_Ext_Width - workarea.x[0] - (nBlkSizeX * MAX_MULTI_BLOCKS_8x8_AVX2) - iY_H_Padding + nHPaddingScaled);
         workarea.nDyMax = nPel * (iY_Ext_Height - workarea.y[0] - nBlkSizeY - iY_V_Padding + nVPaddingScaled - nSearchParam);
         workarea.nDxMin = -nPel * (workarea.x[0] - iY_H_Padding + nHPaddingScaled);
         workarea.nDyMin = -nPel * (workarea.y[0] - iY_V_Padding + nVPaddingScaled - nSearchParam); // if (- nSearchParam) not helps - need to think more.
@@ -4781,17 +4834,21 @@ void	PlaneOfBlocks::search_mv_slice_SO3(Slicer::TaskData& td) // multi-blocks se
         workarea.predictors[4] = ClipMV_SO2(workarea, zeroMV);
 
         workarea.bIntraframe = bInterframeH && bInterframeV;
-/*
+
         if (_predictorType == 0)
           PseudoEPZSearch_optSO2<pixel_t>(workarea); // all predictors (original)
         else if (_predictorType == 1)
           PseudoEPZSearch_optSO2_glob_med_pred<pixel_t>(workarea);
         else // _predictorType == 2
           PseudoEPZSearch_optSO2_no_pred<pixel_t>(workarea);
-        //      (this->*Sel_Pseudo_EPZ_search_SO2)(workarea); // still not works - maybe possible to fix ?
-        */
-        PseudoEPZSearch_optSO3_no_pred<pixel_t>(workarea, pBlkData);
-              // workarea.bestMV = zeroMV; // debug
+
+        
+/*        if (_predictorType == 1)
+          PseudoEPZSearch_optSO3_glob_pred_avx2<pixel_t>(workarea, pBlkData);
+        else // PT=2
+          PseudoEPZSearch_optSO3_no_pred<pixel_t>(workarea, pBlkData);
+          */
+        // workarea.bestMV = zeroMV; // debug
 
               /* write the results */
  /*       pBlkData[workarea.blkx * N_PER_BLOCK + 0] = workarea.bestMV.x;
@@ -4825,24 +4882,24 @@ void	PlaneOfBlocks::search_mv_slice_SO3(Slicer::TaskData& td) // multi-blocks se
         }
 
         /* increment indexes & pointers */
-/*        if (iblkx < nBlkX - 1)
+        if (iblkx < nBlkX - 1)
         {
           workarea.x[0] += nBlkSizeX_Ovr[0] * workarea.blkScanDir;
           workarea.x[1] += nBlkSizeX_Ovr[1] * workarea.blkScanDir;
           workarea.x[2] += nBlkSizeX_Ovr[2] * workarea.blkScanDir;
-        }*/
-        if (iblkx < nBlkX - 1)
-        {
-          workarea.x[0] += NUM_BLOCKS_PER_SEARCH * nBlkSizeX_Ovr[0] * workarea.blkScanDir;
-          workarea.x[1] += NUM_BLOCKS_PER_SEARCH * nBlkSizeX_Ovr[1] * workarea.blkScanDir;
-          workarea.x[2] += NUM_BLOCKS_PER_SEARCH * nBlkSizeX_Ovr[2] * workarea.blkScanDir;
         }
+/*        if (iblkx < nBlkX - 1)
+        {
+          workarea.x[0] += MAX_MULTI_BLOCKS_8x8_AVX2 * nBlkSizeX_Ovr[0] * workarea.blkScanDir;
+          workarea.x[1] += MAX_MULTI_BLOCKS_8x8_AVX2 * nBlkSizeX_Ovr[1] * workarea.blkScanDir;
+          workarea.x[2] += MAX_MULTI_BLOCKS_8x8_AVX2 * nBlkSizeX_Ovr[2] * workarea.blkScanDir;
+        } */
       }	// for iblkx
     } // if nSearchparam==2 - level 1 and more
     else // if nsearchparam == 1 - level 0, 4blocks search
     {
 
-      for (int iblkx = 0; iblkx < nBlkX; iblkx += NUM_BLOCKS_PER_SEARCH)
+      for (int iblkx = 0; iblkx < nBlkX; iblkx += MAX_MULTI_BLOCKS_8x8_AVX2)
       {
         bInterframeH = ((iblkx > 0) && (iblkx < (nBlkX - 1)));
 
@@ -4914,7 +4971,7 @@ void	PlaneOfBlocks::search_mv_slice_SO3(Slicer::TaskData& td) // multi-blocks se
         workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
         workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
         workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);*/
-        workarea.nDxMax = nPel * (iY_Ext_Width - workarea.x[0] - (nBlkSizeX * NUM_BLOCKS_PER_SEARCH) - iY_H_Padding + nHPaddingScaled);
+        workarea.nDxMax = nPel * (iY_Ext_Width - workarea.x[0] - (nBlkSizeX * MAX_MULTI_BLOCKS_8x8_AVX2) - iY_H_Padding + nHPaddingScaled);
         workarea.nDyMax = nPel * (iY_Ext_Height - workarea.y[0] - nBlkSizeY - iY_V_Padding + nVPaddingScaled - nSearchParam);
         workarea.nDxMin = -nPel * (workarea.x[0] - iY_H_Padding + nHPaddingScaled);
         workarea.nDyMin = -nPel * (workarea.y[0] - iY_V_Padding + nVPaddingScaled - nSearchParam); // if (- nSearchParam) not helps - need to think more.
@@ -4933,8 +4990,10 @@ void	PlaneOfBlocks::search_mv_slice_SO3(Slicer::TaskData& td) // multi-blocks se
         else // _predictorType == 2
           PseudoEPZSearch_optSO2_no_pred<pixel_t>(workarea);
         //      (this->*Sel_Pseudo_EPZ_search_SO2)(workarea); // still not works - maybe possible to fix ? */
-        // only no-predictors currently supported
-        PseudoEPZSearch_optSO3_no_pred<pixel_t>(workarea, pBlkData);
+        if (_predictorType == 1)
+          PseudoEPZSearch_optSO3_glob_pred_avx2<pixel_t>(workarea, pBlkData);
+        else // PT=2
+          PseudoEPZSearch_optSO3_no_pred<pixel_t>(workarea, pBlkData);
 
         // workarea.bestMV = zeroMV; // debug
 
@@ -4974,13 +5033,12 @@ void	PlaneOfBlocks::search_mv_slice_SO3(Slicer::TaskData& td) // multi-blocks se
         /* increment indexes & pointers */
         if (iblkx < nBlkX - 1)
         {
-          workarea.x[0] += NUM_BLOCKS_PER_SEARCH * nBlkSizeX_Ovr[0] * workarea.blkScanDir;
-          workarea.x[1] += NUM_BLOCKS_PER_SEARCH * nBlkSizeX_Ovr[1] * workarea.blkScanDir;
-          workarea.x[2] += NUM_BLOCKS_PER_SEARCH * nBlkSizeX_Ovr[2] * workarea.blkScanDir;
+          workarea.x[0] += MAX_MULTI_BLOCKS_8x8_AVX2 * nBlkSizeX_Ovr[0] * workarea.blkScanDir;
+          workarea.x[1] += MAX_MULTI_BLOCKS_8x8_AVX2 * nBlkSizeX_Ovr[1] * workarea.blkScanDir;
+          workarea.x[2] += MAX_MULTI_BLOCKS_8x8_AVX2 * nBlkSizeX_Ovr[2] * workarea.blkScanDir;
         }
       }	// for iblkx
     }
- 
 
     pBlkData += nBlkX * N_PER_BLOCK;
 
@@ -6223,4 +6281,292 @@ void PlaneOfBlocks::PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea) // + 
   workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
 
   _mm256_zeroupper(); // may be not needed ?
+}
+
+template<typename pixel_t>
+void PlaneOfBlocks::PseudoEPZSearch_optSO3_glob_pred_avx2(WorkingArea& workarea, int* pBlkData)
+{
+  typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
+  sad_t sad, cost;
+  VECTOR_XY vectors_coh_check[MAX_MULTI_BLOCKS_8x8_AVX2];
+
+  __m256i ymm8_r1, ymm9_r2, ymm10_r3, ymm11_r4, ymm12_r5, ymm13_r6, ymm14_r7, ymm15_r8;
+
+#define Sad4blocks_8x8 \
+  ymm8_r1 = _mm256_sad_epu8(ymm0_src_r1, *(__m256i*)(pucRef + nRefPitch[0] * 0)); \
+  ymm9_r2 = _mm256_sad_epu8(ymm1_src_r2, *(__m256i*)(pucRef + nRefPitch[0] * 1)); \
+  ymm10_r3 = _mm256_sad_epu8(ymm2_src_r3, *(__m256i*)(pucRef + nRefPitch[0] * 2)); \
+  ymm11_r4 = _mm256_sad_epu8(ymm3_src_r4, *(__m256i*)(pucRef + nRefPitch[0] * 3)); \
+  ymm12_r5 = _mm256_sad_epu8(ymm4_src_r5, *(__m256i*)(pucRef + nRefPitch[0] * 4)); \
+  ymm13_r6 = _mm256_sad_epu8(ymm5_src_r6, *(__m256i*)(pucRef + nRefPitch[0] * 5)); \
+  ymm14_r7 = _mm256_sad_epu8(ymm6_src_r7, *(__m256i*)(pucRef + nRefPitch[0] * 6)); \
+  ymm15_r8 = _mm256_sad_epu8(ymm7_src_r8, *(__m256i*)(pucRef + nRefPitch[0] * 7)); \
+\
+  ymm8_r1 = _mm256_adds_epu16(ymm8_r1, ymm9_r2); \
+  ymm10_r3 = _mm256_adds_epu16(ymm10_r3, ymm11_r4); \
+  ymm12_r5 = _mm256_adds_epu16(ymm12_r5, ymm13_r6); \
+  ymm14_r7 = _mm256_adds_epu16(ymm14_r7, ymm15_r8); \
+ \
+  ymm8_r1 = _mm256_adds_epu16(ymm8_r1, ymm10_r3); \
+  ymm12_r5 = _mm256_adds_epu16(ymm12_r5, ymm14_r7); \
+\
+  ymm8_r1 = _mm256_adds_epu16(ymm8_r1, ymm12_r5);
+
+  // load src blocks
+  const uint8_t* pucCurr = (uint8_t*)workarea.pSrc[0];
+
+  uint8_t* pucRef;
+  // 4 blocks at once proc, pel=1
+  __m256i ymm0_src_r1 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 0));
+  __m256i	ymm1_src_r2 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 1));
+  __m256i	ymm2_src_r3 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 2));
+  __m256i	ymm3_src_r4 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 3));
+  __m256i	ymm4_src_r5 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 4));
+  __m256i	ymm5_src_r6 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 5));
+  __m256i	ymm6_src_r7 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 6));
+  __m256i	ymm7_src_r8 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 7));
+
+  // check zero and global predictor as 4block AVX2 proc because they are guaranteed to be coherent
+  pucRef = (uint8_t*)GetRefBlock(workarea, 0, 0);
+
+  for (int i = 0; i < MAX_MULTI_BLOCKS_8x8_AVX2; i++)
+  {
+    workarea.bestMV_multi[i] = zeroMV;
+  }
+
+  Sad4blocks_8x8 // 4 results in ymm8_r1
+  sad = _mm_cvtsi128_si32(_mm256_castsi256_si128(ymm8_r1));
+  workarea.bestMV_multi[0].sad = sad;
+  workarea.nMinCost_multi[0] = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2*/
+
+  sad = _mm256_extract_epi32(ymm8_r1, 2);
+  workarea.bestMV_multi[1].sad = sad;
+  workarea.nMinCost_multi[1] = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2*/
+
+  sad = _mm256_extract_epi32(ymm8_r1, 4);
+  workarea.bestMV_multi[2].sad = sad;
+  workarea.nMinCost_multi[2] = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2*/
+
+  sad = _mm256_extract_epi32(ymm8_r1, 6);
+  workarea.bestMV_multi[3].sad = sad;
+  workarea.nMinCost_multi[3] = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2*/
+
+  iNumCheckedVectors = 0;
+  checked_mv_vectors[iNumCheckedVectors] = 0;
+  iNumCheckedVectors++;
+
+  workarea.globalMVPredictor = ClipMV_SO2(workarea, workarea.globalMVPredictor);
+  if (!IsVectorChecked((uint64_t)workarea.globalMVPredictor.x | ((uint64_t)workarea.globalMVPredictor.y << 32)))
+  {
+    pucRef = (uint8_t*)GetRefBlock(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y);
+
+    Sad4blocks_8x8 // 4 results in ymm8_r1
+    sad = _mm_cvtsi128_si32(_mm256_castsi256_si128(ymm8_r1));
+    cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
+
+    if (cost < workarea.nMinCost_multi[0])
+    {
+      workarea.bestMV_multi[0].x = workarea.globalMVPredictor.x;
+      workarea.bestMV_multi[0].y = workarea.globalMVPredictor.y;
+      workarea.bestMV_multi[0].sad = sad;
+      workarea.nMinCost_multi[0] = cost;
+    }
+
+    sad = _mm256_extract_epi32(ymm8_r1, 2);
+    cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
+
+    if (cost < workarea.nMinCost_multi[1])
+    {
+      workarea.bestMV_multi[1].x = workarea.globalMVPredictor.x;
+      workarea.bestMV_multi[1].y = workarea.globalMVPredictor.y;
+      workarea.bestMV_multi[1].sad = sad;
+      workarea.nMinCost_multi[1] = cost;
+    }
+
+    sad = _mm256_extract_epi32(ymm8_r1, 4);
+    cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
+
+    if (cost < workarea.nMinCost_multi[2])
+    {
+      workarea.bestMV_multi[2].x = workarea.globalMVPredictor.x;
+      workarea.bestMV_multi[2].y = workarea.globalMVPredictor.y;
+      workarea.bestMV_multi[2].sad = sad;
+      workarea.nMinCost_multi[2] = cost;
+    }
+
+    sad = _mm256_extract_epi32(ymm8_r1, 6);
+    cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
+
+    if (cost < workarea.nMinCost_multi[3])
+    {
+      workarea.bestMV_multi[3].x = workarea.globalMVPredictor.x;
+      workarea.bestMV_multi[3].y = workarea.globalMVPredictor.y;
+      workarea.bestMV_multi[3].sad = sad;
+      workarea.nMinCost_multi[3] = cost;
+    }
+  }
+
+  // check 4 blocks prev level predictor coherency
+  vectors_coh_check[0].x = workarea.predictor.x;
+  vectors_coh_check[0].y = workarea.predictor.y;
+
+  for (int i = 1; i < MAX_MULTI_BLOCKS_8x8_AVX2; i++)
+  {
+    VECTOR predictor_next = ClipMV_SO2(workarea, vectors[workarea.blkIdx + i]); // need update dy/dx max min to 4 blocks advance ?
+    vectors_coh_check[i].x = predictor_next.x;
+    vectors_coh_check[i].y = predictor_next.y;
+  }
+
+  if (IsVectorsCoherent(vectors_coh_check, MAX_MULTI_BLOCKS_8x8_AVX2))
+  {
+    // 4 blocks predictors of previous level are coherent - try to check if it is better zero and global checked positions
+    // with 4 blocks check
+    pucRef = (uint8_t*)GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y);
+
+    Sad4blocks_8x8 // 4 results in ymm8_r1
+    cost = _mm_cvtsi128_si32(_mm256_castsi256_si128(ymm8_r1));
+
+    if (cost < workarea.nMinCost_multi[0])
+    {
+      workarea.bestMV_multi[0].x = workarea.predictor.x;
+      workarea.bestMV_multi[0].y = workarea.predictor.y;
+      workarea.bestMV_multi[0].sad = cost;
+      workarea.nMinCost_multi[0] = cost;
+    }
+
+    cost = _mm256_extract_epi32(ymm8_r1, 2);
+    if (cost < workarea.nMinCost_multi[1])
+    {
+      workarea.bestMV_multi[1].x = workarea.predictor.x;
+      workarea.bestMV_multi[1].y = workarea.predictor.y;
+      workarea.bestMV_multi[1].sad = cost;
+      workarea.nMinCost_multi[1] = cost;
+    }
+
+    cost = _mm256_extract_epi32(ymm8_r1, 4);
+    if (cost < workarea.nMinCost_multi[2])
+    {
+      workarea.bestMV_multi[2].x = workarea.predictor.x;
+      workarea.bestMV_multi[2].y = workarea.predictor.y;
+      workarea.bestMV_multi[2].sad = cost;
+      workarea.nMinCost_multi[2] = cost;
+    }
+
+    cost = _mm256_extract_epi32(ymm8_r1, 6);
+    if (cost < workarea.nMinCost_multi[3])
+    {
+      workarea.bestMV_multi[3].x = workarea.predictor.x;
+      workarea.bestMV_multi[3].y = workarea.predictor.y;
+      workarea.bestMV_multi[3].sad = cost;
+      workarea.nMinCost_multi[3] = cost;
+    }
+
+    // check coherency of best checked vectors again
+    for (int i = 0; i < MAX_MULTI_BLOCKS_8x8_AVX2; i++)
+    {
+      vectors_coh_check[i].x = workarea.bestMV_multi[i].x;
+      vectors_coh_check[i].y = workarea.bestMV_multi[i].y;
+    }
+
+    if (IsVectorsCoherent(vectors_coh_check, MAX_MULTI_BLOCKS_8x8_AVX2))
+    {
+      workarea.bestMV.sad = workarea.bestMV_multi[0].sad;
+      pBlkData[(workarea.blkx + 1) * N_PER_BLOCK + 2] = workarea.bestMV_multi[1].sad;
+      pBlkData[(workarea.blkx + 2) * N_PER_BLOCK + 2] = workarea.bestMV_multi[2].sad;
+      pBlkData[(workarea.blkx + 3) * N_PER_BLOCK + 2] = workarea.bestMV_multi[3].sad;
+
+      ExhaustiveSearch8x8_uint8_4Blks_np1_sp1_avx2(workarea, workarea.bestMV_multi[0].x, workarea.bestMV_multi[0].y, pBlkData);
+    }
+    else // predictors cheking results are not coherent
+    {
+      for (int iBlkNum = 0; iBlkNum < MAX_MULTI_BLOCKS_8x8_AVX2; iBlkNum++)
+      {
+        workarea.bestMV.x = workarea.bestMV_multi[iBlkNum].x;
+        workarea.bestMV.y = workarea.bestMV_multi[iBlkNum].y;
+        workarea.bestMV.sad = workarea.bestMV_multi[iBlkNum].sad;
+        workarea.nMinCost = workarea.nMinCost_multi[iBlkNum];
+
+        ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2(workarea, workarea.bestMV_multi[iBlkNum].x, workarea.bestMV_multi[iBlkNum].y);
+
+        pBlkData[(workarea.blkx + iBlkNum) * N_PER_BLOCK + 0] = workarea.bestMV.x;
+        pBlkData[(workarea.blkx + iBlkNum) * N_PER_BLOCK + 1] = workarea.bestMV.y;
+        pBlkData[(workarea.blkx + iBlkNum) * N_PER_BLOCK + 2] = workarea.bestMV.sad;
+
+        workarea.pSrc[0] += nSrcPitch[0]; // advance src block pointer
+      }
+    }
+
+  }
+  else // predictors for next 3 blocks not coherent - try to check predictors
+  {
+    // using already checked zero and global results
+
+    // first block
+    // check first predictor
+    cost = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[0]); // may be AVX2 sad with loaded src??
+
+    if (cost < workarea.nMinCost_multi[0])
+    {
+      workarea.bestMV_multi[0].x = workarea.predictor.x;
+      workarea.bestMV_multi[0].y = workarea.predictor.y;
+      workarea.bestMV_multi[0].sad = cost;
+      workarea.nMinCost_multi[0] = cost;
+    }
+
+    for (int iBlkNum = 1; iBlkNum < MAX_MULTI_BLOCKS_8x8_AVX2; iBlkNum++)
+    {
+      VECTOR predictor_next = ClipMV_SO2(workarea, vectors[workarea.blkIdx + iBlkNum]);
+      cost = SAD(workarea.pSrc[0] + nSrcPitch[0] * iBlkNum, nSrcPitch[0], GetRefBlock(workarea, predictor_next.x, predictor_next.y), nRefPitch[0]); // may be AVX2 sad with loaded src ? ?
+
+      if (cost < workarea.nMinCost_multi[iBlkNum])
+      {
+        workarea.bestMV_multi[iBlkNum].x = predictor_next.x;
+        workarea.bestMV_multi[iBlkNum].y = predictor_next.y;
+        workarea.bestMV_multi[iBlkNum].sad = cost;
+        workarea.nMinCost_multi[iBlkNum] = cost;
+      }
+
+    }
+
+    // check coherency of best checked vectors again
+    for (int i = 0; i < MAX_MULTI_BLOCKS_8x8_AVX2; i++)
+    {
+      vectors_coh_check[i].x = workarea.bestMV_multi[i].x;
+      vectors_coh_check[i].y = workarea.bestMV_multi[i].y;
+    }
+
+    if (IsVectorsCoherent(vectors_coh_check, MAX_MULTI_BLOCKS_8x8_AVX2))
+    {
+      workarea.bestMV.sad = workarea.bestMV_multi[0].sad;
+      pBlkData[(workarea.blkx + 1) * N_PER_BLOCK + 2] = workarea.bestMV_multi[1].sad;
+      pBlkData[(workarea.blkx + 2) * N_PER_BLOCK + 2] = workarea.bestMV_multi[2].sad;
+      pBlkData[(workarea.blkx + 3) * N_PER_BLOCK + 2] = workarea.bestMV_multi[3].sad;
+
+      ExhaustiveSearch8x8_uint8_4Blks_np1_sp1_avx2(workarea, workarea.bestMV_multi[0].x, workarea.bestMV_multi[0].y, pBlkData); // reuse loaded ref ?
+
+    }
+    else
+    {
+      for (int iBlkNum = 0; iBlkNum < MAX_MULTI_BLOCKS_8x8_AVX2; iBlkNum++)
+      {
+        workarea.bestMV.x = workarea.bestMV_multi[iBlkNum].x;
+        workarea.bestMV.y = workarea.bestMV_multi[iBlkNum].y;
+        workarea.bestMV.sad = workarea.bestMV_multi[iBlkNum].sad;
+        workarea.nMinCost = workarea.nMinCost_multi[iBlkNum];
+
+        ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2(workarea, workarea.bestMV_multi[iBlkNum].x, workarea.bestMV_multi[iBlkNum].y);
+
+        pBlkData[(workarea.blkx + iBlkNum) * N_PER_BLOCK + 0] = workarea.bestMV.x;
+        pBlkData[(workarea.blkx + iBlkNum) * N_PER_BLOCK + 1] = workarea.bestMV.y;
+        pBlkData[(workarea.blkx + iBlkNum) * N_PER_BLOCK + 2] = workarea.bestMV.sad;
+
+        workarea.pSrc[0] += nSrcPitch[0]; // advance src block pointer
+      }
+    }
+  }
+  // we store the result
+//  vectors[workarea.blkIdx] = workarea.bestMV; - no need to store back because no analyse local level predictors in this type of search
+  // stored internally in Exa_search()
+
+  workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
 }
