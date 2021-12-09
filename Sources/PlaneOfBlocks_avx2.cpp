@@ -1552,19 +1552,16 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp2_avx2(WorkingArea& work
 
 }
 
-void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_4Blks_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy, int* pBlkData)
-{
-
 #define SAD_4blocks8x8 /*AVX2*/\
 /* calc sads with ref */ \
-ymm8_r1 = _mm256_sad_epu8(ymm0_src_r1, *(__m256i*)(pucRef + nRefPitch[0] * (y + 0) + x)); \
-ymm9_r2 = _mm256_sad_epu8(ymm1_src_r2, *(__m256i*)(pucRef + nRefPitch[0] * (y + 1) + x)); \
-ymm10_r3 = _mm256_sad_epu8(ymm2_src_r3, *(__m256i*)(pucRef + nRefPitch[0] * (y + 2) + x)); \
-ymm11_r4 = _mm256_sad_epu8(ymm3_src_r4, *(__m256i*)(pucRef + nRefPitch[0] * (y + 3) + x)); \
-ymm12_r5 = _mm256_sad_epu8(ymm4_src_r5, *(__m256i*)(pucRef + nRefPitch[0] * (y + 4) + x)); \
-ymm13_r6 = _mm256_sad_epu8(ymm5_src_r6, *(__m256i*)(pucRef + nRefPitch[0] * (y + 5) + x)); \
-ymm14_r7 = _mm256_sad_epu8(ymm6_src_r7, *(__m256i*)(pucRef + nRefPitch[0] * (y + 6) + x)); \
-ymm15_r8 = _mm256_sad_epu8(ymm7_src_r8, *(__m256i*)(pucRef + nRefPitch[0] * (y + 7) + x)); \
+ymm8_r1 = _mm256_sad_epu8(workarea.ymm0_src_r1, *(__m256i*)(pucRef + nRefPitch[0] * (y + 0) + x)); \
+ymm9_r2 = _mm256_sad_epu8(workarea.ymm1_src_r2, *(__m256i*)(pucRef + nRefPitch[0] * (y + 1) + x)); \
+ymm10_r3 = _mm256_sad_epu8(workarea.ymm2_src_r3, *(__m256i*)(pucRef + nRefPitch[0] * (y + 2) + x)); \
+ymm11_r4 = _mm256_sad_epu8(workarea.ymm3_src_r4, *(__m256i*)(pucRef + nRefPitch[0] * (y + 3) + x)); \
+ymm12_r5 = _mm256_sad_epu8(workarea.ymm4_src_r5, *(__m256i*)(pucRef + nRefPitch[0] * (y + 4) + x)); \
+ymm13_r6 = _mm256_sad_epu8(workarea.ymm5_src_r6, *(__m256i*)(pucRef + nRefPitch[0] * (y + 5) + x)); \
+ymm14_r7 = _mm256_sad_epu8(workarea.ymm6_src_r7, *(__m256i*)(pucRef + nRefPitch[0] * (y + 6) + x)); \
+ymm15_r8 = _mm256_sad_epu8(workarea.ymm7_src_r8, *(__m256i*)(pucRef + nRefPitch[0] * (y + 7) + x)); \
 \
 ymm8_r1 = _mm256_adds_epu16(ymm8_r1, ymm9_r2); \
 ymm10_r3 = _mm256_adds_epu16(ymm10_r3, ymm11_r4); \
@@ -1578,9 +1575,24 @@ ymm8_r1 = _mm256_adds_epu16(ymm8_r1, ymm12_r5);\
 \
 ymm8_r1 = _mm256_slli_epi64(ymm8_r1, 48);
 
+void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_4Blks_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy, int* pBlkData)
+{
+
+  /*
+ymm8_r1 = _mm256_sad_epu8(ymm0_src_r1, *(__m256i*)(pucRef + nRefPitch[0] * (y + 0) + x)); \
+ymm9_r2 = _mm256_sad_epu8(ymm1_src_r2, *(__m256i*)(pucRef + nRefPitch[0] * (y + 1) + x)); \
+ymm10_r3 = _mm256_sad_epu8(ymm2_src_r3, *(__m256i*)(pucRef + nRefPitch[0] * (y + 2) + x)); \
+ymm11_r4 = _mm256_sad_epu8(ymm3_src_r4, *(__m256i*)(pucRef + nRefPitch[0] * (y + 3) + x)); \
+ymm12_r5 = _mm256_sad_epu8(ymm4_src_r5, *(__m256i*)(pucRef + nRefPitch[0] * (y + 4) + x)); \
+ymm13_r6 = _mm256_sad_epu8(ymm5_src_r6, *(__m256i*)(pucRef + nRefPitch[0] * (y + 5) + x)); \
+ymm14_r7 = _mm256_sad_epu8(ymm6_src_r7, *(__m256i*)(pucRef + nRefPitch[0] * (y + 6) + x)); \
+ymm15_r8 = _mm256_sad_epu8(ymm7_src_r8, *(__m256i*)(pucRef + nRefPitch[0] * (y + 7) + x)); \
+
+  */
+
   const uint8_t* pucRef = GetRefBlock(workarea, mvx - 1, mvy - 1); // upper left corner
   const uint8_t* pucCurr = workarea.pSrc[0];
-
+/*
   // 4 blocks at once proc, pel=1
   __m256i ymm0_src_r1 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 0));
   __m256i	ymm1_src_r2 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 1));
@@ -1590,7 +1602,7 @@ ymm8_r1 = _mm256_slli_epi64(ymm8_r1, 48);
   __m256i	ymm5_src_r6 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 5));
   __m256i	ymm6_src_r7 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 6));
   __m256i	ymm7_src_r8 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 7));
-
+  */
   __m256i ymm8_r1, ymm9_r2, ymm10_r3, ymm11_r4, ymm12_r5, ymm13_r6, ymm14_r7, ymm15_r8;
 
   int x, y;
@@ -1762,8 +1774,8 @@ ymm8_r1 = _mm256_slli_epi64(ymm8_r1, 48);
 void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_4Blks_Z_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy, int* pBlkData)
 {
 
-#define SAD_4blocks8x8 /*AVX2*/\
-/* calc sads with ref */ \
+//#define SAD_4blocks8x8_Z /*AVX2*/\
+// calc sads with ref  \
 ymm8_r1 = _mm256_sad_epu8(ymm0_src_r1, *(__m256i*)(pucRef + nRefPitch[0] * (y + 0) + x)); \
 ymm9_r2 = _mm256_sad_epu8(ymm1_src_r2, *(__m256i*)(pucRef + nRefPitch[0] * (y + 1) + x)); \
 ymm10_r3 = _mm256_sad_epu8(ymm2_src_r3, *(__m256i*)(pucRef + nRefPitch[0] * (y + 2) + x)); \
@@ -1789,7 +1801,7 @@ ymm8_r1 = _mm256_slli_epi64(ymm8_r1, 48);
   const uint8_t* pucCurr = workarea.pSrc[0];
 
   // 4 blocks at once proc, pel=1
-  __m256i ymm0_src_r1 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 0));
+/*  __m256i ymm0_src_r1 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 0));
   __m256i	ymm1_src_r2 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 1));
   __m256i	ymm2_src_r3 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 2));
   __m256i	ymm3_src_r4 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 3));
@@ -1797,6 +1809,15 @@ ymm8_r1 = _mm256_slli_epi64(ymm8_r1, 48);
   __m256i	ymm5_src_r6 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 5));
   __m256i	ymm6_src_r7 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 6));
   __m256i	ymm7_src_r8 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 7));
+*/
+  workarea.ymm0_src_r1 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 0));
+  workarea.ymm1_src_r2 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 1));
+  workarea.ymm2_src_r3 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 2));
+  workarea.ymm3_src_r4 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 3));
+  workarea.ymm4_src_r5 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 4));
+  workarea.ymm5_src_r6 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 5));
+  workarea.ymm6_src_r7 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 6));
+  workarea.ymm7_src_r8 = _mm256_loadu_si256((__m256i*)(pucCurr + nSrcPitch[0] * 7));
 
   __m256i ymm8_r1, ymm9_r2, ymm10_r3, ymm11_r4, ymm12_r5, ymm13_r6, ymm14_r7, ymm15_r8;
 
@@ -1808,14 +1829,14 @@ ymm8_r1 = _mm256_slli_epi64(ymm8_r1, 48);
 #endif
   // check zero pos first
   x = 1; y = 1; //
-  ymm8_r1 = _mm256_sad_epu8(ymm0_src_r1, *(__m256i*)(pucRef + nRefPitch[0] * (y + 0) + x)); 
-  ymm9_r2 = _mm256_sad_epu8(ymm1_src_r2, *(__m256i*)(pucRef + nRefPitch[0] * (y + 1) + x)); 
-  ymm10_r3 = _mm256_sad_epu8(ymm2_src_r3, *(__m256i*)(pucRef + nRefPitch[0] * (y + 2) + x)); 
-  ymm11_r4 = _mm256_sad_epu8(ymm3_src_r4, *(__m256i*)(pucRef + nRefPitch[0] * (y + 3) + x)); 
-  ymm12_r5 = _mm256_sad_epu8(ymm4_src_r5, *(__m256i*)(pucRef + nRefPitch[0] * (y + 4) + x)); 
-  ymm13_r6 = _mm256_sad_epu8(ymm5_src_r6, *(__m256i*)(pucRef + nRefPitch[0] * (y + 5) + x)); 
-  ymm14_r7 = _mm256_sad_epu8(ymm6_src_r7, *(__m256i*)(pucRef + nRefPitch[0] * (y + 6) + x)); 
-  ymm15_r8 = _mm256_sad_epu8(ymm7_src_r8, *(__m256i*)(pucRef + nRefPitch[0] * (y + 7) + x)); 
+  ymm8_r1 = _mm256_sad_epu8(workarea.ymm0_src_r1, *(__m256i*)(pucRef + nRefPitch[0] * (y + 0) + x)); 
+  ymm9_r2 = _mm256_sad_epu8(workarea.ymm1_src_r2, *(__m256i*)(pucRef + nRefPitch[0] * (y + 1) + x));
+  ymm10_r3 = _mm256_sad_epu8(workarea.ymm2_src_r3, *(__m256i*)(pucRef + nRefPitch[0] * (y + 2) + x));
+  ymm11_r4 = _mm256_sad_epu8(workarea.ymm3_src_r4, *(__m256i*)(pucRef + nRefPitch[0] * (y + 3) + x));
+  ymm12_r5 = _mm256_sad_epu8(workarea.ymm4_src_r5, *(__m256i*)(pucRef + nRefPitch[0] * (y + 4) + x));
+  ymm13_r6 = _mm256_sad_epu8(workarea.ymm5_src_r6, *(__m256i*)(pucRef + nRefPitch[0] * (y + 5) + x));
+  ymm14_r7 = _mm256_sad_epu8(workarea.ymm6_src_r7, *(__m256i*)(pucRef + nRefPitch[0] * (y + 6) + x));
+  ymm15_r8 = _mm256_sad_epu8(workarea.ymm7_src_r8, *(__m256i*)(pucRef + nRefPitch[0] * (y + 7) + x));
   
   ymm8_r1 = _mm256_adds_epu16(ymm8_r1, ymm9_r2); 
   ymm10_r3 = _mm256_adds_epu16(ymm10_r3, ymm11_r4); 

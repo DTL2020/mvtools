@@ -84,6 +84,45 @@
     _mm512_inserti64x4(_mm512_castsi256_si512(_mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * r2), (__m128i*)(pucRef + nRefPitch[0] * r1))), \
       _mm256_loadu2_m128i((__m128i*)(pucRef + nRefPitch[0] * r4), (__m128i*)(pucRef + nRefPitch[0] * r3)), 1)
 
+#define SAD_16blocks8x8 /*AVX512*/\
+/* calc sads src with ref */ \
+zmm16_r1_b0007 = _mm512_sad_epu8(workarea.zmm0_Src_r1_b0007, *(__m512i*)(pucRef + nRefPitch[0] * (y + 0) + x + 0)); \
+zmm17_r1_b0815 = _mm512_sad_epu8(workarea.zmm1_Src_r1_b0815, *(__m512i*)(pucRef + nRefPitch[0] * (y + 0) + x + 64)); \
+zmm18_r2_b0007 = _mm512_sad_epu8(workarea.zmm2_Src_r2_b0007, *(__m512i*)(pucRef + nRefPitch[0] * (y + 1) + x + 0)); \
+zmm19_r2_b0815 = _mm512_sad_epu8(workarea.zmm3_Src_r2_b0815, *(__m512i*)(pucRef + nRefPitch[0] * (y + 1) + x + 64)); \
+zmm20_r3_b0007 = _mm512_sad_epu8(workarea.zmm4_Src_r3_b0007, *(__m512i*)(pucRef + nRefPitch[0] * (y + 2) + x + 0)); \
+zmm21_r3_b0815 = _mm512_sad_epu8(workarea.zmm5_Src_r3_b0815, *(__m512i*)(pucRef + nRefPitch[0] * (y + 2) + x + 64)); \
+zmm22_r4_b0007 = _mm512_sad_epu8(workarea.zmm6_Src_r4_b0007, *(__m512i*)(pucRef + nRefPitch[0] * (y + 3) + x + 0)); \
+zmm23_r4_b0815 = _mm512_sad_epu8(workarea.zmm7_Src_r4_b0815, *(__m512i*)(pucRef + nRefPitch[0] * (y + 3) + x + 64)); \
+zmm24_r5_b0007 = _mm512_sad_epu8(workarea.zmm8_Src_r5_b0007, *(__m512i*)(pucRef + nRefPitch[0] * (y + 4) + x + 0)); \
+zmm25_r5_b0815 = _mm512_sad_epu8(workarea.zmm9_Src_r5_b0815, *(__m512i*)(pucRef + nRefPitch[0] * (y + 4) + x + 64)); \
+zmm26_r6_b0007 = _mm512_sad_epu8(workarea.zmm10_Src_r6_b0007, *(__m512i*)(pucRef + nRefPitch[0] * (y + 5) + x + 0)); \
+zmm27_r6_b0815 = _mm512_sad_epu8(workarea.zmm11_Src_r6_b0815, *(__m512i*)(pucRef + nRefPitch[0] * (y + 5) + x + 64)); \
+zmm28_r7_b0007 = _mm512_sad_epu8(workarea.zmm12_Src_r7_b0007, *(__m512i*)(pucRef + nRefPitch[0] * (y + 6) + x + 0)); \
+zmm29_r7_b0815 = _mm512_sad_epu8(workarea.zmm13_Src_r7_b0815, *(__m512i*)(pucRef + nRefPitch[0] * (y + 6) + x + 64)); \
+zmm30_r8_b0007 = _mm512_sad_epu8(workarea.zmm14_Src_r8_b0007, *(__m512i*)(pucRef + nRefPitch[0] * (y + 7) + x + 0)); \
+zmm31_r8_b0815 = _mm512_sad_epu8(workarea.zmm15_Src_r8_b0815, *(__m512i*)(pucRef + nRefPitch[0] * (y + 7) + x + 64)); \
+\
+zmm16_r1_b0007 = _mm512_adds_epi16(zmm16_r1_b0007, zmm18_r2_b0007); \
+zmm20_r3_b0007 = _mm512_adds_epi16(zmm20_r3_b0007, zmm22_r4_b0007); \
+zmm24_r5_b0007 = _mm512_adds_epi16(zmm24_r5_b0007, zmm26_r6_b0007); \
+zmm28_r7_b0007 = _mm512_adds_epi16(zmm28_r7_b0007, zmm30_r8_b0007); \
+ \
+zmm17_r1_b0815 = _mm512_adds_epi16(zmm17_r1_b0815, zmm19_r2_b0815); \
+zmm21_r3_b0815 = _mm512_adds_epi16(zmm21_r3_b0815, zmm23_r4_b0815); \
+zmm25_r5_b0815 = _mm512_adds_epi16(zmm25_r5_b0815, zmm27_r6_b0815); \
+zmm29_r7_b0815 = _mm512_adds_epi16(zmm29_r7_b0815, zmm31_r8_b0815); \
+\
+zmm16_r1_b0007 = _mm512_adds_epi16(zmm16_r1_b0007, zmm20_r3_b0007); \
+zmm24_r5_b0007 = _mm512_adds_epi16(zmm24_r5_b0007, zmm28_r7_b0007); \
+\
+zmm17_r1_b0815 = _mm512_adds_epi16(zmm17_r1_b0815, zmm21_r3_b0815); \
+zmm25_r5_b0815 = _mm512_adds_epi16(zmm25_r5_b0815, zmm29_r7_b0815); \
+\
+zmm16_r1_b0007 = _mm512_adds_epi16(zmm16_r1_b0007, zmm24_r5_b0007); \
+\
+zmm17_r1_b0815 = _mm512_adds_epi16(zmm17_r1_b0815, zmm25_r5_b0815);
+
 void PlaneOfBlocks::ExhaustiveSearch16x16_uint8_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy)
 {
   // debug check !! need to fix caller to now allow illegal vectors 
@@ -538,5 +577,508 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx512(WorkingArea& wo
   workarea.bestMV.sad = minsad;
 
   _mm256_zeroupper();
+
+}
+
+void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_16Blks_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy, int* pBlkData)
+{
+  const uint8_t* pucRef = GetRefBlock(workarea, mvx - 1, mvy - 1); // upper left corner
+  const uint8_t* pucCurr = workarea.pSrc[0];
+  // 16 blocks AVX512
+
+  __m512i zmm16_r1_b0007, zmm18_r2_b0007, zmm20_r3_b0007, zmm22_r4_b0007, zmm24_r5_b0007, zmm26_r6_b0007, zmm28_r7_b0007, zmm30_r8_b0007;
+  __m512i	zmm17_r1_b0815, zmm19_r2_b0815, zmm21_r3_b0815, zmm23_r4_b0815, zmm25_r5_b0815, zmm27_r6_b0815, zmm29_r7_b0815, zmm31_r8_b0815;
+
+/*  zmm0_Src_r1_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 0));
+  zmm1_Src_r1_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 0 + 64));
+  zmm2_Src_r2_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 1));
+  zmm3_Src_r2_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 1 + 64));
+  zmm4_Src_r3_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 2));
+  zmm5_Src_r3_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 2 + 64));
+  zmm6_Src_r4_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 3));
+  zmm7_Src_r4_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 3 + 64));
+  zmm8_Src_r5_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 4));
+  zmm9_Src_r5_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 4 + 64));
+  zmm10_Src_r6_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 5));
+  zmm11_Src_r6_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 5 + 64));
+  zmm12_Src_r7_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 6));
+  zmm13_Src_r7_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 6 + 64));
+  zmm14_Src_r8_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 7));
+  zmm15_Src_r8_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 7 + 64));*/
+
+  workarea.zmm0_Src_r1_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 0));
+  workarea.zmm1_Src_r1_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 0 + 64));
+  workarea.zmm2_Src_r2_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 1));
+  workarea.zmm3_Src_r2_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 1 + 64));
+  workarea.zmm4_Src_r3_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 2));
+  workarea.zmm5_Src_r3_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 2 + 64));
+  workarea.zmm6_Src_r4_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 3));
+  workarea.zmm7_Src_r4_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 3 + 64));
+  workarea.zmm8_Src_r5_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 4));
+  workarea.zmm9_Src_r5_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 4 + 64));
+  workarea.zmm10_Src_r6_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 5));
+  workarea.zmm11_Src_r6_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 5 + 64));
+  workarea.zmm12_Src_r7_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 6));
+  workarea.zmm13_Src_r7_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 6 + 64));
+  workarea.zmm14_Src_r8_b0007 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 7));
+  workarea.zmm15_Src_r8_b0815 = _mm512_loadu_si512((__m512i*)(pucCurr + nSrcPitch[0] * 7 + 64));
+
+  int x, y;
+  __m512i part_sads1_0007, part_sads2_0007, part_sads1_0815, part_sads2_0815;
+#ifdef _DEBUG
+  part_sads1_0007 = _mm512_setzero_si512();
+  part_sads2_0007 = _mm512_setzero_si512();
+  part_sads1_0815 = _mm512_setzero_si512();
+  part_sads2_0815 = _mm512_setzero_si512();
+#endif
+
+  // 1st 16sads
+  y = 0; x = 0;
+  SAD_16blocks8x8
+
+    zmm16_r1_b0007 = _mm512_slli_epi64(zmm16_r1_b0007, 48);
+  zmm17_r1_b0815 = _mm512_slli_epi64(zmm17_r1_b0815, 48);
+
+  part_sads1_0007 = _mm512_mask_blend_epi16(0x88888888, part_sads1_0007, zmm16_r1_b0007);
+  part_sads1_0007 = _mm512_srli_epi64(part_sads1_0007, 16);
+
+  part_sads1_0815 = _mm512_mask_blend_epi16(0x88888888, part_sads1_0815, zmm17_r1_b0815);
+  part_sads1_0815 = _mm512_srli_epi64(part_sads1_0815, 16);
+
+  // 2nd 16sads
+  x = 1; y = 0;
+  SAD_16blocks8x8
+
+    zmm16_r1_b0007 = _mm512_slli_epi64(zmm16_r1_b0007, 48);
+  zmm17_r1_b0815 = _mm512_slli_epi64(zmm17_r1_b0815, 48);
+
+  part_sads1_0007 = _mm512_mask_blend_epi16(0x88888888, part_sads1_0007, zmm16_r1_b0007);
+  part_sads1_0007 = _mm512_srli_epi64(part_sads1_0007, 16);
+
+  part_sads1_0815 = _mm512_mask_blend_epi16(0x88888888, part_sads1_0815, zmm17_r1_b0815);
+  part_sads1_0815 = _mm512_srli_epi64(part_sads1_0815, 16);
+
+  // 3rd 16sads
+  x = 2; y = 0;
+  SAD_16blocks8x8
+
+    zmm16_r1_b0007 = _mm512_slli_epi64(zmm16_r1_b0007, 48);
+  zmm17_r1_b0815 = _mm512_slli_epi64(zmm17_r1_b0815, 48);
+
+  part_sads1_0007 = _mm512_mask_blend_epi16(0x88888888, part_sads1_0007, zmm16_r1_b0007);
+  part_sads1_0007 = _mm512_srli_epi64(part_sads1_0007, 16);
+
+  part_sads1_0815 = _mm512_mask_blend_epi16(0x88888888, part_sads1_0815, zmm17_r1_b0815);
+  part_sads1_0815 = _mm512_srli_epi64(part_sads1_0815, 16);
+
+  // 4th 16sads
+  x = 0; y = 1;
+  SAD_16blocks8x8
+
+    zmm16_r1_b0007 = _mm512_slli_epi64(zmm16_r1_b0007, 48);
+  zmm17_r1_b0815 = _mm512_slli_epi64(zmm17_r1_b0815, 48);
+
+  part_sads1_0007 = _mm512_mask_blend_epi16(0x88888888, part_sads1_0007, zmm16_r1_b0007);
+  part_sads1_0815 = _mm512_mask_blend_epi16(0x88888888, part_sads1_0815, zmm17_r1_b0815); // 4 x 16 sads ready
+
+// skip check zero position, add 1 to minpos if > 4 !
+
+  // 5th 16sads
+  x = 2; y = 1;
+  SAD_16blocks8x8
+
+    zmm16_r1_b0007 = _mm512_slli_epi64(zmm16_r1_b0007, 48);
+  zmm17_r1_b0815 = _mm512_slli_epi64(zmm17_r1_b0815, 48);
+
+  part_sads2_0007 = _mm512_mask_blend_epi16(0x88888888, part_sads2_0007, zmm16_r1_b0007);
+  part_sads2_0007 = _mm512_srli_epi64(part_sads1_0007, 16);
+
+  part_sads2_0815 = _mm512_mask_blend_epi16(0x88888888, part_sads2_0815, zmm17_r1_b0815);
+  part_sads2_0815 = _mm512_srli_epi64(part_sads2_0815, 16);
+
+
+  // 6th 4sads
+  x = 0; y = 2;
+  SAD_16blocks8x8
+
+    zmm16_r1_b0007 = _mm512_slli_epi64(zmm16_r1_b0007, 48);
+  zmm17_r1_b0815 = _mm512_slli_epi64(zmm17_r1_b0815, 48);
+
+  part_sads2_0007 = _mm512_mask_blend_epi16(0x88888888, part_sads2_0007, zmm16_r1_b0007);
+  part_sads2_0007 = _mm512_srli_epi64(part_sads1_0007, 16);
+
+  part_sads2_0815 = _mm512_mask_blend_epi16(0x88888888, part_sads2_0815, zmm17_r1_b0815);
+  part_sads2_0815 = _mm512_srli_epi64(part_sads2_0815, 16);
+
+
+  // 7th 4sads
+  x = 1; y = 2;
+  SAD_16blocks8x8
+
+    zmm16_r1_b0007 = _mm512_slli_epi64(zmm16_r1_b0007, 48);
+  zmm17_r1_b0815 = _mm512_slli_epi64(zmm17_r1_b0815, 48);
+
+  part_sads2_0007 = _mm512_mask_blend_epi16(0x88888888, part_sads2_0007, zmm16_r1_b0007);
+  part_sads2_0007 = _mm512_srli_epi64(part_sads1_0007, 16);
+
+  part_sads2_0815 = _mm512_mask_blend_epi16(0x88888888, part_sads2_0815, zmm17_r1_b0815);
+  part_sads2_0815 = _mm512_srli_epi64(part_sads2_0815, 16);
+
+
+  // 8th 4sads
+  x = 2; y = 2;
+  SAD_16blocks8x8
+
+    zmm16_r1_b0007 = _mm512_slli_epi64(zmm16_r1_b0007, 48);
+  zmm17_r1_b0815 = _mm512_slli_epi64(zmm17_r1_b0815, 48);
+
+  part_sads2_0007 = _mm512_mask_blend_epi16(0x88888888, part_sads2_0007, zmm16_r1_b0007);
+  part_sads2_0815 = _mm512_mask_blend_epi16(0x88888888, part_sads2_0815, zmm17_r1_b0815);
+
+
+  // 8 SADs of 1 block
+  __m128i xmm0_sad1 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0007, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 3, 32 + 2, 32 + 1, 32 + 0, 3, 2, 1, 0), part_sads2_0007));
+
+  // 8 SADs of 2 block
+  __m128i xmm1_sad2 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0007, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 7, 32 + 6, 32 + 5, 32 + 4, 7, 6, 5, 4), part_sads2_0007));
+
+  // 8 SADs of 3 block
+  __m128i xmm2_sad3 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0007, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 11, 32 + 10, 32 + 9, 32 + 8, 11, 10, 9, 8), part_sads2_0007));
+
+  // 8 SADs of 4 block
+  __m128i xmm3_sad4 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0007, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 15, 32 + 14, 32 + 13, 32 + 12, 15, 14, 13, 12), part_sads2_0007));
+
+  // 8 SADs of 5 block
+  __m128i xmm4_sad5 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0007, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 19, 32 + 18, 32 + 17, 32 + 16, 19, 18, 17, 16), part_sads2_0007));
+
+  // 8 SADs of 6 block
+  __m128i xmm5_sad6 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0007, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 23, 32 + 22, 32 + 21, 32 + 20, 23, 22, 21, 20), part_sads2_0007));
+
+  // 8 SADs of 7 block
+  __m128i xmm6_sad7 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0007, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 27, 32 + 26, 32 + 25, 32 + 24, 27, 26, 25, 24), part_sads2_0007));
+
+  // 8 SADs of 8 block
+  __m128i xmm7_sad8 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0007, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 31, 32 + 30, 32 + 29, 32 + 28, 31, 30, 29, 28), part_sads2_0007));
+
+  // 8 SADs of 9 block
+  __m128i xmm8_sad9 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0815, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 3, 32 + 2, 32 + 1, 32 + 0, 3, 2, 1, 0), part_sads2_0815));
+
+  // 8 SADs of 10 block
+  __m128i xmm9_sad10 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0815, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 7, 32 + 6, 32 + 5, 32 + 4, 7, 6, 5, 4), part_sads2_0815));
+
+  // 8 SADs of 11 block
+  __m128i xmm10_sad11 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0815, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 11, 32 + 10, 32 + 9, 32 + 8, 11, 10, 9, 8), part_sads2_0815));
+
+  // 8 SADs of 12 block
+  __m128i xmm11_sad12 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0815, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 15, 32 + 14, 32 + 13, 32 + 12, 15, 14, 13, 12), part_sads2_0815));
+
+  // 8 SADs of 13 block
+  __m128i xmm12_sad13 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0815, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 19, 32 + 18, 32 + 17, 32 + 16, 19, 18, 17, 16), part_sads2_0815));
+
+  // 8 SADs of 14 block
+  __m128i xmm13_sad14 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0815, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 23, 32 + 22, 32 + 21, 32 + 20, 23, 22, 21, 20), part_sads2_0815));
+
+  // 8 SADs of 15 block
+  __m128i xmm14_sad15 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0815, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 27, 32 + 26, 32 + 25, 32 + 24, 27, 26, 25, 24), part_sads2_0815));
+
+  // 8 SADs of 16 block
+  __m128i xmm15_sad16 = _mm512_castsi512_si128(_mm512_permutex2var_epi16(part_sads1_0815, _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
+    32 + 31, 32 + 30, 32 + 29, 32 + 28, 31, 30, 29, 28), part_sads2_0815));
+
+  xmm0_sad1 = _mm_minpos_epu16(xmm0_sad1);
+  xmm1_sad2 = _mm_minpos_epu16(xmm1_sad2);
+  xmm2_sad3 = _mm_minpos_epu16(xmm2_sad3);
+  xmm3_sad4 = _mm_minpos_epu16(xmm3_sad4);
+  xmm4_sad5 = _mm_minpos_epu16(xmm4_sad5);
+  xmm5_sad6 = _mm_minpos_epu16(xmm5_sad6);
+  xmm6_sad7 = _mm_minpos_epu16(xmm6_sad7);
+  xmm7_sad8 = _mm_minpos_epu16(xmm7_sad8);
+  xmm8_sad9 = _mm_minpos_epu16(xmm8_sad9);
+  xmm9_sad10 = _mm_minpos_epu16(xmm9_sad10);
+  xmm10_sad11 = _mm_minpos_epu16(xmm10_sad11);
+  xmm11_sad12 = _mm_minpos_epu16(xmm11_sad12);
+  xmm12_sad13 = _mm_minpos_epu16(xmm12_sad13);
+  xmm13_sad14 = _mm_minpos_epu16(xmm13_sad14);
+  xmm14_sad15 = _mm_minpos_epu16(xmm14_sad15);
+  xmm15_sad16 = _mm_minpos_epu16(xmm15_sad16);
+
+  // add +1 to minpos if > 3
+  __m128i xmm_uint3 = _mm_set_epi16(0, 0, 0, 0, 0, 0, 3, 0);
+  __m128i xmm_uint1 = _mm_set_epi16(0, 0, 0, 0, 0, 0, 1, 0);
+
+  xmm0_sad1 = _mm_blendv_epi8(xmm0_sad1, _mm_add_epi16(xmm0_sad1, xmm_uint1), _mm_cmpgt_epi16(xmm0_sad1, xmm_uint3));
+  xmm1_sad2 = _mm_blendv_epi8(xmm1_sad2, _mm_add_epi16(xmm1_sad2, xmm_uint1), _mm_cmpgt_epi16(xmm1_sad2, xmm_uint3));
+  xmm2_sad3 = _mm_blendv_epi8(xmm2_sad3, _mm_add_epi16(xmm2_sad3, xmm_uint1), _mm_cmpgt_epi16(xmm2_sad3, xmm_uint3));
+  xmm3_sad4 = _mm_blendv_epi8(xmm3_sad4, _mm_add_epi16(xmm3_sad4, xmm_uint1), _mm_cmpgt_epi16(xmm3_sad4, xmm_uint3));
+  xmm4_sad5 = _mm_blendv_epi8(xmm4_sad5, _mm_add_epi16(xmm4_sad5, xmm_uint1), _mm_cmpgt_epi16(xmm4_sad5, xmm_uint3));
+  xmm5_sad6 = _mm_blendv_epi8(xmm5_sad6, _mm_add_epi16(xmm5_sad6, xmm_uint1), _mm_cmpgt_epi16(xmm5_sad6, xmm_uint3));
+  xmm6_sad7 = _mm_blendv_epi8(xmm6_sad7, _mm_add_epi16(xmm6_sad7, xmm_uint1), _mm_cmpgt_epi16(xmm6_sad7, xmm_uint3));
+  xmm7_sad8 = _mm_blendv_epi8(xmm7_sad8, _mm_add_epi16(xmm7_sad8, xmm_uint1), _mm_cmpgt_epi16(xmm7_sad8, xmm_uint3));
+  xmm8_sad9 = _mm_blendv_epi8(xmm8_sad9, _mm_add_epi16(xmm8_sad9, xmm_uint1), _mm_cmpgt_epi16(xmm8_sad9, xmm_uint3));
+  xmm9_sad10 = _mm_blendv_epi8(xmm9_sad10, _mm_add_epi16(xmm9_sad10, xmm_uint1), _mm_cmpgt_epi16(xmm9_sad10, xmm_uint3));
+  xmm10_sad11 = _mm_blendv_epi8(xmm10_sad11, _mm_add_epi16(xmm10_sad11, xmm_uint1), _mm_cmpgt_epi16(xmm10_sad11, xmm_uint3));
+  xmm11_sad12 = _mm_blendv_epi8(xmm11_sad12, _mm_add_epi16(xmm11_sad12, xmm_uint1), _mm_cmpgt_epi16(xmm11_sad12, xmm_uint3));
+  xmm12_sad13 = _mm_blendv_epi8(xmm12_sad13, _mm_add_epi16(xmm12_sad13, xmm_uint1), _mm_cmpgt_epi16(xmm12_sad13, xmm_uint3));
+  xmm13_sad14 = _mm_blendv_epi8(xmm13_sad14, _mm_add_epi16(xmm13_sad14, xmm_uint1), _mm_cmpgt_epi16(xmm13_sad14, xmm_uint3));
+  xmm14_sad15 = _mm_blendv_epi8(xmm14_sad15, _mm_add_epi16(xmm14_sad15, xmm_uint1), _mm_cmpgt_epi16(xmm14_sad15, xmm_uint3));
+  xmm15_sad16 = _mm_blendv_epi8(xmm15_sad16, _mm_add_epi16(xmm15_sad16, xmm_uint1), _mm_cmpgt_epi16(xmm15_sad16, xmm_uint3));
+
+  unsigned short minsad1 = (unsigned short)_mm_cvtsi128_si32(xmm0_sad1);
+  unsigned short minsad2 = (unsigned short)_mm_cvtsi128_si32(xmm1_sad2);
+  unsigned short minsad3 = (unsigned short)_mm_cvtsi128_si32(xmm2_sad3);
+  unsigned short minsad4 = (unsigned short)_mm_cvtsi128_si32(xmm3_sad4);
+  unsigned short minsad5 = (unsigned short)_mm_cvtsi128_si32(xmm4_sad5);
+  unsigned short minsad6 = (unsigned short)_mm_cvtsi128_si32(xmm5_sad6);
+  unsigned short minsad7 = (unsigned short)_mm_cvtsi128_si32(xmm6_sad7);
+  unsigned short minsad8 = (unsigned short)_mm_cvtsi128_si32(xmm7_sad8);
+  unsigned short minsad9 = (unsigned short)_mm_cvtsi128_si32(xmm8_sad9);
+  unsigned short minsad10 = (unsigned short)_mm_cvtsi128_si32(xmm9_sad10);
+  unsigned short minsad11 = (unsigned short)_mm_cvtsi128_si32(xmm10_sad11);
+  unsigned short minsad12 = (unsigned short)_mm_cvtsi128_si32(xmm11_sad12);
+  unsigned short minsad13 = (unsigned short)_mm_cvtsi128_si32(xmm12_sad13);
+  unsigned short minsad14 = (unsigned short)_mm_cvtsi128_si32(xmm13_sad14);
+  unsigned short minsad15 = (unsigned short)_mm_cvtsi128_si32(xmm14_sad15);
+  unsigned short minsad16 = (unsigned short)_mm_cvtsi128_si32(xmm15_sad16);
+
+  __m128i xmm_idx0003 = xmm0_sad1;
+  xmm_idx0003 = _mm_blend_epi16(xmm_idx0003, _mm_slli_si128(xmm1_sad2, 4), 8);
+  xmm_idx0003 = _mm_blend_epi16(xmm_idx0003, _mm_slli_si128(xmm2_sad3, 8), 32);
+  xmm_idx0003 = _mm_blend_epi16(xmm_idx0003, _mm_slli_si128(xmm3_sad4, 12), 128);
+
+  xmm_idx0003 = _mm_blend_epi16(xmm_idx0003, _mm_srli_si128(xmm_idx0003, 2), 85);
+
+  __m128i xmm_idx0407 = xmm4_sad5;
+  xmm_idx0407 = _mm_blend_epi16(xmm_idx0407, _mm_slli_si128(xmm5_sad6, 4), 8);
+  xmm_idx0407 = _mm_blend_epi16(xmm_idx0407, _mm_slli_si128(xmm6_sad7, 8), 32);
+  xmm_idx0407 = _mm_blend_epi16(xmm_idx0407, _mm_slli_si128(xmm7_sad8, 12), 128);
+
+  xmm_idx0407 = _mm_blend_epi16(xmm_idx0407, _mm_srli_si128(xmm_idx0407, 2), 85);
+
+  __m128i xmm_idx0811 = xmm8_sad9;
+  xmm_idx0811 = _mm_blend_epi16(xmm_idx0811, _mm_slli_si128(xmm9_sad10, 4), 8);
+  xmm_idx0811 = _mm_blend_epi16(xmm_idx0811, _mm_slli_si128(xmm10_sad11, 8), 32);
+  xmm_idx0811 = _mm_blend_epi16(xmm_idx0811, _mm_slli_si128(xmm11_sad12, 12), 128);
+
+  xmm_idx0811 = _mm_blend_epi16(xmm_idx0811, _mm_srli_si128(xmm_idx0811, 2), 85);
+
+  __m128i xmm_idx1215 = xmm12_sad13;
+  xmm_idx1215 = _mm_blend_epi16(xmm_idx1215, _mm_slli_si128(xmm13_sad14, 4), 8);
+  xmm_idx1215 = _mm_blend_epi16(xmm_idx1215, _mm_slli_si128(xmm14_sad15, 8), 32);
+  xmm_idx1215 = _mm_blend_epi16(xmm_idx1215, _mm_slli_si128(xmm15_sad16, 12), 128);
+
+  xmm_idx1215 = _mm_blend_epi16(xmm_idx0811, _mm_srli_si128(xmm_idx0811, 2), 85);
+
+  //	int dx_minsad = (idx_min_sad % 3) - 1; - just comment where from x,y minsad come from
+  //	int dy_minsad = (idx_min_sad / 3) - 1;
+
+  // dx = idx*11>>5 , dy = (((idx*11)&31)*3)>>5
+  __m128i xmm_uint11 = _mm_set_epi16(11, 11, 11, 11, 11, 11, 11, 11);
+  __m128i xmm_and = _mm_set_epi16(-1, 31, -1, 31, -1, 31, -1, 31);
+  __m128i xmm_1_3 = _mm_set_epi16(1, 3, 1, 3, 1, 3, 1, 3);
+  __m128i xmm_1 = _mm_set_epi16(1, 1, 1, 1, 1, 1, 1, 1);
+
+  xmm_idx0003 = _mm_mullo_epi16(xmm_idx0003, xmm_uint11);
+  xmm_idx0003 = _mm_and_si128(xmm_idx0003, xmm_and);
+  xmm_idx0003 = _mm_mullo_epi16(xmm_idx0003, xmm_1_3);
+  xmm_idx0003 = _mm_srli_epi16(xmm_idx0003, 5);
+  xmm_idx0003 = _mm_sub_epi16(xmm_idx0003, xmm_1);
+
+  xmm_idx0407 = _mm_mullo_epi16(xmm_idx0407, xmm_uint11);
+  xmm_idx0407 = _mm_and_si128(xmm_idx0407, xmm_and);
+  xmm_idx0407 = _mm_mullo_epi16(xmm_idx0407, xmm_1_3);
+  xmm_idx0407 = _mm_srli_epi16(xmm_idx0407, 5);
+  xmm_idx0407 = _mm_sub_epi16(xmm_idx0407, xmm_1);
+
+  xmm_idx0811 = _mm_mullo_epi16(xmm_idx0811, xmm_uint11);
+  xmm_idx0811 = _mm_and_si128(xmm_idx0811, xmm_and);
+  xmm_idx0811 = _mm_mullo_epi16(xmm_idx0811, xmm_1_3);
+  xmm_idx0811 = _mm_srli_epi16(xmm_idx0811, 5);
+  xmm_idx0811 = _mm_sub_epi16(xmm_idx0811, xmm_1);
+
+  xmm_idx1215 = _mm_mullo_epi16(xmm_idx1215, xmm_uint11);
+  xmm_idx1215 = _mm_and_si128(xmm_idx1215, xmm_and);
+  xmm_idx1215 = _mm_mullo_epi16(xmm_idx1215, xmm_1_3);
+  xmm_idx1215 = _mm_srli_epi16(xmm_idx1215, 5);
+  xmm_idx1215 = _mm_sub_epi16(xmm_idx1215, xmm_1);
+  /*
+  int dx_minsad1 = _mm_extract_epi16(xmm_idx0003, 0);
+  int dy_minsad1 = _mm_extract_epi16(xmm_idx0003, 1);
+
+  int dx_minsad2 = _mm_extract_epi16(xmm_idx0003, 2);
+  int dy_minsad2 = _mm_extract_epi16(xmm_idx0003, 3);
+
+  int dx_minsad3 = _mm_extract_epi16(xmm_idx0003, 4);
+  int dy_minsad3 = _mm_extract_epi16(xmm_idx0003, 5);
+
+  int dx_minsad4 = _mm_extract_epi16(xmm_idx0003, 6);
+  int dy_minsad4 = _mm_extract_epi16(xmm_idx0003, 7);
+
+  int dx_minsad5 = _mm_extract_epi16(xmm_idx0407, 0);
+  int dy_minsad5 = _mm_extract_epi16(xmm_idx0407, 1);
+
+  int dx_minsad6 = _mm_extract_epi16(xmm_idx0407, 2);
+  int dy_minsad6 = _mm_extract_epi16(xmm_idx0407, 3);
+
+  int dx_minsad7 = _mm_extract_epi16(xmm_idx0407, 4);
+  int dy_minsad7 = _mm_extract_epi16(xmm_idx0407, 5);
+
+  int dx_minsad8 = _mm_extract_epi16(xmm_idx0407, 6);
+  int dy_minsad8 = _mm_extract_epi16(xmm_idx0407, 7);
+
+  int dx_minsad9 = _mm_extract_epi16(xmm_idx0811, 0);
+  int dy_minsad9 = _mm_extract_epi16(xmm_idx0811, 1);
+
+  int dx_minsad10 = _mm_extract_epi16(xmm_idx0811, 2);
+  int dy_minsad10 = _mm_extract_epi16(xmm_idx0811, 3);
+
+  int dx_minsad11 = _mm_extract_epi16(xmm_idx0811, 4);
+  int dy_minsad11 = _mm_extract_epi16(xmm_idx0811, 5);
+
+  int dx_minsad12 = _mm_extract_epi16(xmm_idx0811, 6);
+  int dy_minsad12 = _mm_extract_epi16(xmm_idx0811, 7);
+
+  int dx_minsad13 = _mm_extract_epi16(xmm_idx1215, 0);
+  int dy_minsad13 = _mm_extract_epi16(xmm_idx1215, 1);
+
+  int dx_minsad14 = _mm_extract_epi16(xmm_idx1215, 2);
+  int dy_minsad14 = _mm_extract_epi16(xmm_idx1215, 3);
+
+  int dx_minsad15 = _mm_extract_epi16(xmm_idx1215, 4);
+  int dy_minsad15 = _mm_extract_epi16(xmm_idx1215, 5);
+
+  int dx_minsad16 = _mm_extract_epi16(xmm_idx1215, 6);
+  int dy_minsad16 = _mm_extract_epi16(xmm_idx1215, 7);*/
+
+  if (minsad1 < workarea.bestMV.sad)
+  {
+    pBlkData[workarea.blkx * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx0003, 0); // dx_minsad1
+    pBlkData[workarea.blkx * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx0003, 1); // dy_minsad1
+    pBlkData[workarea.blkx * N_PER_BLOCK + 2] = (uint32_t)(minsad1);
+
+    workarea.bestMV.x += _mm_extract_epi16(xmm_idx0003, 0); // is it need at all ??
+    workarea.bestMV.y += _mm_extract_epi16(xmm_idx0003, 1);
+    workarea.nMinCost = minsad1 + ((penaltyNew * minsad1) >> 8);
+    workarea.bestMV.sad = minsad1;
+  }
+
+  if (minsad2 < pBlkData[(workarea.blkx + 1) * N_PER_BLOCK + 2])
+  {
+    pBlkData[(workarea.blkx + 1) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx0003, 2); // dx_minsad2
+    pBlkData[(workarea.blkx + 1) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx0003, 3); // dy_minsad2;
+    pBlkData[(workarea.blkx + 1) * N_PER_BLOCK + 2] = (uint32_t)(minsad2);
+  }
+
+  if (minsad3 < pBlkData[(workarea.blkx + 2) * N_PER_BLOCK + 2])
+  {
+    pBlkData[(workarea.blkx + 2) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx0003, 4); // dx_minsad3;
+    pBlkData[(workarea.blkx + 2) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx0003, 5); // dy_minsad3;
+    pBlkData[(workarea.blkx + 2) * N_PER_BLOCK + 2] = (uint32_t)(minsad3);
+  }
+
+  if (minsad4 < pBlkData[(workarea.blkx + 3) * N_PER_BLOCK + 2])
+  {
+    pBlkData[(workarea.blkx + 3) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx0003, 6); // dx_minsad4;
+    pBlkData[(workarea.blkx + 3) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx0003, 7); // dy_minsad4;
+    pBlkData[(workarea.blkx + 3) * N_PER_BLOCK + 2] = (uint32_t)(minsad4);
+  }
+
+  if (minsad5 < pBlkData[(workarea.blkx + 4) * N_PER_BLOCK + 2])
+  {
+    pBlkData[(workarea.blkx + 4) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx0407, 0); // dx_minsad5;
+    pBlkData[(workarea.blkx + 4) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx0407, 1); // dy_minsad5;
+    pBlkData[(workarea.blkx + 4) * N_PER_BLOCK + 2] = (uint32_t)(minsad5);
+  }
+
+  if (minsad6 < pBlkData[(workarea.blkx + 5) * N_PER_BLOCK + 2])
+  {
+    pBlkData[(workarea.blkx + 5) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx0407, 2); // dx_minsad6;
+    pBlkData[(workarea.blkx + 5) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx0407, 3); // dy_minsad6;
+    pBlkData[(workarea.blkx + 5) * N_PER_BLOCK + 2] = (uint32_t)(minsad6);
+  }
+
+  if (minsad7 < pBlkData[(workarea.blkx + 6) * N_PER_BLOCK + 2])
+  {
+    pBlkData[(workarea.blkx + 6) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx0407, 4); // dx_minsad7;
+    pBlkData[(workarea.blkx + 6) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx0407, 5); // dy_minsad7;
+    pBlkData[(workarea.blkx + 6) * N_PER_BLOCK + 2] = (uint32_t)(minsad7);
+  }
+
+  if (minsad8 < pBlkData[(workarea.blkx + 7) * N_PER_BLOCK + 2])
+  {
+    pBlkData[(workarea.blkx + 7) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx0407, 6); // dx_minsad8;
+    pBlkData[(workarea.blkx + 7) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx0407, 7); // dy_minsad8;
+    pBlkData[(workarea.blkx + 7) * N_PER_BLOCK + 2] = (uint32_t)(minsad8);
+  }
+
+  if (minsad9 < pBlkData[(workarea.blkx + 8) * N_PER_BLOCK + 2])
+  {
+    pBlkData[(workarea.blkx + 8) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx0811, 0); // dx_minsad9;
+    pBlkData[(workarea.blkx + 8) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx0811, 1); // dy_minsad9;
+    pBlkData[(workarea.blkx + 8) * N_PER_BLOCK + 2] = (uint32_t)(minsad9);
+  }
+
+  if (minsad10 < pBlkData[(workarea.blkx + 9) * N_PER_BLOCK + 2])
+  {
+    pBlkData[(workarea.blkx + 9) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx0811, 2); // dx_minsad10;
+    pBlkData[(workarea.blkx + 9) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx0811, 3); // dy_minsad10;
+    pBlkData[(workarea.blkx + 9) * N_PER_BLOCK + 2] = (uint32_t)(minsad10);
+  }
+
+  if (minsad11 < pBlkData[(workarea.blkx + 10) * N_PER_BLOCK + 2])
+  {
+    pBlkData[(workarea.blkx + 10) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx0811, 4); // dx_minsad11;
+    pBlkData[(workarea.blkx + 10) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx0811, 5); // dy_minsad11;
+    pBlkData[(workarea.blkx + 10) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+  }
+
+  if (minsad12 < pBlkData[(workarea.blkx + 11) * N_PER_BLOCK + 2])
+  {
+    pBlkData[(workarea.blkx + 11) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx0811, 6); // dx_minsad12;
+    pBlkData[(workarea.blkx + 11) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx0811, 7); // dy_minsad12;
+    pBlkData[(workarea.blkx + 11) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+  }
+
+  if (minsad13 < pBlkData[(workarea.blkx + 12) * N_PER_BLOCK + 2])
+  {
+    pBlkData[(workarea.blkx + 12) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx1215, 0); // dx_minsad13;
+    pBlkData[(workarea.blkx + 12) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx1215, 1); // dy_minsad13;
+    pBlkData[(workarea.blkx + 12) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+  }
+
+  if (minsad14 < pBlkData[(workarea.blkx + 13) * N_PER_BLOCK + 2])
+  {
+    pBlkData[(workarea.blkx + 13) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx1215, 2); // dx_minsad14;
+    pBlkData[(workarea.blkx + 13) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx1215, 3); // dy_minsad14;
+    pBlkData[(workarea.blkx + 13) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+  }
+
+  if (minsad15 < pBlkData[(workarea.blkx + 14) * N_PER_BLOCK + 2])
+  {
+    pBlkData[(workarea.blkx + 14) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx1215, 4); // dx_minsad15;
+    pBlkData[(workarea.blkx + 14) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx1215, 5); // dy_minsad15;
+    pBlkData[(workarea.blkx + 14) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+  }
+
+  if (minsad16 < pBlkData[(workarea.blkx + 15) * N_PER_BLOCK + 2])
+  {
+    pBlkData[(workarea.blkx + 15) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx1215, 6); // dx_minsad16;
+    pBlkData[(workarea.blkx + 15) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx1215, 7); // dy_minsad16;
+    pBlkData[(workarea.blkx + 15) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+  }
 
 }

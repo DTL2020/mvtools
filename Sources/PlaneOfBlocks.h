@@ -337,6 +337,13 @@ private:
 
     template<typename pixel_t>
     sad_t MotionDistorsion(int vx, int vy) const; // this one is better not forceinlined
+
+    // multi blocks processing sources for reusing
+    __m256i ymm0_src_r1, ymm1_src_r2, ymm2_src_r3, ymm3_src_r4, ymm4_src_r5, ymm5_src_r6, ymm6_src_r7, ymm7_src_r8;
+
+    __m512i zmm0_Src_r1_b0007, zmm2_Src_r2_b0007, zmm4_Src_r3_b0007, zmm6_Src_r4_b0007, zmm8_Src_r5_b0007, zmm10_Src_r6_b0007, zmm12_Src_r7_b0007, zmm14_Src_r8_b0007;
+    __m512i zmm1_Src_r1_b0815, zmm3_Src_r2_b0815, zmm5_Src_r3_b0815, zmm7_Src_r4_b0815, zmm9_Src_r5_b0815, zmm11_Src_r6_b0815, zmm13_Src_r7_b0815, zmm15_Src_r8_b0815;
+
   };
 
   class WorkingAreaFactory
@@ -469,6 +476,7 @@ private:
   void ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_4Blks_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy, int* pBlkData);
   void ExhaustiveSearch8x8_uint8_4Blks_Z_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy, int* pBlkData); // + zero pos
+  void ExhaustiveSearch8x8_uint8_16Blks_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy, int* pBlkData); 
    
   // 8x8 exa search radius 2
   void ExhaustiveSearch8x8_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
