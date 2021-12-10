@@ -452,6 +452,15 @@ private:
   template<typename pixel_t>
   void PseudoEPZSearch_optSO3_glob_pred_avx2(WorkingArea& workarea, int* pBlkData); // zero and global predictor, multi-block search AVX2
 
+  /* performs an epz search */
+  template<typename pixel_t>
+  void PseudoEPZSearch_optSO4_no_pred(WorkingArea& workarea, int* pBlkData); // no predictors, multi-block search AVX512
+
+  /* performs an epz search */
+  template<typename pixel_t>
+  void PseudoEPZSearch_optSO4_glob_pred_avx512(WorkingArea& workarea, int* pBlkData); // zero and global predictor, multi-block search AVX512
+
+
   //	void PhaseShiftSearch(int vx, int vy);
 
   /* performs an exhaustive search */
@@ -476,7 +485,8 @@ private:
   void ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_4Blks_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy, int* pBlkData);
   void ExhaustiveSearch8x8_uint8_4Blks_Z_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy, int* pBlkData); // + zero pos
-  void ExhaustiveSearch8x8_uint8_16Blks_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy, int* pBlkData); 
+  void ExhaustiveSearch8x8_uint8_16Blks_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy, int* pBlkData);
+  void ExhaustiveSearch8x8_uint8_16Blks_Z_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy, int* pBlkData); // +zero pos
    
   // 8x8 exa search radius 2
   void ExhaustiveSearch8x8_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
@@ -573,7 +583,11 @@ private:
   void	search_mv_slice_SO2(Slicer::TaskData& td); // with optSearchOption = 2 set of params
 
   template<typename pixel_t>
-  void	search_mv_slice_SO3(Slicer::TaskData& td); // with optSearchOption = 3 set of params, multi-blocks search
+  void	search_mv_slice_SO3(Slicer::TaskData& td); // with optSearchOption = 3 set of params, multi-blocks search AVX2
+
+  template<typename pixel_t>
+  void	search_mv_slice_SO4(Slicer::TaskData& td); // with optSearchOption = 4 set of params, multi-blocks search AVX512
+
 
   template<typename pixel_t>
   void	recalculate_mv_slice(Slicer::TaskData &td);
