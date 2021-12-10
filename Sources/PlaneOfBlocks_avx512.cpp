@@ -1050,35 +1050,35 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_16Blks_np1_sp1_avx512(WorkingArea&
   {
     pBlkData[(workarea.blkx + 11) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx0811, 6); // dx_minsad12;
     pBlkData[(workarea.blkx + 11) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx0811, 7); // dy_minsad12;
-    pBlkData[(workarea.blkx + 11) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+    pBlkData[(workarea.blkx + 11) * N_PER_BLOCK + 2] = (uint32_t)(minsad12);
   }
 
   if (minsad13 < pBlkData[(workarea.blkx + 12) * N_PER_BLOCK + 2])
   {
     pBlkData[(workarea.blkx + 12) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx1215, 0); // dx_minsad13;
     pBlkData[(workarea.blkx + 12) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx1215, 1); // dy_minsad13;
-    pBlkData[(workarea.blkx + 12) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+    pBlkData[(workarea.blkx + 12) * N_PER_BLOCK + 2] = (uint32_t)(minsad13);
   }
 
   if (minsad14 < pBlkData[(workarea.blkx + 13) * N_PER_BLOCK + 2])
   {
     pBlkData[(workarea.blkx + 13) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx1215, 2); // dx_minsad14;
     pBlkData[(workarea.blkx + 13) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx1215, 3); // dy_minsad14;
-    pBlkData[(workarea.blkx + 13) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+    pBlkData[(workarea.blkx + 13) * N_PER_BLOCK + 2] = (uint32_t)(minsad14);
   }
 
   if (minsad15 < pBlkData[(workarea.blkx + 14) * N_PER_BLOCK + 2])
   {
     pBlkData[(workarea.blkx + 14) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx1215, 4); // dx_minsad15;
     pBlkData[(workarea.blkx + 14) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx1215, 5); // dy_minsad15;
-    pBlkData[(workarea.blkx + 14) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+    pBlkData[(workarea.blkx + 14) * N_PER_BLOCK + 2] = (uint32_t)(minsad15);
   }
 
   if (minsad16 < pBlkData[(workarea.blkx + 15) * N_PER_BLOCK + 2])
   {
     pBlkData[(workarea.blkx + 15) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx1215, 6); // dx_minsad16;
     pBlkData[(workarea.blkx + 15) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx1215, 7); // dy_minsad16;
-    pBlkData[(workarea.blkx + 15) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+    pBlkData[(workarea.blkx + 15) * N_PER_BLOCK + 2] = (uint32_t)(minsad16);
   }
 
 }
@@ -1585,35 +1585,35 @@ void PlaneOfBlocks::ExhaustiveSearch8x8_uint8_16Blks_Z_np1_sp1_avx512(WorkingAre
   {
     pBlkData[(workarea.blkx + 11) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx0811, 6); // dx_minsad12;
     pBlkData[(workarea.blkx + 11) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx0811, 7); // dy_minsad12;
-    pBlkData[(workarea.blkx + 11) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+    pBlkData[(workarea.blkx + 11) * N_PER_BLOCK + 2] = (uint32_t)(minsad12);
   }
 
   if (minsad13 < pBlkData[(workarea.blkx + 12) * N_PER_BLOCK + 2])
   {
     pBlkData[(workarea.blkx + 12) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx1215, 0); // dx_minsad13;
     pBlkData[(workarea.blkx + 12) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx1215, 1); // dy_minsad13;
-    pBlkData[(workarea.blkx + 12) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+    pBlkData[(workarea.blkx + 12) * N_PER_BLOCK + 2] = (uint32_t)(minsad13);
   }
 
   if (minsad14 < pBlkData[(workarea.blkx + 13) * N_PER_BLOCK + 2])
   {
     pBlkData[(workarea.blkx + 13) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx1215, 2); // dx_minsad14;
     pBlkData[(workarea.blkx + 13) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx1215, 3); // dy_minsad14;
-    pBlkData[(workarea.blkx + 13) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+    pBlkData[(workarea.blkx + 13) * N_PER_BLOCK + 2] = (uint32_t)(minsad14);
   }
 
   if (minsad15 < pBlkData[(workarea.blkx + 14) * N_PER_BLOCK + 2])
   {
     pBlkData[(workarea.blkx + 14) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx1215, 4); // dx_minsad15;
     pBlkData[(workarea.blkx + 14) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx1215, 5); // dy_minsad15;
-    pBlkData[(workarea.blkx + 14) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+    pBlkData[(workarea.blkx + 14) * N_PER_BLOCK + 2] = (uint32_t)(minsad15);
   }
 
   if (minsad16 < pBlkData[(workarea.blkx + 15) * N_PER_BLOCK + 2])
   {
     pBlkData[(workarea.blkx + 15) * N_PER_BLOCK + 0] += _mm_extract_epi16(xmm_idx1215, 6); // dx_minsad16;
     pBlkData[(workarea.blkx + 15) * N_PER_BLOCK + 1] += _mm_extract_epi16(xmm_idx1215, 7); // dy_minsad16;
-    pBlkData[(workarea.blkx + 15) * N_PER_BLOCK + 2] = (uint32_t)(minsad11);
+    pBlkData[(workarea.blkx + 15) * N_PER_BLOCK + 2] = (uint32_t)(minsad16);
   }
 
 }
