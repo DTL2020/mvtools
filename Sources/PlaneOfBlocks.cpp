@@ -4982,6 +4982,27 @@ void	PlaneOfBlocks::search_mv_slice_SO3(Slicer::TaskData& td) // multi-blocks se
         workarea.blkx = blkxStart + iblkx * workarea.blkScanDir;
         workarea.blkIdx = workarea.blky * nBlkX + workarea.blkx;
         workarea.iter = 0;
+
+        // prefetch is useful for speed but prefetch advance distance (and count and cache level ?) need to be selected after series of tests (at different HW systems ?)
+#define PREFETCH_ADVANCE_SOURCE_AVX2 3
+
+        int x_next = workarea.x[0] + PREFETCH_ADVANCE_SOURCE_AVX2 * (MAX_MULTI_BLOCKS_8x8_AVX2 * nBlkSizeX_Ovr[0] * workarea.blkScanDir);
+        pSrcNext = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(x_next, workarea.y[0]);
+
+        for (int i = 0; i < nBlkSizeY; i++)
+        {
+          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(pSrcNext + nSrcPitch[0] * i)), _MM_HINT_T0);
+        }
+
+        x_next += MAX_MULTI_BLOCKS_8x8_AVX2 * nBlkSizeX_Ovr[0] * workarea.blkScanDir;
+        pSrcNext = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(x_next, workarea.y[0]);
+
+        for (int i = 0; i < nBlkSizeY; i++)
+        {
+          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(pSrcNext + nSrcPitch[0] * i)), _MM_HINT_T0);
+        }
+       
+
         //			DebugPrintf("BlkIdx = %d \n", workarea.blkIdx);
         PROFILE_START(MOTION_PROFILE_ME);
 

@@ -31,6 +31,7 @@
 #include "MVSuper.h"
 #include "profile.h"
 #include "SuperParams64Bits.h"
+#include "d3d12video.h" // for hardware motion estimation
 
 #include <cmath>
 #include <cstdio>
@@ -132,6 +133,47 @@ MVAnalyse::MVAnalyse(
   // Cleanup
   if (hToken != 0) CloseHandle(hToken);
   hToken = NULL;
+  
+  // check for hardware D3D12 motion estimator support
+#if 0
+  ComPtr<IDXGIFactory4> factory;
+  CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory));
+
+    ComPtr<IDXGIAdapter1> hardwareAdapter;
+    GetHardwareAdapter(factory.Get(), &hardwareAdapter);
+
+    HRESULT hr = D3D12CreateDevice(
+      hardwareAdapter.Get(),
+      D3D_FEATURE_LEVEL_11_0,
+      IID_PPV_ARGS(&m_device)
+    );
+
+  ComPtr<ID3D12VideoDevice> vid_dev;
+
+  HRESULT query_device1_result = m_device->QueryInterface(IID_PPV_ARGS(&vid_dev));
+
+  D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR MotionEstimatorSupport = { 0u, DXGI_FORMAT_NV12 };
+  HRESULT feature_support = vid_dev->CheckFeatureSupport(D3D12_FEATURE_VIDEO_MOTION_ESTIMATOR, &MotionEstimatorSupport, sizeof(MotionEstimatorSupport));
+
+  ComPtr<ID3D12VideoDevice1> vid_dev1;
+
+  HRESULT query_vid_device1_result = m_device->QueryInterface(IID_PPV_ARGS(&vid_dev1));
+
+  D3D12_VIDEO_MOTION_ESTIMATOR_DESC motionEstimatorDesc = {
+  0, //NodeIndex
+  DXGI_FORMAT_NV12,
+  D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_8X8,
+  D3D12_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_QUARTER_PEL,
+  {1920, 1080, 1280, 720} // D3D12_VIDEO_SIZE_RANGE
+  };
+
+  ComPtr<ID3D12VideoMotionEstimator> spVideoMotionEstimator;
+  HRESULT vid_est_result = vid_dev1->CreateVideoMotionEstimator(
+    &motionEstimatorDesc,
+    nullptr,
+    IID_PPV_ARGS(&spVideoMotionEstimator));
+#endif
+
 #endif
 
   if (vi.IsY())
