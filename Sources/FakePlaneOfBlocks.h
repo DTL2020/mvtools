@@ -26,7 +26,6 @@
 
 class FakePlaneOfBlocks
 {
-
   int nWidth_Bi;
   int nHeight_Bi;
   int nBlkX;
@@ -42,6 +41,8 @@ class FakePlaneOfBlocks
   int nOverlapY;
 
   FakeBlockData *blocks;
+
+  VECTOR* pMVsArray;
 
 public :
 
@@ -73,6 +74,8 @@ public :
   MV_FORCEINLINE const FakeBlockData& GetBlock(int i) const { return (blocks[i]); }
   MV_FORCEINLINE int GetOverlapX() const { return nOverlapX; }
   MV_FORCEINLINE int GetOverlapY() const { return nOverlapY; }
+
+  MV_FORCEINLINE const VECTOR* GetpMVsArray() const { return pMVsArray; }
 };
 
 

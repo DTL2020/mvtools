@@ -38,6 +38,7 @@ FakePlaneOfBlocks::FakePlaneOfBlocks(int sizeX, int sizeY, int lv, int pel, int 
 //   nBlkY = (nHeight_Bi - nOverlapY) / (nBlkSizeY - nOverlapY); //
    nBlkCount = nBlkX * nBlkY;
    nPel = pel;
+   pMVsArray = new VECTOR[nBlkCount]; // allocate in heap ?
 
   nLogPel = ilog2(nPel);
   nLogScale = lv;
@@ -57,23 +58,28 @@ FakePlaneOfBlocks::~FakePlaneOfBlocks()
 //		delete blocks[i];
 
   delete[] blocks;
+  delete[] pMVsArray;
 }
 
 void FakePlaneOfBlocks::Update(const int *array)
 {
+  // need to copy, pointer not keeped ?
+  memcpy(pMVsArray, array, nBlkCount * sizeof(VECTOR));
+/*
   array += 0;
   for ( int i = 0; i < nBlkCount; i++ )
   {
     blocks[i].Update(array);
     array += N_PER_BLOCK;
-  }
+  } */ // comment-out not compatible with depan (and MDegrainX ?) ! to make - need to pass bool bForDepan, (and bForMDegrainX ?)
 }
 
 bool FakePlaneOfBlocks::IsSceneChange(sad_t nTh1, int nTh2) const
 {
   int sum = 0;
-  for ( int i = 0; i < nBlkCount; i++ )
-    sum += ( blocks[i].GetSAD() > nTh1 ) ? 1 : 0;
+  for (int i = 0; i < nBlkCount; i++)
+    //    sum += ( blocks[i].GetSAD() > nTh1 ) ? 1 : 0;
+    sum += (pMVsArray[i].sad > nTh1) ? 1 : 0;
 
   return ( sum > nTh2 );
 }

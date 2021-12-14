@@ -80,6 +80,8 @@ public :
    bool IsUsable(sad_t nSCD1_, int nSCD2_) const;
    bool IsUsable() const { return IsUsable(nSCD1, nSCD2); }
    bool IsSceneChange() const { return FakeGroupOfPlanes::IsSceneChange(nSCD1, nSCD2); }
+
+   const VECTOR* GetpMVsArray(int nLevel) const { return GetPlane(nLevel).GetpMVsArray(); }
 };
 
 

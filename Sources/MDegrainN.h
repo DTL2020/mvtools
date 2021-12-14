@@ -104,6 +104,23 @@ private:
   template <int P>
   MV_FORCEINLINE void process_chroma(int plane_mask);
 
+#define CACHE_LINE_SIZE 64
+  MV_FORCEINLINE void SWprefetch(char* p, int iSize)
+  {
+    for (int i = 0; i < iSize; i += CACHE_LINE_SIZE)
+    {
+      (void)* (volatile char*)(p + i);
+    }
+  }
+
+  MV_FORCEINLINE void HWprefetch(char* p, int iSize)
+  {
+    for (int i = 0; i < iSize; i += CACHE_LINE_SIZE)
+    {
+      _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(p + i)), _MM_HINT_T0);
+    }
+  }
+
   void process_luma_normal_slice(Slicer::TaskData &td);
   void process_luma_normal_slice_8x8(Slicer::TaskData& td);
   void process_luma_normal_slice_16x16(Slicer::TaskData& td);

@@ -2440,12 +2440,23 @@ void	MDegrainN::use_block_y(
 {
   if (usable_flag)
   {
-    const FakeBlockData &	block = c_info._clip_sptr->GetBlock(0, i);
+/*    const FakeBlockData &	block = c_info._clip_sptr->GetBlock(0, i);
     const int blx = block.GetX() * nPel + block.GetMV().x;
     const int bly = block.GetY() * nPel + block.GetMV().y;
     p = plane_ptr->GetPointer(blx, bly);
     np = plane_ptr->GetPitch();
     const sad_t block_sad = block.GetSAD(); // SAD of MV Block. Scaled to MVClip's bits_per_pixel;
+    wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
+  */  
+    const VECTOR* pMVsArray = c_info._clip_sptr->GetpMVsArray(0);
+    const sad_t block_sad = pMVsArray[i].sad;
+    
+    const FakeBlockData& block = c_info._clip_sptr->GetBlock(0, i); // may be calculate x and y from index i ??? todo: next possible optimization
+    const int blx = block.GetX() * nPel + pMVsArray[i].x;
+    const int bly = block.GetY() * nPel + pMVsArray[i].y;
+    p = plane_ptr->GetPointer(blx, bly);
+    np = plane_ptr->GetPitch();
+//    const sad_t block_sad = block.GetSAD(); // SAD of MV Block. Scaled to MVClip's bits_per_pixel;
     wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
   }
   else
@@ -2465,12 +2476,23 @@ void	MDegrainN::use_block_uv(
 {
   if (usable_flag)
   {
-    const FakeBlockData &block = c_info._clip_sptr->GetBlock(0, i);
+/*    const FakeBlockData &block = c_info._clip_sptr->GetBlock(0, i);
     const int blx = block.GetX() * nPel + block.GetMV().x;
     const int bly = block.GetY() * nPel + block.GetMV().y;
     p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
     np = plane_ptr->GetPitch();
     const sad_t block_sad = block.GetSAD(); // SAD of MV Block. Scaled to MVClip's bits_per_pixel;
+    wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow); */
+
+    const VECTOR* pMVsArray = c_info._clip_sptr->GetpMVsArray(0);
+    const sad_t block_sad = pMVsArray[i].sad;
+
+    const FakeBlockData& block = c_info._clip_sptr->GetBlock(0, i); // may be calculate x and y from index i ??? todo: next possible optimization
+    const int blx = block.GetX() * nPel + pMVsArray[i].x;
+    const int bly = block.GetY() * nPel + pMVsArray[i].y;
+    p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
+    np = plane_ptr->GetPitch();
+//    const sad_t block_sad = block.GetSAD(); // SAD of MV Block. Scaled to MVClip's bits_per_pixel;
     wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
   }
   else

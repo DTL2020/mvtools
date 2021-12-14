@@ -4987,7 +4987,7 @@ void	PlaneOfBlocks::search_mv_slice_SO3(Slicer::TaskData& td) // multi-blocks se
 #define PREFETCH_ADVANCE_SOURCE_AVX2 3
 
         int x_next = workarea.x[0] + PREFETCH_ADVANCE_SOURCE_AVX2 * (MAX_MULTI_BLOCKS_8x8_AVX2 * nBlkSizeX_Ovr[0] * workarea.blkScanDir);
-        pSrcNext = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(x_next, workarea.y[0]);
+        const uint8_t* pSrcNext = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(x_next, workarea.y[0]);
 
         for (int i = 0; i < nBlkSizeY; i++)
         {
