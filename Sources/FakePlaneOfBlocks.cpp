@@ -71,7 +71,7 @@ void FakePlaneOfBlocks::Update(const int *array)
   {
     blocks[i].Update(array);
     array += N_PER_BLOCK;
-  } */ // comment-out not compatible with depan (and MDegrainX ?) ! to make - need to pass bool bForDepan, (and bForMDegrainX ?)
+  } */ // comment-out may be (?) not compatible with depan (and MDegrainX ?), to make - need to pass bool bForDepan, (and bForMDegrainX ?)
 }
 
 bool FakePlaneOfBlocks::IsSceneChange(sad_t nTh1, int nTh2) const

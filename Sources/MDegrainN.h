@@ -146,12 +146,12 @@ private:
   MV_FORCEINLINE void
     use_block_y(
       const BYTE * &p, int &np, int &wref, bool usable_flag, const MvClipInfo &c_info,
-      int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch
+      int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch, int ibx, int iby 
     );
   MV_FORCEINLINE void
     use_block_uv(
       const BYTE * &p, int &np, int &wref, bool usable_flag, const MvClipInfo &c_info,
-      int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch
+      int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch, int ibx, int iby
     );
 
   static MV_FORCEINLINE void

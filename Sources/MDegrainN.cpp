@@ -1715,7 +1715,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       // prefetch vectors ??
       for (int k = 0; k < _trad * 2; ++k)
       {
-          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + 1))), _MM_HINT_T0);
+ //         _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + 1))), _MM_HINT_T0);
       }
 
       for (int k = 0; k < _trad * 2; ++k)
@@ -1730,7 +1730,9 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
           _planes_ptr[k][0],
           pSrcCur,
           xx << pixelsize_super_shift,
-          _src_pitch_arr[0]
+          _src_pitch_arr[0],
+          bx,
+          by
         );
       }
 
@@ -1817,8 +1819,8 @@ void	MDegrainN::process_luma_normal_slice_8x8(Slicer::TaskData& td)
       // prefetch vectors ??
       for (int k = 0; k < _trad * 2; ++k)
       {
-        for (int iSub = 0; iSub < BLOCKS_PER_STORE; iSub+=4)
-          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + BLOCKS_PER_STORE + iSub))), _MM_HINT_T0);
+  //      for (int iSub = 0; iSub < BLOCKS_PER_STORE; iSub+=4)
+  //        _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + BLOCKS_PER_STORE + iSub))), _MM_HINT_T0);
       }
 
       for (int iSubStore = 0; iSubStore < BLOCKS_PER_STORE; ++iSubStore)
@@ -1835,7 +1837,9 @@ void	MDegrainN::process_luma_normal_slice_8x8(Slicer::TaskData& td)
             _planes_ptr[k][0],
             pSrcCur,
             xx << pixelsize_super_shift,
-            _src_pitch_arr[0]
+            _src_pitch_arr[0],
+            bx,
+            by
           );
         }
 
@@ -1925,8 +1929,8 @@ void	MDegrainN::process_luma_normal_slice_16x16(Slicer::TaskData& td)
       // prefetch vectors ??
       for (int k = 0; k < _trad * 2; ++k)
       {
-        for (int iSub = 0; iSub < BLOCKS_PER_STORE; iSub += 2)
-          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + BLOCKS_PER_STORE + iSub))), _MM_HINT_T0);
+ //       for (int iSub = 0; iSub < BLOCKS_PER_STORE; iSub += 2)
+ //         _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + BLOCKS_PER_STORE + iSub))), _MM_HINT_T0);
       }
 
       for (int iSubStore = 0; iSubStore < BLOCKS_PER_STORE; ++iSubStore)
@@ -1943,7 +1947,9 @@ void	MDegrainN::process_luma_normal_slice_16x16(Slicer::TaskData& td)
             _planes_ptr[k][0],
             pSrcCur,
             xx << pixelsize_super_shift,
-            _src_pitch_arr[0]
+            _src_pitch_arr[0],
+            bx,
+            by
           );
         }
 
@@ -2091,7 +2097,7 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
       // prefetch vectors ??
       for (int k = 0; k < _trad * 2; ++k)
       {
-        _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + 1))), _MM_HINT_T0);
+//        _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&(_mv_clip_arr[k]._clip_sptr->GetpMVsArray(0) + sizeof(VECTOR))), _MM_HINT_T0);
       }
 
       for (int k = 0; k < _trad * 2; ++k)
@@ -2106,7 +2112,9 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
           _planes_ptr[k][0],
           pSrcCur,
           xx << pixelsize_super_shift,
-          _src_pitch_arr[0]
+          _src_pitch_arr[0],
+          bx,
+          by
         );
       }
 
@@ -2182,7 +2190,7 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
       // prefetch vectors ??
       for (int k = 0; k < _trad * 2; ++k)
       {
-        _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + 1))), _MM_HINT_T0);
+ //       _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + 1))), _MM_HINT_T0);
       }
 
       for (int k = 0; k < _trad * 2; ++k)
@@ -2198,7 +2206,9 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
           pSrcCur,
           xx << pixelsize_super_shift, // the pointer increment inside knows that xx later here is incremented with nBlkSize and not nBlkSize>>_xRatioUV
               // todo: copy from MDegrainX. Here we shift, and incement with nBlkSize>>_xRatioUV
-          _src_pitch_arr[P]
+          _src_pitch_arr[P],
+          bx,
+          by
         ); // vs: extra nLogPel, plane, xSubUV, ySubUV, thSAD
       }
 
@@ -2354,7 +2364,7 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
       // prefetch vectors ??
       for (int k = 0; k < _trad * 2; ++k)
       {
-        _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + 1))), _MM_HINT_T0);
+ //       _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + 1))), _MM_HINT_T0);
       }
 
       for (int k = 0; k < _trad * 2; ++k)
@@ -2369,7 +2379,9 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
           _planes_ptr[k][P],
           pSrcCur,
           xx << pixelsize_super_shift, //  the pointer increment inside knows that xx later here is incremented with nBlkSize and not nBlkSize>>_xRatioUV
-          _src_pitch_arr[P]
+          _src_pitch_arr[P],
+          bx,
+          by
         );
       }
 
@@ -2435,7 +2447,7 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
 
 void	MDegrainN::use_block_y(
   const BYTE * &p, int &np, int &wref, bool usable_flag, const MvClipInfo &c_info,
-  int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch
+  int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch, int ibx, int iby
 )
 {
   if (usable_flag)
@@ -2451,13 +2463,13 @@ void	MDegrainN::use_block_y(
     const VECTOR* pMVsArray = c_info._clip_sptr->GetpMVsArray(0);
     const sad_t block_sad = pMVsArray[i].sad;
     
-    const FakeBlockData& block = c_info._clip_sptr->GetBlock(0, i); // may be calculate x and y from index i ??? todo: next possible optimization
-    const int blx = block.GetX() * nPel + pMVsArray[i].x;
-    const int bly = block.GetY() * nPel + pMVsArray[i].y;
+    const int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+    const int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
     p = plane_ptr->GetPointer(blx, bly);
     np = plane_ptr->GetPitch();
 //    const sad_t block_sad = block.GetSAD(); // SAD of MV Block. Scaled to MVClip's bits_per_pixel;
     wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
+
   }
   else
   {
@@ -2467,11 +2479,9 @@ void	MDegrainN::use_block_y(
   }
 }
 
-
-
 void	MDegrainN::use_block_uv(
   const BYTE * &p, int &np, int &wref, bool usable_flag, const MvClipInfo &c_info,
-  int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch
+  int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch, int ibx, int iby
 )
 {
   if (usable_flag)
@@ -2486,10 +2496,8 @@ void	MDegrainN::use_block_uv(
 
     const VECTOR* pMVsArray = c_info._clip_sptr->GetpMVsArray(0);
     const sad_t block_sad = pMVsArray[i].sad;
-
-    const FakeBlockData& block = c_info._clip_sptr->GetBlock(0, i); // may be calculate x and y from index i ??? todo: next possible optimization
-    const int blx = block.GetX() * nPel + pMVsArray[i].x;
-    const int bly = block.GetY() * nPel + pMVsArray[i].y;
+    const int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+    const int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
     p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
     np = plane_ptr->GetPitch();
 //    const sad_t block_sad = block.GetSAD(); // SAD of MV Block. Scaled to MVClip's bits_per_pixel;
