@@ -51,6 +51,8 @@
 #include <wrl.h>
 #include <shellapi.h>
 
+using Microsoft::WRL::ComPtr;
+
 #endif
 
 class MVAnalyse
@@ -161,11 +163,29 @@ private:
 
   // DX12_ME
 //  ComPtr<ID3D12Device> m_device;
+  inline UINT Align(UINT size, UINT alignment)
+  {
+    return (size + (alignment - 1)) & ~(alignment - 1);
+  }
+
+  ComPtr<IDXGIFactory4> factory;
+  ComPtr<IDXGIAdapter1> hardwareAdapter;
+  ComPtr<ID3D12Device> m_D3D12device;
+  ComPtr<ID3D12VideoDevice> dev_D3D12VideoDevice;
+  ComPtr<ID3D12VideoDevice1> dev_D3D12VideoDevice1;
+  ComPtr<ID3D12VideoMotionEstimator> spVideoMotionEstimator;
+  ComPtr<ID3D12VideoMotionVectorHeap> spVideoMotionVectorHeap;
+  ComPtr<ID3D12Resource> spResolvedMotionVectors;
+  ComPtr<ID3D12Resource> spCurrentResource;
+  ComPtr<ID3D12Resource> spReferenceResource;
 
   void GetHardwareAdapter(
     _In_ IDXGIFactory1* pFactory,
     _Outptr_result_maybenull_ IDXGIAdapter1** ppAdapter,
     bool requestHighPerformanceAdapter = false);
+
+  void Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize);
+
 };
 
 #endif

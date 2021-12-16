@@ -181,72 +181,25 @@ MVAnalyse::MVAnalyse(
   analysisData.pixelsize = pixelsize;
   analysisData.bits_per_pixel = bits_per_pixel;
 
-
 #ifdef _WIN32
 
   if (optSearchOption == 5) // DX12_ME
   {
-    // check for hardware D3D12 motion estimator support
-    UINT dxgiFactoryFlags = 0;
+    int iBlkSize;
+    if ((_blksizex == 8) && (_blksizey == 8))
+      iBlkSize = 8;
+    else
+      if ((_blksizex == 16) && (_blksizey == 16))
+        iBlkSize = 16;
+      else
+      {
+         env->ThrowError("MAnalyse: Unsupported block size for DX12_ME, only 8x8 and 16x16 allowed");
+      }
 
-    ComPtr<IDXGIFactory4> factory;
-    CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory));
-
-    ComPtr<IDXGIAdapter1> hardwareAdapter;
-    GetHardwareAdapter(factory.Get(), &hardwareAdapter);
-
-    ComPtr<ID3D12Device> m_device;
-
-    HRESULT hr = D3D12CreateDevice(
-      hardwareAdapter.Get(),
-      D3D_FEATURE_LEVEL_11_0,
-      IID_PPV_ARGS(&m_device)
-    );
-
-    ComPtr<ID3D12VideoDevice> vid_dev;
-
-    HRESULT query_device1_result = m_device->QueryInterface(IID_PPV_ARGS(&vid_dev));
-
-    D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR MotionEstimatorSupport = { 0u, DXGI_FORMAT_NV12 };
-    HRESULT feature_support = vid_dev->CheckFeatureSupport(D3D12_FEATURE_VIDEO_MOTION_ESTIMATOR, &MotionEstimatorSupport, sizeof(MotionEstimatorSupport));
-
-    // check if size supported
-    if (analysisData.nWidth > MotionEstimatorSupport.SizeRange.MaxWidth)
-    {
-      env->ThrowError(
-        "MAnalyse: frame width not supported by DX12_ME, max supported width %d", MotionEstimatorSupport.SizeRange.MaxWidth
-      );
-    }
-
-    if (analysisData.nHeight > MotionEstimatorSupport.SizeRange.MaxHeight)
-    {
-      env->ThrowError(
-        "MAnalyse: frame width not supported by DX12_ME, max supported width %d", MotionEstimatorSupport.SizeRange.MaxWidth
-      );
-    }
-
-    ComPtr<ID3D12VideoDevice1> vid_dev1;
-
-    HRESULT query_vid_device1_result = m_device->QueryInterface(IID_PPV_ARGS(&vid_dev1));
-
-    D3D12_VIDEO_MOTION_ESTIMATOR_DESC motionEstimatorDesc = {
-    0, //NodeIndex
-    DXGI_FORMAT_NV12,
-    D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_8X8,
-    D3D12_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_QUARTER_PEL,
-    {analysisData.nWidth, analysisData.nHeight, analysisData.nWidth, analysisData.nHeight} // D3D12_VIDEO_SIZE_RANGE
-    };
-
-    ComPtr<ID3D12VideoMotionEstimator> spVideoMotionEstimator;
-    HRESULT vid_est_result = vid_dev1->CreateVideoMotionEstimator(
-      &motionEstimatorDesc,
-      nullptr,
-      IID_PPV_ARGS(&spVideoMotionEstimator));
+    Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize);
   }
 
 #endif
-
-
 
   if (_chromaSADScale < -2 || _chromaSADScale>2)
     env->ThrowError(
@@ -827,6 +780,8 @@ void	MVAnalyse::load_src_frame(MVGroupOfFrames &gof, ::PVideoFrame &src, const M
   ); // v2.0
 }
 
+#ifdef _WIN32
+
 void MVAnalyse::GetHardwareAdapter(
   IDXGIFactory1* pFactory,
   IDXGIAdapter1** ppAdapter,
@@ -891,3 +846,192 @@ void MVAnalyse::GetHardwareAdapter(
 
   *ppAdapter = adapter.Detach();
 }
+
+void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize)
+{
+  // check for hardware D3D12 motion estimator support and init
+  UINT dxgiFactoryFlags = 0;
+  HRESULT hr;
+
+  hr = CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory));
+  if (hr != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error CreateDXGIFactory2()"
+    );
+  }
+
+  GetHardwareAdapter(factory.Get(), &hardwareAdapter);
+
+  if (hardwareAdapter == NULL)
+  {
+    env->ThrowError(
+      "MAnalyse: Error GetHardwareAdapter return NULL"
+    );
+  }
+
+  hr = D3D12CreateDevice(
+    hardwareAdapter.Get(),
+    D3D_FEATURE_LEVEL_11_0,
+    IID_PPV_ARGS(&m_D3D12device)
+  );
+
+  if (hr != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error D3D12CreateDevice()"
+    );
+  }
+
+  HRESULT query_device1_result = m_D3D12device->QueryInterface(IID_PPV_ARGS(&dev_D3D12VideoDevice));
+
+  D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR MotionEstimatorSupport = { 0u, DXGI_FORMAT_NV12 };
+  HRESULT feature_support = dev_D3D12VideoDevice->CheckFeatureSupport(D3D12_FEATURE_VIDEO_MOTION_ESTIMATOR, &MotionEstimatorSupport, sizeof(MotionEstimatorSupport));
+
+  if (feature_support != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error CheckFeatureSupport() D3D12_FEATURE_VIDEO_MOTION_ESTIMATOR"
+    );
+  }
+
+  // check if size supported
+  if (nWidth > MotionEstimatorSupport.SizeRange.MaxWidth)
+  {
+    env->ThrowError(
+      "MAnalyse: frame width not supported by DX12_ME, max supported width %d", MotionEstimatorSupport.SizeRange.MaxWidth
+    );
+  }
+
+  if (nHeight > MotionEstimatorSupport.SizeRange.MaxHeight)
+  {
+    env->ThrowError(
+      "MAnalyse: frame width not supported by DX12_ME, max supported width %d", MotionEstimatorSupport.SizeRange.MaxWidth
+    );
+  }
+
+  HRESULT query_vid_device1_result = dev_D3D12VideoDevice->QueryInterface(IID_PPV_ARGS(&dev_D3D12VideoDevice1));
+
+  if (query_device1_result != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error QueryInterface -> dev_D3D12VideoDevice1"
+    );
+  }
+
+  D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE ME_BlockSize;
+
+  if (iBlkSize == 8)
+  {
+    ME_BlockSize = D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_8X8;
+  }
+  else
+    if (iBlkSize == 16)
+    {
+      ME_BlockSize = D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_16X16;
+    }
+
+  D3D12_VIDEO_MOTION_ESTIMATOR_DESC motionEstimatorDesc = {
+  0, //NodeIndex
+  DXGI_FORMAT_NV12,
+  ME_BlockSize,
+  D3D12_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_QUARTER_PEL,
+  {nWidth, nHeight, nWidth, nHeight} // D3D12_VIDEO_SIZE_RANGE
+  };
+
+  HRESULT vid_est_result = dev_D3D12VideoDevice1->CreateVideoMotionEstimator(
+    &motionEstimatorDesc,
+    nullptr,
+    IID_PPV_ARGS(&spVideoMotionEstimator));
+
+  if (vid_est_result != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error CreateVideoMotionEstimator()"
+    );
+  }
+
+  D3D12_VIDEO_MOTION_VECTOR_HEAP_DESC MotionVectorHeapDesc = {
+  0, // NodeIndex 
+  DXGI_FORMAT_NV12,
+  D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_8X8,
+  D3D12_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_QUARTER_PEL,
+  {nWidth, nHeight, nWidth, nHeight} // D3D12_VIDEO_SIZE_RANGE
+  };
+
+  HRESULT vect_heap_result = dev_D3D12VideoDevice1->CreateVideoMotionVectorHeap(
+    &MotionVectorHeapDesc,
+    nullptr,
+    IID_PPV_ARGS(&spVideoMotionVectorHeap));
+
+  if (vect_heap_result != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error CreateVideoMotionVectorHeap()"
+    );
+  }
+
+  HRESULT res_motion_vectors_texture = m_D3D12device->CreateCommittedResource(
+    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+    D3D12_HEAP_FLAG_NONE,
+    &CD3DX12_RESOURCE_DESC::Tex2D(
+      DXGI_FORMAT_R16G16_SINT,
+      Align(nWidth, 8) / 8, // This example uses a 8x8 block size. Pixel width and height
+      Align(nHeight, 8) / 8, // are adjusted to store the vectors for those blocks.
+      1, // ArraySize
+      1  // MipLevels
+    ),
+    D3D12_RESOURCE_STATE_COMMON,
+    nullptr,
+    IID_PPV_ARGS(&spResolvedMotionVectors));
+
+  if (res_motion_vectors_texture != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error CreateCommittedResource -> spResolvedMotionVectors"
+    );
+  }
+
+  D3D12_RESOURCE_DESC textureDesc = {};
+  textureDesc.MipLevels = 1;
+  textureDesc.Format = DXGI_FORMAT_NV12;
+  textureDesc.Width = nWidth;
+  textureDesc.Height = nHeight;
+  textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+  textureDesc.DepthOrArraySize = 1;
+  textureDesc.SampleDesc.Count = 1;
+  textureDesc.SampleDesc.Quality = 0;
+  textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+
+  HRESULT res_current_texture = m_D3D12device->CreateCommittedResource(
+    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+    D3D12_HEAP_FLAG_NONE,
+    &textureDesc,
+    D3D12_RESOURCE_STATE_COMMON,
+    nullptr,
+    IID_PPV_ARGS(&spCurrentResource));
+
+  if (res_current_texture != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error CreateCommittedResource -> spCurrentResource"
+    );
+  }
+
+  HRESULT res_ref_texture = m_D3D12device->CreateCommittedResource(
+    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+    D3D12_HEAP_FLAG_NONE,
+    &textureDesc,
+    D3D12_RESOURCE_STATE_COMMON,
+    nullptr,
+    IID_PPV_ARGS(&spReferenceResource));
+
+  if (res_ref_texture != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error CreateCommittedResource -> spReferenceResource"
+    );
+  }
+}
+
+#endif // _WIN32
