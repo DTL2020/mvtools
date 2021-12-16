@@ -61,7 +61,7 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{E9BEFD98-715B-40C8-A1F1-1F302DF0B32B}</ProjectGuid>
     <RootNamespace>mvtools</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.20348.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
@@ -424,6 +424,7 @@
       <AdditionalOptions> %(AdditionalOptions)</AdditionalOptions>
       <AssemblyDebug>
       </AssemblyDebug>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;d3d12.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <NASM>
       <ObjectFileName>$(IntDir)%(FileName).obj</ObjectFileName>
@@ -1898,6 +1899,7 @@
       <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release_v141_xp|x64'">cpu-32.asm;%(AdditionalInputs)</AdditionalInputs>
       <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64'">cpu-32.asm;%(AdditionalInputs)</AdditionalInputs>
     </CustomBuild>
+    <ClInclude Include="d3dx12.h" />
     <ClInclude Include="DCTClass.h" />
     <ClInclude Include="DCTFactory.h" />
     <ClInclude Include="DCTFFTW.h" />
