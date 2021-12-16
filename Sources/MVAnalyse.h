@@ -31,7 +31,27 @@
 #include <memory>
 #include <vector>
 
+#ifdef _WIN32
 
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN             // Exclude rarely-used stuff from Windows headers.
+#endif
+
+#include <windows.h>
+
+#include <d3d12.h>
+#include <dxgi1_6.h>
+#include <D3Dcompiler.h>
+#include <DirectXMath.h>
+#include "d3dx12.h"
+#include "d3d12video.h"
+
+#include <string>
+#include <wrl.h>
+#include <shellapi.h>
+
+#endif
 
 class MVAnalyse
   : public GenericVideoFilter
@@ -138,6 +158,14 @@ public:
 private:
 
   void load_src_frame(MVGroupOfFrames &gof, ::PVideoFrame &src, const MVAnalysisData &ana_data);
+
+  // DX12_ME
+//  ComPtr<ID3D12Device> m_device;
+
+  void GetHardwareAdapter(
+    _In_ IDXGIFactory1* pFactory,
+    _Outptr_result_maybenull_ IDXGIAdapter1** ppAdapter,
+    bool requestHighPerformanceAdapter = false);
 };
 
 #endif

@@ -31,7 +31,11 @@
 #include "MVSuper.h"
 #include "profile.h"
 #include "SuperParams64Bits.h"
-#include "d3d12video.h" // for hardware motion estimation
+
+
+#ifdef _WIN32
+using namespace Microsoft::WRL;
+#endif
 
 #include <cmath>
 #include <cstdio>
@@ -133,48 +137,9 @@ MVAnalyse::MVAnalyse(
   // Cleanup
   if (hToken != 0) CloseHandle(hToken);
   hToken = NULL;
-  
-  // check for hardware D3D12 motion estimator support
-#if 0
-  ComPtr<IDXGIFactory4> factory;
-  CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory));
-
-    ComPtr<IDXGIAdapter1> hardwareAdapter;
-    GetHardwareAdapter(factory.Get(), &hardwareAdapter);
-
-    HRESULT hr = D3D12CreateDevice(
-      hardwareAdapter.Get(),
-      D3D_FEATURE_LEVEL_11_0,
-      IID_PPV_ARGS(&m_device)
-    );
-
-  ComPtr<ID3D12VideoDevice> vid_dev;
-
-  HRESULT query_device1_result = m_device->QueryInterface(IID_PPV_ARGS(&vid_dev));
-
-  D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR MotionEstimatorSupport = { 0u, DXGI_FORMAT_NV12 };
-  HRESULT feature_support = vid_dev->CheckFeatureSupport(D3D12_FEATURE_VIDEO_MOTION_ESTIMATOR, &MotionEstimatorSupport, sizeof(MotionEstimatorSupport));
-
-  ComPtr<ID3D12VideoDevice1> vid_dev1;
-
-  HRESULT query_vid_device1_result = m_device->QueryInterface(IID_PPV_ARGS(&vid_dev1));
-
-  D3D12_VIDEO_MOTION_ESTIMATOR_DESC motionEstimatorDesc = {
-  0, //NodeIndex
-  DXGI_FORMAT_NV12,
-  D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_8X8,
-  D3D12_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_QUARTER_PEL,
-  {1920, 1080, 1280, 720} // D3D12_VIDEO_SIZE_RANGE
-  };
-
-  ComPtr<ID3D12VideoMotionEstimator> spVideoMotionEstimator;
-  HRESULT vid_est_result = vid_dev1->CreateVideoMotionEstimator(
-    &motionEstimatorDesc,
-    nullptr,
-    IID_PPV_ARGS(&spVideoMotionEstimator));
-#endif
 
 #endif
+
 
   if (vi.IsY())
     chroma = false; // silent fallback
@@ -215,6 +180,73 @@ MVAnalyse::MVAnalyse(
   }
   analysisData.pixelsize = pixelsize;
   analysisData.bits_per_pixel = bits_per_pixel;
+
+
+#ifdef _WIN32
+
+  if (optSearchOption == 5) // DX12_ME
+  {
+    // check for hardware D3D12 motion estimator support
+    UINT dxgiFactoryFlags = 0;
+
+    ComPtr<IDXGIFactory4> factory;
+    CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory));
+
+    ComPtr<IDXGIAdapter1> hardwareAdapter;
+    GetHardwareAdapter(factory.Get(), &hardwareAdapter);
+
+    ComPtr<ID3D12Device> m_device;
+
+    HRESULT hr = D3D12CreateDevice(
+      hardwareAdapter.Get(),
+      D3D_FEATURE_LEVEL_11_0,
+      IID_PPV_ARGS(&m_device)
+    );
+
+    ComPtr<ID3D12VideoDevice> vid_dev;
+
+    HRESULT query_device1_result = m_device->QueryInterface(IID_PPV_ARGS(&vid_dev));
+
+    D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR MotionEstimatorSupport = { 0u, DXGI_FORMAT_NV12 };
+    HRESULT feature_support = vid_dev->CheckFeatureSupport(D3D12_FEATURE_VIDEO_MOTION_ESTIMATOR, &MotionEstimatorSupport, sizeof(MotionEstimatorSupport));
+
+    // check if size supported
+    if (analysisData.nWidth > MotionEstimatorSupport.SizeRange.MaxWidth)
+    {
+      env->ThrowError(
+        "MAnalyse: frame width not supported by DX12_ME, max supported width %d", MotionEstimatorSupport.SizeRange.MaxWidth
+      );
+    }
+
+    if (analysisData.nHeight > MotionEstimatorSupport.SizeRange.MaxHeight)
+    {
+      env->ThrowError(
+        "MAnalyse: frame width not supported by DX12_ME, max supported width %d", MotionEstimatorSupport.SizeRange.MaxWidth
+      );
+    }
+
+    ComPtr<ID3D12VideoDevice1> vid_dev1;
+
+    HRESULT query_vid_device1_result = m_device->QueryInterface(IID_PPV_ARGS(&vid_dev1));
+
+    D3D12_VIDEO_MOTION_ESTIMATOR_DESC motionEstimatorDesc = {
+    0, //NodeIndex
+    DXGI_FORMAT_NV12,
+    D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_8X8,
+    D3D12_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_QUARTER_PEL,
+    {analysisData.nWidth, analysisData.nHeight, analysisData.nWidth, analysisData.nHeight} // D3D12_VIDEO_SIZE_RANGE
+    };
+
+    ComPtr<ID3D12VideoMotionEstimator> spVideoMotionEstimator;
+    HRESULT vid_est_result = vid_dev1->CreateVideoMotionEstimator(
+      &motionEstimatorDesc,
+      nullptr,
+      IID_PPV_ARGS(&spVideoMotionEstimator));
+  }
+
+#endif
+
+
 
   if (_chromaSADScale < -2 || _chromaSADScale>2)
     env->ThrowError(
@@ -586,6 +618,7 @@ MVAnalyse::MVAnalyse(
     vi.sample_type = (int)(p & 0xffffffffUL);
 #endif
   }
+
 }
 
 
@@ -794,3 +827,67 @@ void	MVAnalyse::load_src_frame(MVGroupOfFrames &gof, ::PVideoFrame &src, const M
   ); // v2.0
 }
 
+void MVAnalyse::GetHardwareAdapter(
+  IDXGIFactory1* pFactory,
+  IDXGIAdapter1** ppAdapter,
+  bool requestHighPerformanceAdapter)
+{
+  *ppAdapter = nullptr;
+
+  ComPtr<IDXGIAdapter1> adapter;
+
+  ComPtr<IDXGIFactory6> factory6;
+  if (SUCCEEDED(pFactory->QueryInterface(IID_PPV_ARGS(&factory6))))
+  {
+    for (
+      UINT adapterIndex = 0;
+      SUCCEEDED(factory6->EnumAdapterByGpuPreference(
+        adapterIndex,
+        requestHighPerformanceAdapter == true ? DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE : DXGI_GPU_PREFERENCE_UNSPECIFIED,
+        IID_PPV_ARGS(&adapter)));
+      ++adapterIndex)
+    {
+      DXGI_ADAPTER_DESC1 desc;
+      adapter->GetDesc1(&desc);
+
+      if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
+      {
+        // Don't select the Basic Render Driver adapter.
+        // If you want a software adapter, pass in "/warp" on the command line.
+        continue;
+      }
+
+      // Check to see whether the adapter supports Direct3D 12, but don't create the
+      // actual device yet.
+      if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr)))
+      {
+        break;
+      }
+    }
+  }
+
+  if (adapter.Get() == nullptr)
+  {
+    for (UINT adapterIndex = 0; SUCCEEDED(pFactory->EnumAdapters1(adapterIndex, &adapter)); ++adapterIndex)
+    {
+      DXGI_ADAPTER_DESC1 desc;
+      adapter->GetDesc1(&desc);
+
+      if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
+      {
+        // Don't select the Basic Render Driver adapter.
+        // If you want a software adapter, pass in "/warp" on the command line.
+        continue;
+      }
+
+      // Check to see whether the adapter supports Direct3D 12, but don't create the
+      // actual device yet.
+      if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr)))
+      {
+        break;
+      }
+    }
+  }
+
+  *ppAdapter = adapter.Detach();
+}

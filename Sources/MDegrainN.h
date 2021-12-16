@@ -146,18 +146,20 @@ private:
   MV_FORCEINLINE void
     use_block_y(
       const BYTE * &p, int &np, int &wref, bool usable_flag, const MvClipInfo &c_info,
-      int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch, int ibx, int iby 
+      int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch, int ibx, int iby, const VECTOR* pMVsArray 
     );
   MV_FORCEINLINE void
     use_block_uv(
       const BYTE * &p, int &np, int &wref, bool usable_flag, const MvClipInfo &c_info,
-      int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch, int ibx, int iby
+      int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch, int ibx, int iby, const VECTOR* pMVsArray
     );
 
   static MV_FORCEINLINE void
     norm_weights(int wref_arr[], int trad);
 
   MvClipArray _mv_clip_arr;
+
+  const VECTOR* pMVsPlanesArrays[MAX_TEMP_RAD * 2];
 
   int _trad;// Temporal radius (nbr frames == _trad * 2 + 1)
   int _yuvplanes;

@@ -1288,6 +1288,12 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
     }
   }
 
+  // load pMVsArray into temp buf once, 2.7.46
+  for (int k = 0; k < _trad * 2; ++k)
+  {
+    pMVsPlanesArrays[k] = _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0);
+  }
+
   PROFILE_START(MOTION_PROFILE_COMPENSATION);
 
   //-------------------------------------------------------------------------
@@ -1712,10 +1718,36 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       int pitch_arr[MAX_TEMP_RAD * 2];
       int weight_arr[1 + MAX_TEMP_RAD * 2];
 
-      // prefetch vectors ??
-      for (int k = 0; k < _trad * 2; ++k)
+      if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
       {
- //         _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + 1))), _MM_HINT_T0);
+        for (int k = 0; k < _trad * 2; ++k)
+        {
+          const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
+        } // should serviced with hw prefetcher - why fail ? may be too many streams for tr >4 ?
+      }
+      
+      int iCacheLine = CACHE_LINE_SIZE / nBlkSizeX;
+
+      if ((bx % iCacheLine) == 0) // try to prefetch each next cacheline ??
+      // try to prefetch set of next ref blocks
+      if (bx < nBlkX - iCacheLine)
+      {
+        for (int k = 0; k < _trad * 2; ++k)
+        {
+          const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+          const int blx = (bx + iCacheLine) * (nBlkSizeX - nOverlapX) * nPel + pMVsArrayPref[i + iCacheLine].x;
+          const int bly = by * (nBlkSizeY - nOverlapY) * nPel + pMVsArrayPref[i + iCacheLine].y;
+          const BYTE* p = _planes_ptr[k][0]->GetPointer(blx, bly);
+          int np = _planes_ptr[k][0]->GetPitch();
+
+          for (int iH = 0; iH < nBlkSizeY; ++iH)
+          {
+            _mm_prefetch(const_cast<const CHAR*>((const char*)p + np * iH), _MM_HINT_T1);
+          }
+
+          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + iCacheLine*2])), _MM_HINT_T0); // prefetch MVs for next prefetch
+        }
       }
 
       for (int k = 0; k < _trad * 2; ++k)
@@ -1732,7 +1764,8 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
           xx << pixelsize_super_shift,
           _src_pitch_arr[0],
           bx,
-          by
+          by,
+          pMVsPlanesArrays[k]
         );
       }
 
@@ -1816,11 +1849,13 @@ void	MDegrainN::process_luma_normal_slice_8x8(Slicer::TaskData& td)
       int pitch_arr[MAX_TEMP_RAD * 2 * BLOCKS_PER_STORE];
       int weight_arr[1 + MAX_TEMP_RAD * 2 * BLOCKS_PER_STORE];
 
-      // prefetch vectors ??
-      for (int k = 0; k < _trad * 2; ++k)
+      if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
       {
-  //      for (int iSub = 0; iSub < BLOCKS_PER_STORE; iSub+=4)
-  //        _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + BLOCKS_PER_STORE + iSub))), _MM_HINT_T0);
+        for (int k = 0; k < _trad * 2; ++k)
+        {
+          const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
+        } // should serviced with hw prefetcher - why fail ? may be too many streams for tr >4 ?
       }
 
       for (int iSubStore = 0; iSubStore < BLOCKS_PER_STORE; ++iSubStore)
@@ -1839,7 +1874,8 @@ void	MDegrainN::process_luma_normal_slice_8x8(Slicer::TaskData& td)
             xx << pixelsize_super_shift,
             _src_pitch_arr[0],
             bx,
-            by
+            by,
+            pMVsPlanesArrays[k]
           );
         }
 
@@ -1926,11 +1962,13 @@ void	MDegrainN::process_luma_normal_slice_16x16(Slicer::TaskData& td)
       int pitch_arr[MAX_TEMP_RAD * 2 * BLOCKS_PER_STORE];
       int weight_arr[1 + MAX_TEMP_RAD * 2 * BLOCKS_PER_STORE];
 
-      // prefetch vectors ??
-      for (int k = 0; k < _trad * 2; ++k)
+      if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
       {
- //       for (int iSub = 0; iSub < BLOCKS_PER_STORE; iSub += 2)
- //         _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + BLOCKS_PER_STORE + iSub))), _MM_HINT_T0);
+        for (int k = 0; k < _trad * 2; ++k)
+        {
+          const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
+        } // should serviced with hw prefetcher - why fail ? may be too many streams for tr >4 ?
       }
 
       for (int iSubStore = 0; iSubStore < BLOCKS_PER_STORE; ++iSubStore)
@@ -1949,7 +1987,8 @@ void	MDegrainN::process_luma_normal_slice_16x16(Slicer::TaskData& td)
             xx << pixelsize_super_shift,
             _src_pitch_arr[0],
             bx,
-            by
+            by,
+            pMVsPlanesArrays[k]
           );
         }
 
@@ -2094,10 +2133,38 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
       int pitch_arr[MAX_TEMP_RAD * 2];
       int weight_arr[1 + MAX_TEMP_RAD * 2];
 
-      // prefetch vectors ??
-      for (int k = 0; k < _trad * 2; ++k)
+      if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
       {
-//        _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&(_mv_clip_arr[k]._clip_sptr->GetpMVsArray(0) + sizeof(VECTOR))), _MM_HINT_T0);
+        for (int k = 0; k < _trad * 2; ++k)
+        {
+          const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
+        } // should serviced with hw prefetcher - why fail ? may be too many streams for tr >4 ?
+      }
+
+      int iCacheLine = CACHE_LINE_SIZE / nBlkSizeX;
+
+      if ((bx % iCacheLine) == 0) // try to prefetch each next cacheline ??
+      {
+        // try to prefetch set of next ref blocks
+        if (bx < nBlkX - iCacheLine)
+        {
+          for (int k = 0; k < _trad * 2; ++k)
+          {
+            const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+            const int blx = (bx + iCacheLine) * (nBlkSizeX - nOverlapX) * nPel + pMVsArrayPref[i + iCacheLine].x;
+            const int bly = by * (nBlkSizeY - nOverlapY) * nPel + pMVsArrayPref[i + iCacheLine].y;
+            const BYTE* p = _planes_ptr[k][0]->GetPointer(blx, bly);
+            int np = _planes_ptr[k][0]->GetPitch();
+
+            for (int iH = 0; iH < nBlkSizeY; ++iH)
+            {
+              _mm_prefetch(const_cast<const CHAR*>((const char*)p + np * iH), _MM_HINT_T1);
+            }
+
+            _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + iCacheLine * 2])), _MM_HINT_T0); // prefetch MVs for next prefetch
+          }
+        }
       }
 
       for (int k = 0; k < _trad * 2; ++k)
@@ -2114,7 +2181,8 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
           xx << pixelsize_super_shift,
           _src_pitch_arr[0],
           bx,
-          by
+          by,
+          pMVsPlanesArrays[k]
         );
       }
 
@@ -2187,10 +2255,38 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
       int pitch_arr[MAX_TEMP_RAD * 2];
       int weight_arr[1 + MAX_TEMP_RAD * 2]; // 0th is special. vs:int WSrc, WRefs[radius * 2];
 
-      // prefetch vectors ??
-      for (int k = 0; k < _trad * 2; ++k)
+      if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
       {
- //       _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + 1))), _MM_HINT_T0);
+        for (int k = 0; k < _trad * 2; ++k)
+        {
+          const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
+        } // should serviced with hw prefetcher - why fail ? may be too many streams for tr >4 ?
+      }
+
+      int iCacheLine = CACHE_LINE_SIZE / nBlkSizeX;
+
+      if ((bx % iCacheLine) == 0) // try to prefetch each next cacheline ??
+      {
+        // try to prefetch set of next ref blocks
+        if (bx < nBlkX - iCacheLine)
+        {
+          for (int k = 0; k < _trad * 2; ++k)
+          {
+            const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+            const int blx = (bx + iCacheLine) * (nBlkSizeX - nOverlapX) * nPel + pMVsArrayPref[i + iCacheLine].x;
+            const int bly = by * (nBlkSizeY - nOverlapY) * nPel + pMVsArrayPref[i + iCacheLine].y;
+            const BYTE* p = _planes_ptr[k][0]->GetPointer(blx, bly);
+            int np = _planes_ptr[k][0]->GetPitch();
+
+            for (int iH = 0; iH < nBlkSizeY; ++iH)
+            {
+              _mm_prefetch(const_cast<const CHAR*>((const char*)p + np * iH), _MM_HINT_T1);
+            }
+
+            _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + iCacheLine * 2])), _MM_HINT_T0); // prefetch MVs for next prefetch
+          }
+        }
       }
 
       for (int k = 0; k < _trad * 2; ++k)
@@ -2208,7 +2304,8 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
               // todo: copy from MDegrainX. Here we shift, and incement with nBlkSize>>_xRatioUV
           _src_pitch_arr[P],
           bx,
-          by
+          by,
+          pMVsPlanesArrays[k]
         ); // vs: extra nLogPel, plane, xSubUV, ySubUV, thSAD
       }
 
@@ -2361,10 +2458,38 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
       int pitch_arr[MAX_TEMP_RAD * 2];
       int weight_arr[1 + MAX_TEMP_RAD * 2]; // 0th is special
 
-      // prefetch vectors ??
-      for (int k = 0; k < _trad * 2; ++k)
+      if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
       {
- //       _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&_mv_clip_arr[k]._clip_sptr->GetBlock(0, i + 1))), _MM_HINT_T0);
+        for (int k = 0; k < _trad * 2; ++k)
+        {
+          const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
+        } // should serviced with hw prefetcher - why fail ? may be too many streams for tr >4 ?
+      }
+
+      int iCacheLine = CACHE_LINE_SIZE / nBlkSizeX;
+
+      if ((bx % iCacheLine) == 0) // try to prefetch each next cacheline ??
+      {
+        // try to prefetch set of next ref blocks
+        if (bx < nBlkX - iCacheLine)
+        {
+          for (int k = 0; k < _trad * 2; ++k)
+          {
+            const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+            const int blx = (bx + iCacheLine) * (nBlkSizeX - nOverlapX) * nPel + pMVsArrayPref[i + iCacheLine].x;
+            const int bly = by * (nBlkSizeY - nOverlapY) * nPel + pMVsArrayPref[i + iCacheLine].y;
+            const BYTE* p = _planes_ptr[k][0]->GetPointer(blx, bly);
+            int np = _planes_ptr[k][0]->GetPitch();
+
+            for (int iH = 0; iH < nBlkSizeY; ++iH)
+            {
+              _mm_prefetch(const_cast<const CHAR*>((const char*)p + np * iH), _MM_HINT_T1);
+            }
+
+            _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + iCacheLine * 2])), _MM_HINT_T0); // prefetch MVs for next prefetch
+          }
+        }
       }
 
       for (int k = 0; k < _trad * 2; ++k)
@@ -2381,7 +2506,8 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
           xx << pixelsize_super_shift, //  the pointer increment inside knows that xx later here is incremented with nBlkSize and not nBlkSize>>_xRatioUV
           _src_pitch_arr[P],
           bx,
-          by
+          by,
+          pMVsPlanesArrays[k]
         );
       }
 
@@ -2445,31 +2571,19 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
 
 
 
-void	MDegrainN::use_block_y(
+MV_FORCEINLINE void	MDegrainN::use_block_y(
   const BYTE * &p, int &np, int &wref, bool usable_flag, const MvClipInfo &c_info,
-  int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch, int ibx, int iby
+  int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch, int ibx, int iby, const VECTOR* pMVsArray
 )
 {
   if (usable_flag)
   {
-/*    const FakeBlockData &	block = c_info._clip_sptr->GetBlock(0, i);
-    const int blx = block.GetX() * nPel + block.GetMV().x;
-    const int bly = block.GetY() * nPel + block.GetMV().y;
-    p = plane_ptr->GetPointer(blx, bly);
-    np = plane_ptr->GetPitch();
-    const sad_t block_sad = block.GetSAD(); // SAD of MV Block. Scaled to MVClip's bits_per_pixel;
-    wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
-  */  
-    const VECTOR* pMVsArray = c_info._clip_sptr->GetpMVsArray(0);
-    const sad_t block_sad = pMVsArray[i].sad;
-    
     const int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
     const int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
     p = plane_ptr->GetPointer(blx, bly);
     np = plane_ptr->GetPitch();
-//    const sad_t block_sad = block.GetSAD(); // SAD of MV Block. Scaled to MVClip's bits_per_pixel;
+    const sad_t block_sad = pMVsArray[i].sad;
     wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
-
   }
   else
   {
@@ -2479,28 +2593,18 @@ void	MDegrainN::use_block_y(
   }
 }
 
-void	MDegrainN::use_block_uv(
+MV_FORCEINLINE void	MDegrainN::use_block_uv(
   const BYTE * &p, int &np, int &wref, bool usable_flag, const MvClipInfo &c_info,
-  int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch, int ibx, int iby
+  int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch, int ibx, int iby, const VECTOR* pMVsArray
 )
 {
   if (usable_flag)
   {
-/*    const FakeBlockData &block = c_info._clip_sptr->GetBlock(0, i);
-    const int blx = block.GetX() * nPel + block.GetMV().x;
-    const int bly = block.GetY() * nPel + block.GetMV().y;
-    p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
-    np = plane_ptr->GetPitch();
-    const sad_t block_sad = block.GetSAD(); // SAD of MV Block. Scaled to MVClip's bits_per_pixel;
-    wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow); */
-
-    const VECTOR* pMVsArray = c_info._clip_sptr->GetpMVsArray(0);
-    const sad_t block_sad = pMVsArray[i].sad;
     const int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
     const int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
     p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
     np = plane_ptr->GetPitch();
-//    const sad_t block_sad = block.GetSAD(); // SAD of MV Block. Scaled to MVClip's bits_per_pixel;
+    const sad_t block_sad = pMVsArray[i].sad;
     wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
   }
   else
