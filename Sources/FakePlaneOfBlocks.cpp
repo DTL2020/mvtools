@@ -21,7 +21,7 @@
 #include "commonfunctions.h"
 #include "FakePlaneOfBlocks.h"
 #include	"MVInterface.h"
-
+#include <stdlib.h>
 
 
 FakePlaneOfBlocks::FakePlaneOfBlocks(int sizeX, int sizeY, int lv, int pel, int _nOverlapX, int _nOverlapY, int _nBlkX, int _nBlkY)
@@ -38,7 +38,22 @@ FakePlaneOfBlocks::FakePlaneOfBlocks(int sizeX, int sizeY, int lv, int pel, int 
 //   nBlkY = (nHeight_Bi - nOverlapY) / (nBlkSizeY - nOverlapY); //
    nBlkCount = nBlkX * nBlkY;
    nPel = pel;
+
+#ifdef _WIN32
+   // to prevent cache set overloading when accessing fpob MVs arrays - add random L2L3_CACHE_LINE_SIZE-bytes sized offset to different allocations
+   size_t random = rand();
+   random *= RAND_OFFSET_MAX;
+   random /= RAND_MAX;
+   random *= L2L3_CACHE_LINE_SIZE;
+
+   SIZE_T stSizeToAlloc = nBlkCount * sizeof(VECTOR) + RAND_OFFSET_MAX * L2L3_CACHE_LINE_SIZE;
+
+   BYTE* pbMVsArray_a = (BYTE*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+   pMVsArray = (VECTOR*)(pbMVsArray_a + random);
+#else
    pMVsArray = new VECTOR[nBlkCount]; // allocate in heap ?
+#endif
+
 
   nLogPel = ilog2(nPel);
   nLogScale = lv;
@@ -54,11 +69,14 @@ FakePlaneOfBlocks::FakePlaneOfBlocks(int sizeX, int sizeY, int lv, int pel, int 
 
 FakePlaneOfBlocks::~FakePlaneOfBlocks()
 {
-//	for ( int i = 0; i < nBlkCount; i++ )
-//		delete blocks[i];
 
   delete[] blocks;
+
+#ifdef _WIN32
+  VirtualFree(pbMVsArray_a, 0, MEM_RELEASE);
+#else
   delete[] pMVsArray;
+#endif
 }
 
 void FakePlaneOfBlocks::Update(const int *array)

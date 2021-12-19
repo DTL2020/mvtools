@@ -42,7 +42,8 @@ class FakePlaneOfBlocks
 
   FakeBlockData *blocks;
 
-  VECTOR* pMVsArray;
+  VECTOR* pMVsArray; // working pointer
+  BYTE* pbMVsArray_a; // allocated pointer
 
 public :
 

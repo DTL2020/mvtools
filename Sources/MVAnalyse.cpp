@@ -33,7 +33,7 @@
 #include "SuperParams64Bits.h"
 
 
-#ifdef _WIN32
+#if defined _WIN32 && DX12_ME
 using namespace Microsoft::WRL;
 #endif
 
@@ -181,7 +181,7 @@ MVAnalyse::MVAnalyse(
   analysisData.pixelsize = pixelsize;
   analysisData.bits_per_pixel = bits_per_pixel;
 
-#ifdef _WIN32
+#if defined _WIN32 && DX12_ME
 
   if (optSearchOption == 5) // DX12_ME
   {
@@ -780,7 +780,7 @@ void	MVAnalyse::load_src_frame(MVGroupOfFrames &gof, ::PVideoFrame &src, const M
   ); // v2.0
 }
 
-#ifdef _WIN32
+#if defined _WIN32 && DX12_ME
 
 void MVAnalyse::GetHardwareAdapter(
   IDXGIFactory1* pFactory,
@@ -1034,4 +1034,4 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   }
 }
 
-#endif // _WIN32
+#endif // _WIN32 && DX12_ME

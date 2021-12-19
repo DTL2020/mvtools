@@ -36,8 +36,14 @@
 
 // WWUUT? We require XP now?
 #if !defined(NTDDI_VERSION) && !defined(_WIN32_WINNT)
+
+#if defined _WIN32 && DX12_ME
   #define NTDDI_VERSION 0x0A000000 // 0x05020000 - raised for DX12_ME 2.7.46, minimum VISTA required ?
-  #define _WIN32_WINNT  0x0A00 // was 0x0500 - raised to build DX12_ME
+  #define _WIN32_WINNT  0x0A00 // was 0x0502 - raised to build DX12_ME
+#else
+  #define NTDDI_VERSION 0x05020000 
+  #define _WIN32_WINNT  0x0502 
+#endif
 #endif
 
 #define WIN32_LEAN_AND_MEAN

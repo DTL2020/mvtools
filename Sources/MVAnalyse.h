@@ -31,14 +31,7 @@
 #include <memory>
 #include <vector>
 
-#ifdef _WIN32
-
-
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN             // Exclude rarely-used stuff from Windows headers.
-#endif
-
-#include <windows.h>
+#if defined _WIN32 && DX_12ME
 
 #include <d3d12.h>
 #include <dxgi1_6.h>
@@ -161,7 +154,7 @@ private:
 
   void load_src_frame(MVGroupOfFrames &gof, ::PVideoFrame &src, const MVAnalysisData &ana_data);
 
-  // DX12_ME
+#if defined _WIN32 && DX12_ME
 //  ComPtr<ID3D12Device> m_device;
   inline UINT Align(UINT size, UINT alignment)
   {
@@ -185,7 +178,7 @@ private:
     bool requestHighPerformanceAdapter = false);
 
   void Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize);
-
+#endif 
 };
 
 #endif

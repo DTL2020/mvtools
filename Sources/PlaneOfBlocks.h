@@ -53,6 +53,8 @@
 #define MAX_MULTI_BLOCKS_8x8_AVX2 4
 #define MAX_MULTI_BLOCKS_8x8_AVX512 16
 
+#define CACHE_LINE_SIZE 64
+
 struct VECTOR_XY
 {
   int x;
@@ -121,6 +123,9 @@ public:
   template<typename safe_sad_t, typename smallOverlapSafeSad_t>
 //  void InterpolatePrediction(const PlaneOfBlocks &pob);
   void InterpolatePrediction(PlaneOfBlocks& pob); // temp for MVVector[]
+
+  template<typename safe_sad_t, typename smallOverlapSafeSad_t>
+  void InterpolatePrediction_sse(PlaneOfBlocks& pob); // temp for MVVector[]
 
 
   void WriteHeaderToArray(int *array);

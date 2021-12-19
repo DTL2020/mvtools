@@ -38,8 +38,8 @@
 
 // ALIGN_PLANES aligns the sourceblock UNLESS overlap != 0 OR special case: MMX function AND Block=16, Overlap = 8
 // ALIGN_SOURCEBLOCK creates aligned copy of Source block. Set it to 1 if you don't want alignment.
-//#define ALIGN_SOURCEBLOCK (16) // 16 - for old CPUs (SSE)
-#define ALIGN_SOURCEBLOCK (1) // 1 - for new CPUs (AVX)
+#define ALIGN_SOURCEBLOCK (16) // 16 - for old CPUs (SSE)
+//#define ALIGN_SOURCEBLOCK (1) // 1 - for new CPUs (AVX)
 
 // special feature, disable in the standard release !!!
 //#define RETURN_PREV_LEVEL_SAD_AT_LEVEL_0
@@ -50,6 +50,9 @@
 
 // make the check if it is no default reference (zero, global,...)
 //#define	ONLY_CHECK_NONDEFAULT_MV
+
+// build hardware-accelerated motion search based on DX12 Motion Estimation API (Win10 SDK 10.0.20348.0 minimum required)
+//#define	DX12_ME
 
 
 #define DEBUG_CLIENTBLOCK
@@ -70,6 +73,8 @@
 
 constexpr VECTOR zeroMV = { {{ 0, 0} }, -1  };
 
-
+#define RAND_OFFSET_MAX 256 
+/* overhead about 1.6% max over 2 MB largepage, support about 256 different allocations without addresses of same offset inside frame hit same cache set. */
+#define L2L3_CACHE_LINE_SIZE 128
 
 #endif

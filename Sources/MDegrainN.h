@@ -13,10 +13,12 @@
 #include "yuy2planes.h"
 #include "def.h"
 
+#include "MVInterface.h"
+
 #include	<memory>
 #include	<vector>
 
-
+#define CACHE_LINE_SIZE 64
 
 class MVPlane;
 
@@ -104,7 +106,6 @@ private:
   template <int P>
   MV_FORCEINLINE void process_chroma(int plane_mask);
 
-#define CACHE_LINE_SIZE 64
   MV_FORCEINLINE void SWprefetch(char* p, int iSize)
   {
     for (int i = 0; i < iSize; i += CACHE_LINE_SIZE)
@@ -113,13 +114,30 @@ private:
     }
   }
 
-  MV_FORCEINLINE void HWprefetch(char* p, int iSize)
+  MV_FORCEINLINE void HWprefetch_NTA(char* p, int iSize)
+  {
+    for (int i = 0; i < iSize; i += CACHE_LINE_SIZE)
+    {
+      _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(p + i)), _MM_HINT_NTA);
+    }
+  }
+
+  MV_FORCEINLINE void HWprefetch_T0(char* p, int iSize)
   {
     for (int i = 0; i < iSize; i += CACHE_LINE_SIZE)
     {
       _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(p + i)), _MM_HINT_T0);
     }
   }
+
+  MV_FORCEINLINE void HWprefetch_T1(char* p, int iSize)
+  {
+    for (int i = 0; i < iSize; i += CACHE_LINE_SIZE)
+    {
+      _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(p + i)), _MM_HINT_T1);
+    }
+  }
+
 
   void process_luma_normal_slice(Slicer::TaskData &td);
   void process_luma_normal_slice_8x8(Slicer::TaskData& td);

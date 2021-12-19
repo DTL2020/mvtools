@@ -682,6 +682,179 @@ template void PlaneOfBlocks::InterpolatePrediction<sad_t, sad_t>(PlaneOfBlocks& 
 template void PlaneOfBlocks::InterpolatePrediction<sad_t, bigsad_t>(PlaneOfBlocks& pob);
 template void PlaneOfBlocks::InterpolatePrediction<bigsad_t, bigsad_t>(PlaneOfBlocks& pob);
 
+template<typename safe_sad_t, typename smallOverlapSafeSad_t>
+void PlaneOfBlocks::InterpolatePrediction_sse(PlaneOfBlocks& pob)
+{
+  int normFactor = 3 - nLogPel + pob.nLogPel;
+  int mulFactor = (normFactor < 0) ? -normFactor : 0;
+  normFactor = (normFactor < 0) ? 0 : normFactor;
+  int normov = (nBlkSizeX - nOverlapX) * (nBlkSizeY - nOverlapY);
+  __m128 xmm_normov_rcp = _mm_rcp_ps(_mm_set1_ps((float)(normov)));
+
+  int aoddx = (nBlkSizeX * 3 - nOverlapX * 2);
+  int aevenx = (nBlkSizeX * 3 - nOverlapX * 4);
+  int aoddy = (nBlkSizeY * 3 - nOverlapY * 2);
+  int aeveny = (nBlkSizeY * 3 - nOverlapY * 4);
+  // note: overlapping is still (v2.5.7) not processed properly
+  // PF todo make faster
+
+  // 2.7.19.22 max safe: BlkX*BlkY: sqrt(2147483647 / 3 / 255) = 1675 ,(2147483647 = 0x7FFFFFFF)
+  //bool isSafeBlkSizeFor8bits = (nBlkSizeX*nBlkSizeY) < 1675;
+
+  // 2.7.35: 
+  // the limit was too small for smallOverlap case e.g. BlkSizeX=32 BlkSizeY=32 OverLapX=0 OverLapY=4
+  // Worst case (approximately) ax1 * ay1: (nBlkSizeX*3 * nBlkSizeY*3)
+  // 32 bit usability for 8 bits (10+bits are always using bigsad_t):
+  // (evenOrOdd_xMax * evenOrOdd_yMax) * SadMax                              *4 < 0x7FFFFFFF
+  //    *4: four components before /normov
+  // (nBlkSizeX*3 * nBlkSizeY*3) * SadMax                                    *4 < 0x7FFFFFFF
+  //    SadMax: 3 full planes (worst case 4:4:4 luma and chroma)
+  // (nBlkSizeX*3 * nBlkSizeY*3) * (nBlkSizeX * nBlkSizeY * 255 * 3plane)    *4 < 0x7FFFFFFF
+  // (nBlkSizeX*nBlkSizeY)^2 *9*255*3 * 4 < 0x7FFFFFFF
+  // nBlkSizeX*nBlkSizeY < sqrt(...) 
+  // nBlkSizeX*nBlkSizeY < 279.24 -> 280
+  // => smallOverlapSafeSad_t needs to be bigsad_t when (nBlkSizeX*nBlkSizeY) >= 280
+
+  // safe_sad_t: 16 bit worst case: 16 * sad_max: 16 * 3x32x32x65536 = 4+5+5+16 > 2^31 over limit
+  //             in case of BlockSize > 32, e.g. 128x128x65536 is even more: 7+7+16=30 bits
+  //             generally use big_sad_t for 10+ bits
+
+
+  bool bNoOverlap = (nOverlapX == 0 && nOverlapY == 0);
+  bool bSmallOverlap = nOverlapX <= (nBlkSizeX >> 1) && nOverlapY <= (nBlkSizeY >> 1);
+
+  int iout_x, iout_y, iout_sad;
+
+  // prefetch all vectors array
+  int iSize_of_vectors = pob.vectors.size() * sizeof(vectors[0]);
+  for (int i = 0; i < iSize_of_vectors; i += CACHE_LINE_SIZE)
+  {
+    _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pob.vectors[0] + i)), _MM_HINT_T0);
+  }
+
+  for (int l = 0, index = 0; l < nBlkY; l++)
+  {
+    for (int k = 0; k < nBlkX; k++, index++)
+    {
+      VECTOR v1, v2, v3, v4;
+      int i = k;
+      int j = l;
+      if (i >= 2 * pob.nBlkX)
+      {
+        i = 2 * pob.nBlkX - 1;
+      }
+      if (j >= 2 * pob.nBlkY)
+      {
+        j = 2 * pob.nBlkY - 1;
+      }
+      int offy = -1 + 2 * (j % 2);
+      int offx = -1 + 2 * (i % 2);
+      int iper2 = i / 2;
+      int jper2 = j / 2;
+
+      if ((i == 0) || (i >= 2 * pob.nBlkX - 1))
+      {
+        if ((j == 0) || (j >= 2 * pob.nBlkY - 1))
+        {
+          v1 = v2 = v3 = v4 = pob.vectors[iper2 + (jper2)*pob.nBlkX];
+        }
+        else
+        {
+          v1 = v2 = pob.vectors[iper2 + (jper2)*pob.nBlkX];
+          v3 = v4 = pob.vectors[iper2 + (jper2 + offy) * pob.nBlkX];
+        }
+      }
+      else if ((j == 0) || (j >= 2 * pob.nBlkY - 1))
+      {
+        v1 = v2 = pob.vectors[iper2 + (jper2)*pob.nBlkX];
+        v3 = v4 = pob.vectors[iper2 + offx + (jper2)*pob.nBlkX];
+      }
+      else
+      {
+        v1 = pob.vectors[iper2 + (jper2)*pob.nBlkX];
+        v2 = pob.vectors[iper2 + offx + (jper2)*pob.nBlkX];
+        v3 = pob.vectors[iper2 + (jper2 + offy) * pob.nBlkX];
+        v4 = pob.vectors[iper2 + offx + (jper2 + offy) * pob.nBlkX];
+      }
+
+      safe_sad_t tmp_sad;
+
+      if (bNoOverlap)
+      {
+        iout_x = 9 * v1.x + 3 * v2.x + 3 * v3.x + v4.x;
+        iout_y = 9 * v1.y + 3 * v2.y + 3 * v3.y + v4.y;
+        tmp_sad = 9 * (safe_sad_t)v1.sad + 3 * (safe_sad_t)v2.sad + 3 * (safe_sad_t)v3.sad + (safe_sad_t)v4.sad + 8;
+
+      }
+      else if (bSmallOverlap) // corrected in v1.4.11
+      {
+        int	ax1 = (offx > 0) ? aoddx : aevenx;
+        int ax2 = (nBlkSizeX - nOverlapX) * 4 - ax1;
+        int ay1 = (offy > 0) ? aoddy : aeveny;
+        int ay2 = (nBlkSizeY - nOverlapY) * 4 - ay1;
+        int a11 = ax1 * ay1, a12 = ax1 * ay2, a21 = ax2 * ay1, a22 = ax2 * ay2;
+
+//        iout_x = (a11 * v1.x + a21 * v2.x + a12 * v3.x + a22 * v4.x) / normov;
+//        iout_y = (a11 * v1.y + a21 * v2.y + a12 * v3.y + a22 * v4.y) / normov; 
+        __m128i xmm_x = _mm_set_epi32(v4.x, v3.x, v2.x, v1.x);
+        __m128i xmm_y = _mm_set_epi32(v4.y, v3.y, v2.y, v1.y);
+        __m128i xmm_a = _mm_set_epi32(a22, a12, a21, a11);
+
+        xmm_x = _mm_mullo_epi32(xmm_x, xmm_a); // 32bit is enough ?
+        xmm_y = _mm_mullo_epi32(xmm_y, xmm_a); // 32bit is enough ?
+
+        xmm_x = _mm_hadd_epi32(xmm_x, xmm_x);
+        xmm_y = _mm_hadd_epi32(xmm_y, xmm_y);
+
+        xmm_x = _mm_add_epi32(xmm_x, _mm_srli_si128(xmm_x, 4));
+        xmm_y = _mm_add_epi32(xmm_y, _mm_srli_si128(xmm_y, 4));
+
+        iout_x = _mm_cvtss_si32(_mm_mul_ss(_mm_cvtepi32_ps(xmm_x), xmm_normov_rcp));
+        iout_y = _mm_cvtss_si32(_mm_mul_ss(_mm_cvtepi32_ps(xmm_y), xmm_normov_rcp));
+        
+        // generic safe_sad_t is not always safe for the next calculations
+//        tmp_sad = (safe_sad_t)(((smallOverlapSafeSad_t)a11 * v1.sad + (smallOverlapSafeSad_t)a21 * v2.sad + (smallOverlapSafeSad_t)a12 * v3.sad + (smallOverlapSafeSad_t)a22 * v4.sad) / normov);
+        __m128i xmm_sad = _mm_set_epi32(v4.sad, v3.sad, v2.sad, v1.sad);
+        xmm_sad = _mm_mullo_epi32(xmm_sad, xmm_a); // 32bit is enough ?
+        xmm_sad = _mm_hadd_epi32(xmm_sad, xmm_sad);
+        xmm_sad = _mm_add_epi32(xmm_sad, _mm_srli_si128(xmm_sad, 4));
+
+        tmp_sad = _mm_cvtss_si32(_mm_mul_ss(_mm_cvtepi32_ps(xmm_sad), xmm_normov_rcp)); // for 32bit sad only ?
+
+#if defined _DEBUG
+        if (tmp_sad < 0)
+          _RPT1(0, "Vector and SAD Interpolate Problem: possible SAD overflow %d\n", (sad_t)tmp_sad);
+#endif
+      }
+      else // large overlap. Weights are not quite correct but let it be
+      {
+        iout_x = (v1.x + v2.x + v3.x + v4.x) << 2;
+        iout_y = (v1.y + v2.y + v3.y + v4.y) << 2;
+        tmp_sad = ((safe_sad_t)v1.sad + v2.sad + v3.sad + v4.sad + 2) << 2;
+      }
+
+      iout_x = (iout_x >> normFactor) << mulFactor;
+      iout_y = (iout_y >> normFactor) << mulFactor;
+      iout_sad = (sad_t)(tmp_sad >> 4);
+
+      // non-temporal store require better arrangement to 64bytes - to do.
+      vectors[index].x = iout_x;
+      vectors[index].y = iout_y;
+      vectors[index].sad = iout_sad;
+
+#if 0
+      if (vectors[index].sad < 0)
+        _RPT1(0, "Vector and SAD Interpolate Problem: possible SAD overflow: %d\n", vectors[index].sad);
+#endif
+    }	// for k < nBlkX
+  }	// for l < nBlkY
+
+}
+
+template void PlaneOfBlocks::InterpolatePrediction_sse<sad_t, sad_t>(PlaneOfBlocks& pob);
+template void PlaneOfBlocks::InterpolatePrediction_sse<sad_t, bigsad_t>(PlaneOfBlocks& pob);
+template void PlaneOfBlocks::InterpolatePrediction_sse<bigsad_t, bigsad_t>(PlaneOfBlocks& pob);
+
 
 void PlaneOfBlocks::WriteHeaderToArray(int *array)
 {
