@@ -239,11 +239,11 @@ void	GroupOfPlanes::SearchMVs(
           planes[i]->InterpolatePrediction_sse<sad_t, sad_t>(*(planes[i + 1])); // use 32 bit intermediate for smallOverlap
       else
 //        planes[i]->InterpolatePrediction<sad_t, bigsad_t>(*(planes[i + 1])); // use 64bit intermediate for smallOverLap
-      planes[i]->InterpolatePrediction_sse<sad_t, bigsad_t>(*(planes[i + 1])); // use 64bit intermediate for smallOverLap
+      planes[i]->InterpolatePrediction_sse<sad_t, bigsad_t>(*(planes[i + 1])); // use 64bit intermediate for smallOverLap - only here with SSE, other need special version
     }
     else
-//      planes[i]->InterpolatePrediction<bigsad_t, bigsad_t>(*(planes[i + 1])); // always use 64bit temporary inside
-        planes[i]->InterpolatePrediction_sse<bigsad_t, bigsad_t>(*(planes[i + 1])); // always use 64bit temporary inside
+      planes[i]->InterpolatePrediction<bigsad_t, bigsad_t>(*(planes[i + 1])); // always use 64bit temporary inside
+
 
     if (global) // can be moved after Interpolate, since it does not use the global mv results
     {
