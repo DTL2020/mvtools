@@ -31,14 +31,16 @@
 #include <memory>
 #include <vector>
 
-#if defined _WIN32 && DX_12ME
+#if defined _WIN32// && defined DX_12ME
 
+#include <initguid.h>
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <D3Dcompiler.h>
 #include <DirectXMath.h>
 #include "d3dx12.h"
 #include "d3d12video.h"
+#include "DirectXHelpers.h"
 
 #include <string>
 #include <wrl.h>
@@ -154,7 +156,7 @@ private:
 
   void load_src_frame(MVGroupOfFrames &gof, ::PVideoFrame &src, const MVAnalysisData &ana_data);
 
-#if defined _WIN32 && DX12_ME
+#if defined _WIN32 && defined DX12_ME
 //  ComPtr<ID3D12Device> m_device;
   inline UINT Align(UINT size, UINT alignment)
   {
@@ -169,8 +171,25 @@ private:
   ComPtr<ID3D12VideoMotionEstimator> spVideoMotionEstimator;
   ComPtr<ID3D12VideoMotionVectorHeap> spVideoMotionVectorHeap;
   ComPtr<ID3D12Resource> spResolvedMotionVectors;
+  ComPtr<ID3D12Resource> spResolvedMotionVectorsReadBack;
   ComPtr<ID3D12Resource> spCurrentResource;
+  ComPtr<ID3D12Resource> spCurrentResourceUpload;
   ComPtr<ID3D12Resource> spReferenceResource;
+  ComPtr<ID3D12Resource> spReferenceResourceUpload;
+  ComPtr<ID3D12VideoEncodeCommandList> m_VideoEncodeCommandList;
+  ComPtr<ID3D12GraphicsCommandList> m_GraphicsCommandList;
+  ComPtr<ID3D12CommandAllocator> m_commandAllocatorGraphics;
+  ComPtr<ID3D12CommandAllocator> m_commandAllocatorVideo;
+  ComPtr<ID3D12CommandQueue> m_commandQueue;
+
+  HANDLE m_fenceEventGraphics;
+  HANDLE m_fenceEventVideo;
+  HANDLE m_fenceEventCopyBack;
+  ComPtr<ID3D12Fence> m_fence;
+  UINT64 m_fenceValue;
+
+  ComPtr<ID3D12Debug> debugController;
+
 
   void GetHardwareAdapter(
     _In_ IDXGIFactory1* pFactory,

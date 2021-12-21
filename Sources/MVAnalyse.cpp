@@ -33,7 +33,7 @@
 #include "SuperParams64Bits.h"
 
 
-#if defined _WIN32 && DX12_ME
+#if defined _WIN32 && defined DX12_ME
 using namespace Microsoft::WRL;
 #endif
 
@@ -181,11 +181,11 @@ MVAnalyse::MVAnalyse(
   analysisData.pixelsize = pixelsize;
   analysisData.bits_per_pixel = bits_per_pixel;
 
-#if defined _WIN32 && DX12_ME
+#if defined _WIN32 && defined DX12_ME
 
   if (optSearchOption == 5) // DX12_ME
   {
-    int iBlkSize;
+    int iBlkSize = 8;
     if ((_blksizex == 8) && (_blksizey == 8))
       iBlkSize = 8;
     else
@@ -592,6 +592,7 @@ MVAnalyse::~MVAnalyse()
   pRefGOF = 0;
   _RPT1(0, "MAnalyze destroyed %d\n",_instance_id);
 
+
 }
 
 
@@ -696,6 +697,201 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       pVecPrevOrNull = &srd._vec_prev[0];
     }
 
+    
+    if (optSearchOption == 5)
+    {
+      HRESULT hr;
+      UINT64 size;
+
+      hr = m_GraphicsCommandList->Reset(m_commandAllocatorGraphics.Get(), 0);
+      if (hr != S_OK)
+      {
+        env->ThrowError(
+          "MAnalyse: Error m_GraphicsCommandList->Reset 1"
+        );
+      }
+
+      D3D12_SUBRESOURCE_DATA textureData = {};
+      textureData.pData = src->GetReadPtr(PLANAR_Y);
+      textureData.RowPitch = src->GetPitch(PLANAR_Y);
+      textureData.SlicePitch = textureData.RowPitch * src->GetHeight();
+
+      size = UpdateSubresources(m_GraphicsCommandList.Get(), spCurrentResource.Get(), spCurrentResourceUpload.Get(), 0, 0, 1, &textureData);
+      m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spCurrentResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE/*D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ*//*D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE*/));
+
+      TransitionResource(m_GraphicsCommandList.Get(), spCurrentResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ);
+/*      textureData.pData = ref->GetReadPtr(PLANAR_Y);
+      textureData.RowPitch = ref->GetPitch(PLANAR_Y);
+      textureData.SlicePitch = textureData.RowPitch * ref->GetHeight();
+
+      size = UpdateSubresources(m_GraphicsCommandList.Get(), spReferenceResource.Get(), spCurrentResourceUpload.Get(), 0, 0, 1, &textureData);
+      m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spCurrentResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE));
+  */    
+      hr = m_GraphicsCommandList->Close();
+      if (hr != S_OK)
+      {
+        env->ThrowError(
+          "MAnalyse: Error m_GraphicsCommandList->Close"
+        );
+      }
+
+      // Execute Commandlist.
+      ID3D12CommandList* ppGraphicsCommandLists[1] = { m_GraphicsCommandList.Get() };
+      m_commandQueue->ExecuteCommandLists(1, ppGraphicsCommandLists);
+
+      // Signal and increment the fence value.
+      const UINT64 fence_Graphics = m_fenceValue;
+      hr = m_commandQueue->Signal(m_fence.Get(), fence_Graphics);
+      if (hr != S_OK)
+      {
+        env->ThrowError(
+          "MAnalyse: Error m_commandQueue->Signal fence_Graphics"
+        );
+      }
+
+      m_fenceValue++;
+
+      // Wait until the previous frame is finished.
+      if (m_fence->GetCompletedValue() < fence_Graphics)
+      {
+        hr = m_fence->SetEventOnCompletion(fence_Graphics, m_fenceEventGraphics);
+        if (hr != S_OK)
+        {
+          env->ThrowError(
+            "MAnalyse: Error m_fence->SetEventOnCompletion -> EventGraphics"
+          );
+        }
+        WaitForSingleObject(m_fenceEventGraphics, INFINITE);
+      }
+
+      hr = m_VideoEncodeCommandList->Reset(m_commandAllocatorVideo.Get());
+
+      const D3D12_VIDEO_MOTION_ESTIMATOR_OUTPUT outputArgsEM = { spVideoMotionVectorHeap.Get() };
+
+      const D3D12_VIDEO_MOTION_ESTIMATOR_INPUT inputArgsEM = {
+          spCurrentResource.Get(),
+          0,
+          spReferenceResource.Get(),
+          0,
+          nullptr // pHintMotionVectorHeap
+      };
+
+      
+      m_VideoEncodeCommandList->EstimateMotion(spVideoMotionEstimator.Get(), &outputArgsEM, &inputArgsEM);
+
+      const D3D12_RESOLVE_VIDEO_MOTION_VECTOR_HEAP_OUTPUT outputArgsRMVH = {
+          spResolvedMotionVectors.Get(),
+          {} };
+
+      const D3D12_RESOLVE_VIDEO_MOTION_VECTOR_HEAP_INPUT inputArgsRMVH = {
+          spVideoMotionVectorHeap.Get(),
+          srd._analysis_data.nWidth,
+          srd._analysis_data.nHeight
+      };
+
+      m_VideoEncodeCommandList->ResolveMotionVectorHeap(&outputArgsRMVH, &inputArgsRMVH);
+
+      hr = m_VideoEncodeCommandList->Close();
+      if (hr != S_OK)
+      {
+        env->ThrowError(
+          "MAnalyse: Error m_VideoEncodeCommandList->Close"
+        );
+      }
+
+      // Execute Commandlist.
+      ID3D12CommandList* ppCommandLists[1] = { m_VideoEncodeCommandList.Get() };
+      m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
+
+      // Signal and increment the fence value.
+      const UINT64 fence_Video = m_fenceValue;
+      hr = m_commandQueue->Signal(m_fence.Get(), fence_Video);
+      if (hr != S_OK)
+      {
+        env->ThrowError(
+          "MAnalyse: Error m_commandQueue->Signal fence_Video"
+        );
+      }
+
+      m_fenceValue++;
+
+      // Wait until the previous frame is finished.
+      if (m_fence->GetCompletedValue() < fence_Video)
+      {
+        hr = m_fence->SetEventOnCompletion(fence_Video, m_fenceEventVideo);
+        if (hr != S_OK)
+        {
+          env->ThrowError(
+            "MAnalyse: Error m_fence->SetEventOnCompletion -> EventVideo"
+          );
+        }
+        WaitForSingleObject(m_fenceEventVideo, INFINITE);
+      }
+
+      // copy back to CPU memory
+      hr = m_GraphicsCommandList->Reset(m_commandAllocatorGraphics.Get(), 0);
+
+      {
+        D3D12_RESOURCE_BARRIER outputBufferResourceBarrier
+        {
+            CD3DX12_RESOURCE_BARRIER::Transition(spResolvedMotionVectors.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE)
+        };
+        m_GraphicsCommandList->ResourceBarrier(1, &outputBufferResourceBarrier);
+      }
+
+      m_GraphicsCommandList->CopyResource(spResolvedMotionVectorsReadBack.Get(), spResolvedMotionVectors.Get());
+
+      hr = m_GraphicsCommandList->Close();
+      if (hr != S_OK)
+      {
+        env->ThrowError(
+          "MAnalyse: Error m_GraphicsCommandList->Close readback"
+        );
+      }
+      // Execute Commandlist.
+      ID3D12CommandList* ppCopyBackCommandLists[1] = { m_GraphicsCommandList.Get() };
+      m_commandQueue->ExecuteCommandLists(1, ppCopyBackCommandLists);
+
+      // Signal and increment the fence value.
+      const UINT64 fence_CopyBack = m_fenceValue;
+      hr = m_commandQueue->Signal(m_fence.Get(), fence_CopyBack);
+      if (hr != S_OK)
+      {
+        env->ThrowError(
+          "MAnalyse: Error m_commandQueue->Signal fence_CopyBack"
+        );
+      }
+
+      m_fenceValue++;
+
+      // Wait until the previous frame is finished.
+      if (m_fence->GetCompletedValue() < fence_CopyBack)
+      {
+        hr = m_fence->SetEventOnCompletion(fence_CopyBack, m_fenceEventCopyBack);
+        if (hr != S_OK)
+        {
+          env->ThrowError(
+            "MAnalyse: Error m_fence->SetEventOnCompletion -> EventCopyBack"
+          );
+        }
+        WaitForSingleObject(m_fenceEventCopyBack, INFINITE);
+      }
+
+      D3D12_RANGE readbackBufferRange{ 0, /*srd._analysis_data.nBlkX * srd._analysis_data.nBlkY * sizeof(short) * 2*/1000 }; // 2x16bit coordinates ?
+      short* pReadbackBufferData{};
+
+      hr = spResolvedMotionVectorsReadBack->Map(0, &readbackBufferRange, reinterpret_cast<void**>(&pReadbackBufferData));
+      if (hr != S_OK)
+      {
+        HRESULT hr2 = m_D3D12device->GetDeviceRemovedReason();
+
+        env->ThrowError(
+          "MAnalyse: Error spResolvedMotionVectorsReadBack->Map"
+        );
+      }
+
+    }
+    
     _vectorfields_aptr->SearchMVs(
       pSrcGOF, pRefGOF,
       searchType, nSearchParam, nPelSearch, nLambda, lsad, pnew, plevel,
@@ -780,7 +976,7 @@ void	MVAnalyse::load_src_frame(MVGroupOfFrames &gof, ::PVideoFrame &src, const M
   ); // v2.0
 }
 
-#if defined _WIN32 && DX12_ME
+#if defined _WIN32 && defined DX12_ME
 
 void MVAnalyse::GetHardwareAdapter(
   IDXGIFactory1* pFactory,
@@ -853,6 +1049,21 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   UINT dxgiFactoryFlags = 0;
   HRESULT hr;
 
+#if defined(_DEBUG)
+  // Enable the debug layer (requires the Graphics Tools "optional feature").
+  // NOTE: Enabling the debug layer after device creation will invalidate the active device.
+  {
+//    ComPtr<ID3D12Debug> debugController;
+    if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
+    {
+      debugController->EnableDebugLayer();
+
+      // Enable additional debug layers.
+      dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
+    }
+  }
+#endif
+
   hr = CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory));
   if (hr != S_OK)
   {
@@ -880,6 +1091,20 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   {
     env->ThrowError(
       "MAnalyse: Error D3D12CreateDevice()"
+    );
+  }
+
+  // Describe and create the command queue.
+  D3D12_COMMAND_QUEUE_DESC queueDesc = {};
+  queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+  queueDesc.Type = D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE;
+
+  hr = m_D3D12device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_commandQueue));
+
+  if (hr != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error m_D3D12device - >CreateCommandQueue"
     );
   }
 
@@ -919,7 +1144,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     );
   }
 
-  D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE ME_BlockSize;
+  D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE ME_BlockSize = D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_8X8;
 
   if (iBlkSize == 8)
   {
@@ -976,12 +1201,12 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     D3D12_HEAP_FLAG_NONE,
     &CD3DX12_RESOURCE_DESC::Tex2D(
       DXGI_FORMAT_R16G16_SINT,
-      Align(nWidth, 8) / 8, // This example uses a 8x8 block size. Pixel width and height
-      Align(nHeight, 8) / 8, // are adjusted to store the vectors for those blocks.
+      Align(nWidth, iBlkSize) / iBlkSize, 
+      Align(nHeight, iBlkSize) / iBlkSize,
       1, // ArraySize
       1  // MipLevels
     ),
-    D3D12_RESOURCE_STATE_COMMON,
+    D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE,
     nullptr,
     IID_PPV_ARGS(&spResolvedMotionVectors));
 
@@ -989,6 +1214,23 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   {
     env->ThrowError(
       "MAnalyse: Error CreateCommittedResource -> spResolvedMotionVectors"
+    );
+  }
+
+  D3D12_RESOURCE_DESC readbackBufferDesc{ CD3DX12_RESOURCE_DESC::Buffer((nWidth / iBlkSize) * (nHeight / iBlkSize)*sizeof(short) * 2) }; // 2x16bit ber coord ?
+
+  hr = m_D3D12device->CreateCommittedResource(
+    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK),
+    D3D12_HEAP_FLAG_NONE,
+    &readbackBufferDesc,
+    D3D12_RESOURCE_STATE_COPY_DEST,
+    nullptr,
+    IID_PPV_ARGS(&spResolvedMotionVectorsReadBack));
+
+  if (hr != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error CreateCommittedResource -> spResolvedMotionVectorsReadBack"
     );
   }
 
@@ -1007,7 +1249,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
     D3D12_HEAP_FLAG_NONE,
     &textureDesc,
-    D3D12_RESOURCE_STATE_COMMON,
+    /*D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ*/D3D12_RESOURCE_STATE_COPY_DEST,
     nullptr,
     IID_PPV_ARGS(&spCurrentResource));
 
@@ -1018,11 +1260,27 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     );
   }
 
+  // Create the GPU upload buffer.
+  hr = m_D3D12device->CreateCommittedResource(
+    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+    D3D12_HEAP_FLAG_NONE,
+    &CD3DX12_RESOURCE_DESC::Buffer(nWidth*nHeight*sizeof(int)), // size of NV12 format ??
+    D3D12_RESOURCE_STATE_GENERIC_READ,
+    nullptr,
+    IID_PPV_ARGS(&spCurrentResourceUpload));
+
+  if (hr != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error CreateCommittedResource -> spCurrentResourceUpload"
+    );
+  }
+  
   HRESULT res_ref_texture = m_D3D12device->CreateCommittedResource(
     &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
     D3D12_HEAP_FLAG_NONE,
     &textureDesc,
-    D3D12_RESOURCE_STATE_COMMON,
+    /*D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ*/D3D12_RESOURCE_STATE_COPY_DEST,
     nullptr,
     IID_PPV_ARGS(&spReferenceResource));
 
@@ -1032,6 +1290,105 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
       "MAnalyse: Error CreateCommittedResource -> spReferenceResource"
     );
   }
+
+  // Create the GPU upload buffer.
+  hr = m_D3D12device->CreateCommittedResource(
+    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+    D3D12_HEAP_FLAG_NONE,
+    &CD3DX12_RESOURCE_DESC::Buffer(nWidth * nHeight * sizeof(int)), // size of NV12 format ??
+    D3D12_RESOURCE_STATE_GENERIC_READ,
+    nullptr,
+    IID_PPV_ARGS(&spReferenceResourceUpload));
+
+  if (hr != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error CreateCommittedResource -> spReferenceResourceUpload"
+    );
+  }
+
+  hr = m_D3D12device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE, IID_PPV_ARGS(&m_commandAllocatorVideo));
+
+  if (hr != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error CreateCommandAllocatorVideo "
+    );
+  }
+
+  hr = m_D3D12device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocatorGraphics));
+
+  if (hr != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error CreateCommandAllocatorGraphics "
+    );
+  }
+
+  hr = m_D3D12device->CreateCommandList(
+    0,
+    D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE,
+    m_commandAllocatorVideo.Get(),
+    NULL,
+    IID_PPV_ARGS(&m_VideoEncodeCommandList)
+  );
+
+  if (hr != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error CreateCommandList -> D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE"
+    );
+  }
+
+  m_VideoEncodeCommandList->Close();
+
+  hr = m_D3D12device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocatorGraphics.Get(), 0, IID_PPV_ARGS(&m_GraphicsCommandList));
+  if (hr != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error CreateCommandList -> D3D12_COMMAND_LIST_TYPE_DIRECT"
+    );
+  }
+
+  m_GraphicsCommandList->Close();
+
+  hr = m_D3D12device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence));
+  if (hr != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error CreateFence"
+    );
+  }
+
+  m_fenceValue = 1;
+
+  // Create an event handle to use for frame synchronization.
+  m_fenceEventGraphics = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+  if (m_fenceEventGraphics == nullptr)
+  {
+    env->ThrowError(
+      "MAnalyse: Error createEvent -> m_fenceEventGraphics "
+    );
+  }
+
+  m_fenceEventVideo = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+  if (m_fenceEventVideo == nullptr)
+  {
+    env->ThrowError(
+      "MAnalyse: Error createEvent -> m_fenceEventVideo "
+    );
+  }
+
+  m_fenceEventCopyBack = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+  if (m_fenceEventCopyBack == nullptr)
+  {
+    env->ThrowError(
+      "MAnalyse: Error createEvent -> m_fenceEventCopyBack "
+    );
+  }
+  
 }
+
+
 
 #endif // _WIN32 && DX12_ME
