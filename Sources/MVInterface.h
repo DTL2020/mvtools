@@ -52,7 +52,7 @@
 //#define	ONLY_CHECK_NONDEFAULT_MV
 
 // build hardware-accelerated motion search based on DX12 Motion Estimation API (Win10 SDK 10.0.20348.0 minimum required)
-#define	DX12_ME
+//#define	DX12_ME
 
 
 #define DEBUG_CLIENTBLOCK

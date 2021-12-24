@@ -697,6 +697,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       pVecPrevOrNull = &srd._vec_prev[0];
     }
 
+#if defined _WIN32 && defined DX12_ME
     
     if (optSearchOption == 5)
     {
@@ -891,6 +892,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       }
 
     }
+#endif
     
     _vectorfields_aptr->SearchMVs(
       pSrcGOF, pRefGOF,

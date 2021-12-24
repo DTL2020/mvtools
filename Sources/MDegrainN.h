@@ -60,22 +60,6 @@ private:
     int Wall[], int trad
     );
 
-  template <int blockWidth, int blockHeight, int out16_type>
-  void DegrainN_8_8x8_sse41(
-    BYTE* pDst, int nDstPitch,
-    const BYTE* pSrc, int nSrcPitch,
-    const BYTE* pRef[], int Pitch[],
-    int Wall[], int trad
-  );
-
-  template <int blockWidth, int blockHeight, int out16_type>
-  void DegrainN_4_16x16_sse41(
-    BYTE* pDst, int nDstPitch,
-    const BYTE* pSrc, int nSrcPitch,
-    const BYTE* pRef[], int Pitch[],
-    int Wall[], int trad
-  );
-
   DenoiseNFunction* get_denoiseN_function(int BlockX, int BlockY, int _bits_per_pixel, bool _lsb_flag, bool _out16_flag, arch_t arch);
 
   class MvClipInfo
@@ -140,20 +124,10 @@ private:
 
 
   void process_luma_normal_slice(Slicer::TaskData &td);
-  void process_luma_normal_slice_8x8(Slicer::TaskData& td);
-  void process_luma_normal_slice_16x16(Slicer::TaskData& td);
+  void process_luma_normal_slice_softweight(Slicer::TaskData& td);
   void process_luma_overlap_slice(Slicer::TaskData &td);
   void process_luma_overlap_slice(int y_beg, int y_end);
 
-  /*
-  template <int blockWidth, int blockHeight, int out16_type>
-  void DegrainN_8_8x8_sse41(
-    BYTE* pDst, int nDstPitch,
-    const BYTE* pSrc, int nSrcPitch,
-    const BYTE* pRef[], int Pitch[],
-    int Wall[], int trad
-  );
-  */
   template <int P>
   void process_chroma_normal_slice(Slicer::TaskData &td);
   template <int P>
@@ -174,6 +148,9 @@ private:
 
   static MV_FORCEINLINE void
     norm_weights(int wref_arr[], int trad);
+
+  template <int blockWidth, int blockHeight>
+  void CreateSoftWeightsArr(int wref_arr[], int trad);
 
   MvClipArray _mv_clip_arr;
 
@@ -207,6 +184,7 @@ private:
 
   // 2.7.46
   int _wpow;
+  BYTE* pSoftWeightsArr;
 
   std::unique_ptr <YUY2Planes> _dst_planes;
   std::unique_ptr <YUY2Planes> _src_planes;

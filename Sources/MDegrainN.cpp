@@ -146,8 +146,7 @@ void DegrainN_sse2(
           src = _mm_loadl_epi64((__m128i*) (pSrc + x));
         else // load 4 pixels
           src = _mm_cvtsi32_si128(*(uint32_t*)(pSrc + x));
-//        __m128i val = _mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_set1_epi16(Wall[0]));
-        __m128i val = _mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_set1_epi32(Wall[0]));
+        __m128i val = _mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_set1_epi16(Wall[0]));
         for (int k = 0; k < trad; ++k)
         {
           __m128i src1, src2;
@@ -160,10 +159,8 @@ void DegrainN_sse2(
             src1 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2] + x));
             src2 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2 + 1] + x));
           }
-//          const __m128i	s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1]));
-//          const __m128i	s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2]));
-          const __m128i	s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi32(Wall[k * 2 + 1]));
-          const __m128i	s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi32(Wall[k * 2 + 2]));
+          const __m128i	s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1]));
+          const __m128i	s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2]));
           val = _mm_add_epi16(val, s1);
           val = _mm_add_epi16(val, s2);
         }
@@ -213,8 +210,7 @@ void DegrainN_sse2(
         else // load 4 pixels
           src = _mm_cvtsi32_si128(*(uint32_t*)(pSrc + x));
 
-//        __m128i val = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_set1_epi16(Wall[0])), o);
-        __m128i val = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_set1_epi32(Wall[0])), o);
+        __m128i val = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_set1_epi16(Wall[0])), o);
         for (int k = 0; k < trad; ++k)
         {
           __m128i src1, src2;
@@ -227,10 +223,8 @@ void DegrainN_sse2(
             src1 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2] + x));
             src2 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2 + 1] + x));
           }
-//          const __m128i s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1]));
-//          const __m128i s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2]));
-          const __m128i s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi32(Wall[k * 2 + 1]));
-          const __m128i s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi32(Wall[k * 2 + 2]));
+          const __m128i s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1]));
+          const __m128i s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2]));
           val = _mm_add_epi16(val, s1);
           val = _mm_add_epi16(val, s2);
         }
@@ -254,37 +248,18 @@ void DegrainN_sse2(
   }
 }
 
-// process 8 8x8 blocks to form 64 byte output non-temporal store
 template <int blockWidth, int blockHeight, int out16_type>
-void MDegrainN::DegrainN_8_8x8_sse41(
-  BYTE* pDst, int nDstPitch,
+void DegrainN_sse2_softweight(
+  BYTE* pDst, BYTE* pDstLsb, int nDstPitch,
   const BYTE* pSrc, int nSrcPitch,
   const BYTE* pRef[], int Pitch[],
-  int Wall[], int trad
+  BYTE* pWall, int trad
 )
 {
-  assert(blockWidth % 8 == 0);
+  assert(blockWidth % 4 == 0);
+  // only mod4 supported
 
-  assert((int)pDst % 64 == 0);
-  // only mod8 supported (now)
-  const int BLOCKS_PER_STORE = 8;
-
-#define Process_8_samples \
-  src = _mm_loadl_epi64((__m128i*) (pSrc + x)); \
-  val = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_set1_epi16(Wall[0 + iBlockNum * MAX_TEMP_RAD * 2])), o); \
-  for (int k = 0; k < trad; ++k) \
-  { \
-    src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + iBlockNum * MAX_TEMP_RAD * 2] + x)); \
-    src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1 + iBlockNum * MAX_TEMP_RAD * 2] + x)); \
-    s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1 + iBlockNum * MAX_TEMP_RAD * 2])); \
-    s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2 + iBlockNum * MAX_TEMP_RAD * 2])); \
-    val = _mm_add_epi16(val, s1); \
-    val = _mm_add_epi16(val, s2); \
-  } \
-  res = _mm_packus_epi16(_mm_srli_epi16(val, 8), z);
-
-
-//  iSubStore* MAX_TEMP_RAD * 2 - step in arrays !
+  int iBlkSize = blockWidth * blockHeight; // for 8bit
 
   constexpr bool lsb_flag = (out16_type == 1);
   constexpr bool out16 = (out16_type == 2);
@@ -292,199 +267,68 @@ void MDegrainN::DegrainN_8_8x8_sse41(
   const __m128i z = _mm_setzero_si128();
 
   constexpr bool is_mod8 = blockWidth % 8 == 0;
-  constexpr int pixels_at_a_time = 8; 
+  constexpr int pixels_at_a_time = is_mod8 ? 8 : 4; // 4 for 4 and 12; 8 for all others 8, 16, 24, 32...
 
-  // only 8 bit here for now
-    // base 8 bit -> 8 bit
-    const __m128i o = _mm_set1_epi16(128); // rounding
-
-    for (int h = 0; h < blockHeight; ++h)
-    {
-
-      __m128i src, val, src1, src2;
-      __m128i s1, s2;
-      __m128i res;
-/*
-        __m128i src = _mm_loadl_epi64((__m128i*) (pSrc + x));
-        __m128i val = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_set1_epi16(Wall[0 + iBlockNum * MAX_TEMP_RAD * 2])), o);
-        for (int k = 0; k < trad; ++k)
-        {
-          __m128i src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + iBlockNum * MAX_TEMP_RAD * 2] + x));
-          __m128i src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1 + iBlockNum * MAX_TEMP_RAD * 2] + x));
-
-          const __m128i s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1 + iBlockNum * MAX_TEMP_RAD * 2]));
-          const __m128i s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2 + iBlockNum * MAX_TEMP_RAD * 2]));
-          val = _mm_add_epi16(val, s1);
-          val = _mm_add_epi16(val, s2);
-        }
-        auto res = _mm_packus_epi16(_mm_srli_epi16(val, 8), z);
-  */
-      int iBlockNum = 0;
-      int x = 0;
-      Process_8_samples
-      __m128i xmm_01 = res;
-
-      iBlockNum = 1;
-//      x += 8;
-      Process_8_samples
-      xmm_01 = _mm_blend_epi16(xmm_01, _mm_slli_si128(res, 8), 240);
-
-      iBlockNum = 2;
-//      x += 8;
-      Process_8_samples
-      __m128i xmm_23 = res;
-
-      iBlockNum = 3;
-//      x += 8;
-      Process_8_samples
-      xmm_23 = _mm_blend_epi16(xmm_23, _mm_slli_si128(res, 8), 240);
-
-      iBlockNum = 4;
-//      x += 8;
-      Process_8_samples
-      __m128i xmm_45 = res;
-
-      iBlockNum = 5;
-//      x += 8;
-      Process_8_samples
-      xmm_45 = _mm_blend_epi16(xmm_45, _mm_slli_si128(res, 8), 240);
-
-      iBlockNum = 6;
-//      x += 8;
-      Process_8_samples
-      __m128i xmm_67 = res;
-
-      iBlockNum = 7;
-//      x += 8;
-      Process_8_samples
-      xmm_67 = _mm_blend_epi16(xmm_67, _mm_slli_si128(res, 8), 240);
-
-      _mm_stream_si128((__m128i*)(pDst + 0), xmm_01);
-      _mm_stream_si128((__m128i*)(pDst + 16), xmm_23);
-      _mm_stream_si128((__m128i*)(pDst + 32), xmm_45);
-      _mm_stream_si128((__m128i*)(pDst + 48), xmm_67);
-
-      pDst += nDstPitch;
-      pSrc += nSrcPitch;
-
-      for (iBlockNum = 0; iBlockNum < BLOCKS_PER_STORE; ++iBlockNum)
-      {
-        for (int k = 0; k < trad; ++k)
-        {
-          pRef[k * 2 + iBlockNum * MAX_TEMP_RAD * 2] += Pitch[k * 2 + iBlockNum * MAX_TEMP_RAD * 2];
-          pRef[k * 2 + 1 + iBlockNum * MAX_TEMP_RAD * 2] += Pitch[k * 2 + 1 + iBlockNum * MAX_TEMP_RAD * 2];
-        }
-      }
-
-    }
-  
-}
-
-// process 8 8x8 blocks to form 64 byte output non-temporal store
-template <int blockWidth, int blockHeight, int out16_type>
-void MDegrainN::DegrainN_4_16x16_sse41(
-  BYTE* pDst, int nDstPitch,
-  const BYTE* pSrc, int nSrcPitch,
-  const BYTE* pRef[], int Pitch[],
-  int Wall[], int trad
-)
-{
-  assert(blockWidth % 8 == 0);
-
-  assert((int)pDst % 64 == 0);
-  // only mod8 supported (now)
-  const int BLOCKS_PER_STORE = 4;
-
-#define Process_16_samples \
-  src = _mm_loadl_epi64((__m128i*) (pSrc + 0)); \
-  val = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_set1_epi16(Wall[0 + iBlockNum * MAX_TEMP_RAD * 2])), o); \
-  for (int k = 0; k < trad; ++k) \
-  { \
-    src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + iBlockNum * MAX_TEMP_RAD * 2] + 0)); \
-    src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1 + iBlockNum * MAX_TEMP_RAD * 2] + 0)); \
-    s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1 + iBlockNum * MAX_TEMP_RAD * 2])); \
-    s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2 + iBlockNum * MAX_TEMP_RAD * 2])); \
-    val = _mm_add_epi16(val, s1); \
-    val = _mm_add_epi16(val, s2); \
-  } \
-  res1 = _mm_packus_epi16(_mm_srli_epi16(val, 8), z);\
-\
-  src = _mm_loadl_epi64((__m128i*) (pSrc + 8)); \
-    val = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_set1_epi16(Wall[0 + iBlockNum * MAX_TEMP_RAD * 2])), o); \
-    for (int k = 0; k < trad; ++k) \
-    { \
-      src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + iBlockNum * MAX_TEMP_RAD * 2] + 8)); \
-      src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1 + iBlockNum * MAX_TEMP_RAD * 2] + 8)); \
-      s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1 + iBlockNum * MAX_TEMP_RAD * 2])); \
-      s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2 + iBlockNum * MAX_TEMP_RAD * 2])); \
-      val = _mm_add_epi16(val, s1); \
-      val = _mm_add_epi16(val, s2); \
-    } \
-      res2 = _mm_packus_epi16(_mm_srli_epi16(val, 8), z); \
-    res = _mm_blend_epi16(res1, _mm_slli_si128(res2, 8), 240);
-
-  //  iSubStore* MAX_TEMP_RAD * 2 - step in arrays !
-
-  constexpr bool lsb_flag = (out16_type == 1);
-  constexpr bool out16 = (out16_type == 2);
-
-  const __m128i z = _mm_setzero_si128();
-
-  constexpr bool is_mod8 = blockWidth % 8 == 0;
-  constexpr int pixels_at_a_time = 8;
-
-  // only 8 bit here for now
-    // base 8 bit -> 8 bit
+  // base 8 bit -> 8 bit
   const __m128i o = _mm_set1_epi16(128); // rounding
+  
+  uint8_t* pW = pWall + iBlkSize * 2; // shift by 2*W0
 
   for (int h = 0; h < blockHeight; ++h)
   {
-
-    __m128i src, val, src1, src2;
-    __m128i s1, s2;
-    __m128i res, res1, res2;
-
-    int iBlockNum = 0;
-    Process_16_samples
-      __m128i xmm_01 = res;
-
-//    _mm_storeu_si128((__m128i*)(pDst + 0), xmm_01);
-
-    iBlockNum = 1;
-    Process_16_samples
-     __m128i xmm_23 = res;
-
-//    _mm_storeu_si128((__m128i*)(pDst + 16), xmm_23);
-
-    iBlockNum = 2;
-    Process_16_samples
-     __m128i xmm_45 = res;
-
-//    _mm_storeu_si128((__m128i*)(pDst + 32), xmm_45);
-
-    iBlockNum = 3;
-    Process_16_samples
-     __m128i xmm_67 = res;
-
-//    _mm_storeu_si128((__m128i*)(pDst + 48), xmm_67);
-
-    _mm_stream_si128((__m128i*)(pDst + 0), xmm_01);
-    _mm_stream_si128((__m128i*)(pDst + 16), xmm_23);
-    _mm_stream_si128((__m128i*)(pDst + 32), xmm_45);
-    _mm_stream_si128((__m128i*)(pDst + 48), xmm_67);
-    
-    pDst += nDstPitch;
-    pSrc += nSrcPitch;
-
-    for (iBlockNum = 0; iBlockNum < BLOCKS_PER_STORE; ++iBlockNum)
+    for (int x = 0; x < blockWidth; x += pixels_at_a_time)
     {
+      __m128i src;
+      if constexpr (is_mod8) // load 8 pixels
+        src = _mm_loadl_epi64((__m128i*) (pSrc + x));
+      else // load 4 pixels
+        src = _mm_cvtsi32_si128(*(uint32_t*)(pSrc + x));
+
+      __m128i weight_src = _mm_loadl_epi64((__m128i*) (&pWall[0] + h * blockWidth + x));
+      //        __m128i val = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_set1_epi16(Wall[0])), o);
+      __m128i val = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_unpacklo_epi8(weight_src, z)), o);
+
       for (int k = 0; k < trad; ++k)
       {
-        pRef[k * 2 + iBlockNum * MAX_TEMP_RAD * 2] += Pitch[k * 2 + iBlockNum * MAX_TEMP_RAD * 2];
-        pRef[k * 2 + 1 + iBlockNum * MAX_TEMP_RAD * 2] += Pitch[k * 2 + 1 + iBlockNum * MAX_TEMP_RAD * 2];
+        __m128i src1, src2;
+        __m128i weight1, weight2;
+        if constexpr (is_mod8) // load 8-8 pixels
+        {
+          src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2] + x));
+          src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1] + x));
+          
+          weight1 = _mm_loadl_epi64((__m128i*)(pW + (k * 2 * blockWidth + x)));
+          weight2 = _mm_loadl_epi64((__m128i*)(pW + ((k * 2 + 1) * blockWidth + x))); // +x - not tested for > 8x8 blocks
+        }
+        else { // 4-4 pixels
+          src1 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2] + x));
+          src2 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2 + 1] + x));
+        }
+        //          const __m128i s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1]));
+        //          const __m128i s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2]));
+        const __m128i s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_unpacklo_epi8(weight1, z));
+        const __m128i s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_unpacklo_epi8(weight2, z));
+        val = _mm_add_epi16(val, s1);
+        val = _mm_add_epi16(val, s2);
+      }
+      auto res = _mm_packus_epi16(_mm_srli_epi16(val, 8), z);
+      if constexpr (is_mod8) {
+        _mm_storel_epi64((__m128i*)(pDst + x), res);
+      }
+      else {
+        *(uint32_t*)(pDst + x) = _mm_cvtsi128_si32(res);
       }
     }
 
+    pW += blockWidth * trad * 2;
+
+    pDst += nDstPitch;
+    pSrc += nSrcPitch;
+    for (int k = 0; k < trad; ++k)
+    {
+      pRef[k * 2] += Pitch[k * 2];
+      pRef[k * 2 + 1] += Pitch[k * 2 + 1];
+    }
   }
 
 }
@@ -1098,6 +942,8 @@ MDegrainN::MDegrainN(
     else if (vi.IsYV24())
       vi.pixel_type = VideoInfo::CS_YUV444P16;
   }
+
+  pSoftWeightsArr = new BYTE[(_trad + 1) * 2 * (nBlkSizeX*nBlkSizeY) * pixelsize_super]; // pixelsize already set ?
 }
 
 
@@ -1105,6 +951,7 @@ MDegrainN::MDegrainN(
 MDegrainN::~MDegrainN()
 {
   // Nothing
+  delete pSoftWeightsArr;
 }
 
 static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *srcp, int srcpitch, int width, int height)
@@ -1327,29 +1174,12 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
 
     if (nOverlapX == 0 && nOverlapY == 0)
     {
-/*      if (nBlkSizeX == 8 && nBlkSizeY == 8 && (nBlkX % 8 == 0))
       {
         slicer.start(
           nBlkY,
           *this,
-          &MDegrainN::process_luma_normal_slice_8x8
-        );
-      }
-      else
-      if (nBlkSizeX == 16 && nBlkSizeY == 16 && (nBlkX % 4 == 0))
-      {
-        slicer.start(
-          nBlkY,
-          *this,
-          &MDegrainN::process_luma_normal_slice_16x16
-        );
-      }
-      else */
-      {
-        slicer.start(
-          nBlkY,
-          *this,
-          &MDegrainN::process_luma_normal_slice
+//          &MDegrainN::process_luma_normal_slice_softweight
+            &MDegrainN::process_luma_normal_slice
         );
       }
       slicer.wait();
@@ -1704,8 +1534,6 @@ void	MDegrainN::process_chroma(int plane_mask)
   }
 }
 
-
-
 void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
 {
   assert(&td != 0);
@@ -1857,11 +1685,9 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
 }
 
 
-void	MDegrainN::process_luma_normal_slice_8x8(Slicer::TaskData& td)
+void	MDegrainN::process_luma_normal_slice_softweight(Slicer::TaskData& td)
 {
   assert(&td != 0);
-
-  const int BLOCKS_PER_STORE = 8;
 
   const int rowsize = nBlkSizeY;
   BYTE* pDstCur = _dst_ptr_arr[0] + td._y_beg * rowsize * _dst_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
@@ -1870,14 +1696,19 @@ void	MDegrainN::process_luma_normal_slice_8x8(Slicer::TaskData& td)
   for (int by = td._y_beg; by < td._y_end; ++by)
   {
     int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
-    
-    //for (int bx = 0; bx < nBlkX; ++bx)
-    for (int bx = 0; bx < nBlkX; bx+= BLOCKS_PER_STORE)
+
+    // prefetch source full row in linear lines reading
+    for (int iH = 0; iH < nBlkSizeY; ++iH)
+    {
+      HWprefetch_T1((char*)pSrcCur + _src_pitch_arr[0] * iH, nBlkX * nBlkSizeX);
+    }
+
+    for (int bx = 0; bx < nBlkX; ++bx)
     {
       int i = by * nBlkX + bx;
-      const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2 * BLOCKS_PER_STORE];
-      int pitch_arr[MAX_TEMP_RAD * 2 * BLOCKS_PER_STORE];
-      int weight_arr[1 + MAX_TEMP_RAD * 2 * BLOCKS_PER_STORE];
+      const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
+      int pitch_arr[MAX_TEMP_RAD * 2];
+      int weight_arr[1 + MAX_TEMP_RAD * 2];
 
       if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
       {
@@ -1885,40 +1716,66 @@ void	MDegrainN::process_luma_normal_slice_8x8(Slicer::TaskData& td)
         {
           const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
           _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
-        } // should serviced with hw prefetcher - why fail ? may be too many streams for tr >4 ?
-      }
-
-      for (int iSubStore = 0; iSubStore < BLOCKS_PER_STORE; ++iSubStore)
-      {
-        for (int k = 0; k < _trad * 2; ++k)
-        {
-          use_block_y(
-            ref_data_ptr_arr[k + iSubStore * MAX_TEMP_RAD * 2],
-            pitch_arr[k + iSubStore * MAX_TEMP_RAD * 2],
-            weight_arr[k + 1 + iSubStore * MAX_TEMP_RAD * 2],
-            _usable_flag_arr[k],
-            _mv_clip_arr[k],
-            i + iSubStore,
-            _planes_ptr[k][0],
-            pSrcCur,
-            xx << pixelsize_super_shift,
-            _src_pitch_arr[0],
-            bx,
-            by,
-            pMVsPlanesArrays[k]
-          );
         }
+      }
+      /*
+            int iCacheLine = CACHE_LINE_SIZE / nBlkSizeX;
 
-        norm_weights(weight_arr + iSubStore * MAX_TEMP_RAD * 2, _trad); //??
+            if ((bx % iCacheLine) == 0) // try to prefetch each next cacheline ??
+            // try to prefetch set of next ref blocks
+              if (bx < nBlkX - iCacheLine)
+              {
+                for (int k = 0; k < _trad * 2; ++k)
+                {
+                  const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+                  const int blx = (bx + iCacheLine) * (nBlkSizeX - nOverlapX) * nPel + pMVsArrayPref[i + iCacheLine].x;
+                  const int bly = by * (nBlkSizeY - nOverlapY) * nPel + pMVsArrayPref[i + iCacheLine].y;
+                  const BYTE* p = _planes_ptr[k][0]->GetPointer(blx, bly);
+                  int np = _planes_ptr[k][0]->GetPitch();
+
+                  for (int iH = 0; iH < nBlkSizeY; ++iH)
+                  {
+                    _mm_prefetch(const_cast<const CHAR*>((const char*)p + np * iH), _MM_HINT_T1);
+                  }
+                }
+              }
+              */
+      for (int k = 0; k < _trad * 2; ++k)
+      {
+        use_block_y(
+          ref_data_ptr_arr[k],
+          pitch_arr[k],
+          weight_arr[k + 1],
+          _usable_flag_arr[k],
+          _mv_clip_arr[k],
+          i,
+          _planes_ptr[k][0],
+          pSrcCur,
+          xx << pixelsize_super_shift,
+          _src_pitch_arr[0],
+          bx,
+          by,
+          pMVsPlanesArrays[k]
+        );
       }
 
-      DegrainN_8_8x8_sse41<8,8,1>(
-        pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[0],
+      norm_weights(weight_arr, _trad);
+
+      CreateSoftWeightsArr<8, 8>(weight_arr, _trad);
+
+      // luma
+/*      _degrainluma_ptr(
+        pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+      );*/
+      DegrainN_sse2_softweight<8,8,1>(
+        pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
+        pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+        ref_data_ptr_arr, pitch_arr, pSoftWeightsArr, _trad
       );
 
-      xx += (nBlkSizeX) * BLOCKS_PER_STORE; // xx: indexing offset
+      xx += (nBlkSizeX); // xx: indexing offset
 
       if (bx == nBlkX - 1 && _covered_width < nWidth) // right non-covered region
       {
@@ -1964,123 +1821,6 @@ void	MDegrainN::process_luma_normal_slice_8x8(Slicer::TaskData& td)
     }
   }	// for by
 
-  //  if (sse2) - all versions must support SSE2 minimum ? 
-  {
-    _mm_sfence(); // after _mm_stream() in DegrainM_sse non-temporal store.
-  }
-}
-
-void	MDegrainN::process_luma_normal_slice_16x16(Slicer::TaskData& td)
-{
-  assert(&td != 0);
-
-  const int BLOCKS_PER_STORE = 4;
-
-  const int rowsize = nBlkSizeY;
-  BYTE* pDstCur = _dst_ptr_arr[0] + td._y_beg * rowsize * _dst_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
-  const BYTE* pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
-
-  for (int by = td._y_beg; by < td._y_end; ++by)
-  {
-    int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
-
-    //for (int bx = 0; bx < nBlkX; ++bx)
-    for (int bx = 0; bx < nBlkX; bx += BLOCKS_PER_STORE)
-    {
-      int i = by * nBlkX + bx;
-      const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2 * BLOCKS_PER_STORE];
-      int pitch_arr[MAX_TEMP_RAD * 2 * BLOCKS_PER_STORE];
-      int weight_arr[1 + MAX_TEMP_RAD * 2 * BLOCKS_PER_STORE];
-
-      if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
-      {
-        for (int k = 0; k < _trad * 2; ++k)
-        {
-          const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
-          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
-        } // should serviced with hw prefetcher - why fail ? may be too many streams for tr >4 ?
-      }
-
-      for (int iSubStore = 0; iSubStore < BLOCKS_PER_STORE; ++iSubStore)
-      {
-        for (int k = 0; k < _trad * 2; ++k)
-        {
-          use_block_y(
-            ref_data_ptr_arr[k + iSubStore * MAX_TEMP_RAD * 2],
-            pitch_arr[k + iSubStore * MAX_TEMP_RAD * 2],
-            weight_arr[k + 1 + iSubStore * MAX_TEMP_RAD * 2],
-            _usable_flag_arr[k],
-            _mv_clip_arr[k],
-            i + iSubStore,
-            _planes_ptr[k][0],
-            pSrcCur,
-            xx << pixelsize_super_shift,
-            _src_pitch_arr[0],
-            bx,
-            by,
-            pMVsPlanesArrays[k]
-          );
-        }
-
-        norm_weights(weight_arr + iSubStore * MAX_TEMP_RAD * 2, _trad); //??
-      }
-
-      DegrainN_4_16x16_sse41<16, 16, 1>(
-        pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[0],
-        pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-        ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-        );
-
-      xx += (nBlkSizeX)*BLOCKS_PER_STORE; // xx: indexing offset
-
-      if (bx == nBlkX - 1 && _covered_width < nWidth) // right non-covered region
-      {
-        if (_out16_flag) {
-          // copy 8 bit source to 16bit target
-          plane_copy_8_to_16_c(
-            pDstCur + (_covered_width << pixelsize_output_shift), _dst_pitch_arr[0],
-            pSrcCur + (_covered_width << pixelsize_super_shift), _src_pitch_arr[0],
-            nWidth - _covered_width, nBlkSizeY
-          );
-        }
-        else {
-          // luma
-          BitBlt(
-            pDstCur + (_covered_width << pixelsize_super_shift), _dst_pitch_arr[0],
-            pSrcCur + (_covered_width << pixelsize_super_shift), _src_pitch_arr[0],
-            (nWidth - _covered_width) << pixelsize_super_shift, nBlkSizeY);
-        }
-      }
-    }	// for bx
-
-    pDstCur += rowsize * _dst_pitch_arr[0];
-    pSrcCur += rowsize * _src_pitch_arr[0];
-
-    if (by == nBlkY - 1 && _covered_height < nHeight) // bottom uncovered region
-    {
-      // luma
-      if (_out16_flag) {
-        // copy 8 bit source to 16bit target
-        plane_copy_8_to_16_c(
-          pDstCur, _dst_pitch_arr[0],
-          pSrcCur, _src_pitch_arr[0],
-          nWidth, nHeight - _covered_height
-        );
-      }
-      else {
-        BitBlt(
-          pDstCur, _dst_pitch_arr[0],
-          pSrcCur, _src_pitch_arr[0],
-          nWidth << pixelsize_super_shift, nHeight - _covered_height
-        );
-      }
-    }
-  }	// for by
-
-  //  if (sse2) - all versions must support SSE2 minimum ? 
-  {
-    _mm_sfence(); // after _mm_stream() in DegrainM_sse non-temporal store.
-  }
 }
 
 
@@ -2601,9 +2341,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
     np = plane_ptr->GetPitch();
     const sad_t block_sad = pMVsArray[i].sad;
 
-    // place 2x16bit weight into 32bit to save time at Degrain - allow only shuffle to broadcast, may be 64bit will be faster ???
-    int iWeight = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
-    wref = iWeight | iWeight << 16;//DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
+    wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
   }
   else
   {
@@ -2626,10 +2364,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv(
     np = plane_ptr->GetPitch();
     const sad_t block_sad = pMVsArray[i].sad;
 
-    // place 2x16bit weight into 32bit to save time at Degrain - allow only shuffle to broadcast, may be 64bit will be faster ???
-    //wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
-    int iWeight = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
-    wref = iWeight | iWeight << 16;
+    wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
   }
   else
   {
@@ -2701,5 +2436,37 @@ MV_FORCEINLINE int DegrainWeightN(int thSAD, double thSAD_pow, int blockSAD, int
   // float is approximately only 24 bit precise, use double
   return (int)((double)(1 << DEGRAIN_WEIGHT_BITS) * (thSAD_pow - blockSAD_pow) / (thSAD_pow + blockSAD_pow));
 
+}
+
+template <int blockWidth, int blockHeight>
+void MDegrainN::CreateSoftWeightsArr(int wref_arr[], int trad) // still no internal MT supported - global class pSoftWeightsArr array
+{
+  // square hard weights at start
+  // src zero
+    for (int h = 0; h < blockHeight; h++)
+    {
+      for (int x = 0; x < blockWidth; x++)
+      {
+        *(&pSoftWeightsArr[0] + h * blockWidth + x) = wref_arr[0];
+        // debug
+//        *(&pSoftWeightsArr[0] + h * blockWidth + x) = 125;
+      }
+    }
+
+    int iBlkSize = blockWidth * blockHeight;
+
+    uint8_t* pDst = pSoftWeightsArr + iBlkSize * 2; // shift by 2*W0
+  for (int h = 0; h < blockHeight; ++h)
+  {
+    for (int k = 0; k < trad; ++k)
+    {
+      for (int x = 0; x < blockWidth; ++x)
+      {
+        pDst[k * 2 * blockWidth + x] = wref_arr[k * 2 + 1];
+        pDst[(k * 2 + 1) * blockWidth + x] = wref_arr[k * 2 + 2];
+      }
+    }
+    pDst += blockWidth * trad * 2;
+  }
 }
 
