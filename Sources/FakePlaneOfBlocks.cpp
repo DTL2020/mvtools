@@ -48,7 +48,7 @@ FakePlaneOfBlocks::FakePlaneOfBlocks(int sizeX, int sizeY, int lv, int pel, int 
 
    SIZE_T stSizeToAlloc = nBlkCount * sizeof(VECTOR) + RAND_OFFSET_MAX * L2L3_CACHE_LINE_SIZE;
 
-   BYTE* pbMVsArray_a = (BYTE*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+   pbMVsArray_a = (BYTE*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
    pMVsArray = (VECTOR*)(pbMVsArray_a + random);
 #else
    pMVsArray = new VECTOR[nBlkCount]; // allocate in heap ?

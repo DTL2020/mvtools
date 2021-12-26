@@ -31,7 +31,7 @@
 #include <memory>
 #include <vector>
 
-#if defined _WIN32 && defined DX_12ME
+#if defined _WIN32// && defined DX_12ME
 
 #include <initguid.h>
 #include <d3d12.h>
@@ -180,7 +180,8 @@ private:
   ComPtr<ID3D12GraphicsCommandList> m_GraphicsCommandList;
   ComPtr<ID3D12CommandAllocator> m_commandAllocatorGraphics;
   ComPtr<ID3D12CommandAllocator> m_commandAllocatorVideo;
-  ComPtr<ID3D12CommandQueue> m_commandQueue;
+  ComPtr<ID3D12CommandQueue> m_commandQueueVideo;
+  ComPtr<ID3D12CommandQueue> m_commandQueueGraphics;
 
   HANDLE m_fenceEventGraphics;
   HANDLE m_fenceEventVideo;
