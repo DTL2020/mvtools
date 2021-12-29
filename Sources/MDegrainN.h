@@ -140,6 +140,7 @@ private:
       const BYTE * &p, int &np, int &wref, bool usable_flag, const MvClipInfo &c_info,
       int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch, int ibx, int iby, const VECTOR* pMVsArray 
     );
+
   MV_FORCEINLINE void
     use_block_uv(
       const BYTE * &p, int &np, int &wref, bool usable_flag, const MvClipInfo &c_info,
@@ -150,11 +151,13 @@ private:
     norm_weights(int wref_arr[], int trad);
 
   template <int blockWidth, int blockHeight>
-  void CreateSoftWeightsArr(int wref_arr[], int trad);
+  void CreateSoftWeightsArr(int wref_arr[], int bx, int by, int trad);
+
+  void CreateFrameWeightsArr(void);
 
   MvClipArray _mv_clip_arr;
 
-  const VECTOR* pMVsPlanesArrays[MAX_TEMP_RAD * 2];
+
 
   int _trad;// Temporal radius (nbr frames == _trad * 2 + 1)
   int _yuvplanes;
@@ -185,6 +188,9 @@ private:
   // 2.7.46
   int _wpow;
   uint16_t* pui16SoftWeightsArr;
+  uint16_t* pui16WeightsFrameArr;
+  const VECTOR* pMVsPlanesArrays[MAX_TEMP_RAD * 2];
+
 
   std::unique_ptr <YUY2Planes> _dst_planes;
   std::unique_ptr <YUY2Planes> _src_planes;

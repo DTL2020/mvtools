@@ -949,6 +949,7 @@ MDegrainN::MDegrainN(
   }
 
   pui16SoftWeightsArr = new uint16_t[(_trad + 1) * 2 * (nBlkSizeX*nBlkSizeY) * pixelsize_super * sizeof(uint16_t)]; // pixelsize already set ?
+  pui16WeightsFrameArr = new uint16_t[(_trad + 1) * 2 * nBlkX *nBlkY * sizeof(uint16_t)];
 }
 
 
@@ -957,6 +958,7 @@ MDegrainN::~MDegrainN()
 {
   // Nothing
   delete pui16SoftWeightsArr;
+  delete pui16WeightsFrameArr;
 }
 
 static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *srcp, int srcpitch, int width, int height)
@@ -1180,6 +1182,7 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
     if (nOverlapX == 0 && nOverlapY == 0)
     {
       {
+        CreateFrameWeightsArr();
         slicer.start(
           nBlkY,
           *this,
@@ -1714,6 +1717,7 @@ void	MDegrainN::process_luma_normal_slice_softweight(Slicer::TaskData& td)
       const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
       int pitch_arr[MAX_TEMP_RAD * 2];
       int weight_arr[1 + MAX_TEMP_RAD * 2];
+//      uint16_t* pDstWeights = pui16WeightsFrameArr + (bx + by * nBlkX) * (2 * _trad + 1); // norm directly to global array
 
       if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
       {
@@ -1747,7 +1751,7 @@ void	MDegrainN::process_luma_normal_slice_softweight(Slicer::TaskData& td)
               */
       for (int k = 0; k < _trad * 2; ++k)
       {
-        use_block_y(
+/*        use_block_y(
           ref_data_ptr_arr[k],
           pitch_arr[k],
           weight_arr[k + 1],
@@ -1762,16 +1766,27 @@ void	MDegrainN::process_luma_normal_slice_softweight(Slicer::TaskData& td)
           by,
           pMVsPlanesArrays[k]
         );
+    );
+        */
+        if (_usable_flag_arr[k])
+        {
+          const VECTOR* pMVsArray = pMVsPlanesArrays[k];
+          const int blx = bx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+          const int bly = by * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
+          ref_data_ptr_arr[k] = _planes_ptr[k][0]->GetPointer(blx, bly);
+          pitch_arr[k] = _planes_ptr[k][0]->GetPitch();
+        }
+        else
+        {
+          ref_data_ptr_arr[k] = pSrcCur + xx;
+          pitch_arr[k] = _src_pitch_arr[0];
+        }
       }
 
-      if (i == 1027)
-      {
-        int idbr = 0;
-      }
+//      norm_weights(weight_arr, _trad);
 
-      norm_weights(weight_arr, _trad);
-
-      CreateSoftWeightsArr<8, 8>(weight_arr, _trad);
+      CreateSoftWeightsArr<8, 8>(weight_arr, bx, by, _trad);
+//      CreateSoftWeightsArr<8, 8>(weight_arr, _trad);
 
       // luma
 /*      _degrainluma_ptr(
@@ -2449,15 +2464,16 @@ MV_FORCEINLINE int DegrainWeightN(int thSAD, double thSAD_pow, int blockSAD, int
 }
 
 template <int blockWidth, int blockHeight>
-void MDegrainN::CreateSoftWeightsArr(int wref_arr[], int trad) // still no internal MT supported - global class pSoftWeightsArr array
+void MDegrainN::CreateSoftWeightsArr(int wref_arr[], int bx, int by, int trad) // still no internal MT supported - global class pSoftWeightsArr array
 {
+  uint16_t* pDstWeights = pui16WeightsFrameArr + (bx + by * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
   // square hard weights at start
   // src zero
     for (int h = 0; h < blockHeight; h++)
     {
       for (int x = 0; x < blockWidth; x++)
       {
-        *(&pui16SoftWeightsArr[0] + (uint64_t)h * (uint64_t)blockWidth + x) = (uint16_t)wref_arr[0];
+        *(&pui16SoftWeightsArr[0] + (uint64_t)h * (uint64_t)blockWidth + x) = pDstWeights[0];//(uint16_t)wref_arr[0];
         // debug
 //        *(&pSoftWeightsArr[0] + h * blockWidth + x) = 125;
       }
@@ -2472,11 +2488,71 @@ void MDegrainN::CreateSoftWeightsArr(int wref_arr[], int trad) // still no inter
     {
       for (int x = 0; x < blockWidth; ++x)
       {
-        pDst[k * 2 * blockWidth + x] = (uint16_t)wref_arr[k * 2 + 1];
-        pDst[(k * 2 + 1) * blockWidth + x] = (uint16_t)wref_arr[k * 2 + 2];
+        pDst[k * 2 * blockWidth + x] = pDstWeights[k * 2 + 1];// (uint16_t)wref_arr[k * 2 + 1];
+        pDst[(k * 2 + 1) * blockWidth + x] = pDstWeights[k * 2 + 2];// (uint16_t)wref_arr[k * 2 + 2];
       }
     }
     pDst += blockWidth * (uint64_t)trad * 2;
   }
+}
+
+void MDegrainN::CreateFrameWeightsArr(void)
+{
+  const int one = 1 << DEGRAIN_WEIGHT_BITS; // 8 bit, 256
+  //  for (int by = td._y_beg; by < td._y_end; ++by)
+  for (int by = 0; by < nBlkY; ++by) // single threaded proc
+  {
+    int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
+
+    for (int bx = 0; bx < nBlkX; ++bx)
+    {
+      int i = by * nBlkX + bx;
+
+      const int nbr_frames = _trad * 2 + 1;
+      uint16_t* pDst = pui16WeightsFrameArr + (bx + by * nBlkX) * nbr_frames; // norm directly to global array
+
+      if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
+      {
+        for (int k = 0; k < _trad * 2; ++k)
+        {
+          const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
+        }
+      }
+      for (int k = 0; k < _trad * 2; ++k)
+      {
+
+        if (_usable_flag_arr[k])
+        {
+          const VECTOR* pMVsArray = pMVsPlanesArrays[k];
+          const sad_t block_sad = pMVsArray[i].sad;
+
+          pDst[k + 1] = (uint16_t)DegrainWeightN(_mv_clip_arr[k]._thsad, _mv_clip_arr[k]._thsad_sq, block_sad, _wpow);
+        }
+        else
+        {
+          pDst[k + 1] = 0;
+        }
+      }
+
+      pDst[0] = one;
+      int wsum = 1;
+      for (int k = 0; k < nbr_frames; ++k)
+      {
+        wsum += pDst[k];
+      }
+
+      // normalize weights to 256
+      int wsrc = one;
+      for (int k = 1; k < nbr_frames; ++k)
+      {
+        const int norm = pDst[k] * one / wsum;
+        pDst[k] = norm;
+        wsrc -= norm;
+      }
+      pDst[0] = wsrc; 
+
+    }	// for bx
+  }	// for by
 }
 
