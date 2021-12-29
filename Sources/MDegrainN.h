@@ -184,7 +184,7 @@ private:
 
   // 2.7.46
   int _wpow;
-  BYTE* pSoftWeightsArr;
+  uint16_t* pui16SoftWeightsArr;
 
   std::unique_ptr <YUY2Planes> _dst_planes;
   std::unique_ptr <YUY2Planes> _src_planes;

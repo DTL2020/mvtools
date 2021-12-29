@@ -253,7 +253,7 @@ void DegrainN_sse2_softweight(
   BYTE* pDst, BYTE* pDstLsb, int nDstPitch,
   const BYTE* pSrc, int nSrcPitch,
   const BYTE* pRef[], int Pitch[],
-  BYTE* pWall, int trad
+  uint16_t* pWall, int trad
 )
 {
   assert(blockWidth % 4 == 0);
@@ -272,7 +272,7 @@ void DegrainN_sse2_softweight(
   // base 8 bit -> 8 bit
   const __m128i o = _mm_set1_epi16(128); // rounding
   
-  uint8_t* pW = pWall + iBlkSize * 2; // shift by 2*W0
+  uint16_t* pW = pWall + (uint64_t)iBlkSize * 2; // shift by 2*W0
 
   for (int h = 0; h < blockHeight; ++h)
   {
@@ -284,9 +284,10 @@ void DegrainN_sse2_softweight(
       else // load 4 pixels
         src = _mm_cvtsi32_si128(*(uint32_t*)(pSrc + x));
 
-      __m128i weight_src = _mm_loadl_epi64((__m128i*) (&pWall[0] + h * blockWidth + x));
+      __m128i weight_src = _mm_loadu_si128((__m128i*) (&pWall[0] + (uint64_t)h * blockWidth + x));
+
       //        __m128i val = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_set1_epi16(Wall[0])), o);
-      __m128i val = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_unpacklo_epi8(weight_src, z)), o);
+      __m128i val = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(src, z), weight_src), o);
 
       for (int k = 0; k < trad; ++k)
       {
@@ -296,9 +297,10 @@ void DegrainN_sse2_softweight(
         {
           src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2] + x));
           src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1] + x));
-          
-          weight1 = _mm_loadl_epi64((__m128i*)(pW + (k * 2 * blockWidth + x)));
-          weight2 = _mm_loadl_epi64((__m128i*)(pW + ((k * 2 + 1) * blockWidth + x))); // +x - not tested for > 8x8 blocks
+
+          weight1 = _mm_loadu_si128((__m128i*)(pW + ((uint64_t)k * 2 * (uint64_t)blockWidth + x)));
+          weight2 = _mm_loadu_si128((__m128i*)(pW + (((uint64_t)k * 2 + 1) * (uint64_t)blockWidth + x))); // +x - not tested for > 8x8 blocks
+
         }
         else { // 4-4 pixels
           src1 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2] + x));
@@ -306,12 +308,15 @@ void DegrainN_sse2_softweight(
         }
         //          const __m128i s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1]));
         //          const __m128i s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2]));
-        const __m128i s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_unpacklo_epi8(weight1, z));
-        const __m128i s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_unpacklo_epi8(weight2, z));
+          const __m128i s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), weight1);
+          const __m128i s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), weight2);
+
         val = _mm_add_epi16(val, s1);
         val = _mm_add_epi16(val, s2);
       }
+
       auto res = _mm_packus_epi16(_mm_srli_epi16(val, 8), z);
+
       if constexpr (is_mod8) {
         _mm_storel_epi64((__m128i*)(pDst + x), res);
       }
@@ -320,7 +325,7 @@ void DegrainN_sse2_softweight(
       }
     }
 
-    pW += blockWidth * trad * 2;
+    pW += blockWidth * (uint64_t)trad * 2;
 
     pDst += nDstPitch;
     pSrc += nSrcPitch;
@@ -943,7 +948,7 @@ MDegrainN::MDegrainN(
       vi.pixel_type = VideoInfo::CS_YUV444P16;
   }
 
-  pSoftWeightsArr = new BYTE[(_trad + 1) * 2 * (nBlkSizeX*nBlkSizeY) * pixelsize_super]; // pixelsize already set ?
+  pui16SoftWeightsArr = new uint16_t[(_trad + 1) * 2 * (nBlkSizeX*nBlkSizeY) * pixelsize_super * sizeof(uint16_t)]; // pixelsize already set ?
 }
 
 
@@ -951,7 +956,7 @@ MDegrainN::MDegrainN(
 MDegrainN::~MDegrainN()
 {
   // Nothing
-  delete pSoftWeightsArr;
+  delete pui16SoftWeightsArr;
 }
 
 static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *srcp, int srcpitch, int width, int height)
@@ -1055,8 +1060,8 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
     _src_pitch_arr[2] = VPITCH(src);
   }
 
-  DWORD dwOldProt;
-  BYTE* pbAVS = (BYTE*)_dst_ptr_arr[0];
+//  DWORD dwOldProt;
+//  BYTE* pbAVS = (BYTE*)_dst_ptr_arr[0];
 
   _lsb_offset_arr[0] = _dst_pitch_arr[0] * nHeight;
   _lsb_offset_arr[1] = _dst_pitch_arr[1] * (nHeight >> nLogyRatioUV_super);
@@ -1178,8 +1183,8 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
         slicer.start(
           nBlkY,
           *this,
-//          &MDegrainN::process_luma_normal_slice_softweight
-            &MDegrainN::process_luma_normal_slice
+          &MDegrainN::process_luma_normal_slice_softweight
+//            &MDegrainN::process_luma_normal_slice
         );
       }
       slicer.wait();
@@ -1759,6 +1764,11 @@ void	MDegrainN::process_luma_normal_slice_softweight(Slicer::TaskData& td)
         );
       }
 
+      if (i == 1027)
+      {
+        int idbr = 0;
+      }
+
       norm_weights(weight_arr, _trad);
 
       CreateSoftWeightsArr<8, 8>(weight_arr, _trad);
@@ -1772,7 +1782,7 @@ void	MDegrainN::process_luma_normal_slice_softweight(Slicer::TaskData& td)
       DegrainN_sse2_softweight<8,8,1>(
         pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-        ref_data_ptr_arr, pitch_arr, pSoftWeightsArr, _trad
+        ref_data_ptr_arr, pitch_arr, pui16SoftWeightsArr, _trad
       );
 
       xx += (nBlkSizeX); // xx: indexing offset
@@ -2447,7 +2457,7 @@ void MDegrainN::CreateSoftWeightsArr(int wref_arr[], int trad) // still no inter
     {
       for (int x = 0; x < blockWidth; x++)
       {
-        *(&pSoftWeightsArr[0] + h * blockWidth + x) = wref_arr[0];
+        *(&pui16SoftWeightsArr[0] + (uint64_t)h * (uint64_t)blockWidth + x) = (uint16_t)wref_arr[0];
         // debug
 //        *(&pSoftWeightsArr[0] + h * blockWidth + x) = 125;
       }
@@ -2455,18 +2465,18 @@ void MDegrainN::CreateSoftWeightsArr(int wref_arr[], int trad) // still no inter
 
     int iBlkSize = blockWidth * blockHeight;
 
-    uint8_t* pDst = pSoftWeightsArr + iBlkSize * 2; // shift by 2*W0
+    uint16_t* pDst = pui16SoftWeightsArr + (uint64_t)iBlkSize * 2; // shift by 2*W0
   for (int h = 0; h < blockHeight; ++h)
   {
     for (int k = 0; k < trad; ++k)
     {
       for (int x = 0; x < blockWidth; ++x)
       {
-        pDst[k * 2 * blockWidth + x] = wref_arr[k * 2 + 1];
-        pDst[(k * 2 + 1) * blockWidth + x] = wref_arr[k * 2 + 2];
+        pDst[k * 2 * blockWidth + x] = (uint16_t)wref_arr[k * 2 + 1];
+        pDst[(k * 2 + 1) * blockWidth + x] = (uint16_t)wref_arr[k * 2 + 2];
       }
     }
-    pDst += blockWidth * trad * 2;
+    pDst += blockWidth * (uint64_t)trad * 2;
   }
 }
 
