@@ -199,6 +199,8 @@ MVAnalyse::MVAnalyse(
     Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize);
   }
 
+  iUploadedCurrentFrameNum = -1; // is it non-existent frame num ?
+
 #endif
 
   if (_chromaSADScale < -2 || _chromaSADScale>2)
@@ -704,6 +706,22 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       HRESULT hr;
       UINT64 size;
 
+      hr = m_commandAllocatorGraphics->Reset();
+      if (hr != S_OK)
+      {
+        env->ThrowError(
+          "MAnalyse: Error m_commandAllocatorGraphics->Reset"
+        );
+      }
+
+      hr = m_commandAllocatorVideo->Reset();
+      if (hr != S_OK)
+      {
+        env->ThrowError(
+          "MAnalyse: Error m_commandAllocatorVideo->Reset"
+        );
+      }
+
       hr = m_GraphicsCommandList->Reset(m_commandAllocatorGraphics.Get(), 0);
       if (hr != S_OK)
       {
@@ -712,22 +730,28 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         );
       }
 
-      m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spCurrentResource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST));
+      if (nsrc != iUploadedCurrentFrameNum) // do not upload current source on each src+ref pair
+      {
+        m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spCurrentResource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST));
+        D3D12_SUBRESOURCE_DATA textureData_current = {};
+        textureData_current.pData = src->GetReadPtr(PLANAR_Y);
+        textureData_current.RowPitch = src->GetPitch(PLANAR_Y);
+        textureData_current.SlicePitch = textureData_current.RowPitch * src->GetHeight();
+
+        size = UpdateSubresources(m_GraphicsCommandList.Get(), spCurrentResource.Get(), spCurrentResourceUpload.Get(), 0, 0, 1, &textureData_current);
+        m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spCurrentResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON));
+
+        iUploadedCurrentFrameNum = nsrc;
+      }
+
       m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spReferenceResource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST));
 
-      D3D12_SUBRESOURCE_DATA textureData = {};
-      textureData.pData = src->GetReadPtr(PLANAR_Y);
-      textureData.RowPitch = src->GetPitch(PLANAR_Y);
-      textureData.SlicePitch = textureData.RowPitch * src->GetHeight();
+      D3D12_SUBRESOURCE_DATA textureData_ref = {};
+      textureData_ref.pData = ref->GetReadPtr(PLANAR_Y);
+      textureData_ref.RowPitch = ref->GetPitch(PLANAR_Y);
+      textureData_ref.SlicePitch = textureData_ref.RowPitch * ref->GetHeight();
 
-      size = UpdateSubresources(m_GraphicsCommandList.Get(), spCurrentResource.Get(), spCurrentResourceUpload.Get(), 0, 0, 1, &textureData);
-      m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spCurrentResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON));
-
-      textureData.pData = ref->GetReadPtr(PLANAR_Y);
-      textureData.RowPitch = ref->GetPitch(PLANAR_Y);
-      textureData.SlicePitch = textureData.RowPitch * ref->GetHeight();
-
-      size = UpdateSubresources(m_GraphicsCommandList.Get(), spReferenceResource.Get(), spReferenceResourceUpload.Get(), 0, 0, 1, &textureData);
+      size = UpdateSubresources(m_GraphicsCommandList.Get(), spReferenceResource.Get(), spReferenceResourceUpload.Get(), 0, 0, 1, &textureData_ref);
       m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spReferenceResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON));
       
       hr = m_GraphicsCommandList->Close();
@@ -766,7 +790,8 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         }
         WaitForSingleObject(m_fenceEventGraphics, INFINITE);
       }
-
+      
+      
       hr = m_VideoEncodeCommandList->Reset(m_commandAllocatorVideo.Get());
 
       m_VideoEncodeCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spCurrentResource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ));
@@ -774,7 +799,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       m_VideoEncodeCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spReferenceResource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ));
 
       m_VideoEncodeCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spResolvedMotionVectors.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE));
-
+      
       const D3D12_VIDEO_MOTION_ESTIMATOR_OUTPUT outputArgsEM = { spVideoMotionVectorHeap.Get() };
 
       const D3D12_VIDEO_MOTION_ESTIMATOR_INPUT inputArgsEM = {
@@ -804,7 +829,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       m_VideoEncodeCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spCurrentResource.Get(), D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ, D3D12_RESOURCE_STATE_COMMON));
 
       m_VideoEncodeCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spReferenceResource.Get(), D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ, D3D12_RESOURCE_STATE_COMMON));
-
+      
 
       hr = m_VideoEncodeCommandList->Close();
       if (hr != S_OK)
@@ -842,7 +867,8 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         }
         WaitForSingleObject(m_fenceEventVideo, INFINITE);
       }
-
+      
+      
       // copy back to CPU memory
       hr = m_GraphicsCommandList->Reset(m_commandAllocatorGraphics.Get(), 0);
 
@@ -921,7 +947,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
       spResolvedMotionVectorsReadBack->Unmap(0, NULL);
 
-
+      
       optPredictorType = 3; // force SAD calculation only - no refine.
     }
 #endif
