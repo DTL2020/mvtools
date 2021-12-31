@@ -144,6 +144,7 @@ public:
     int _divideExtra, int smooth, bool meander,
     int optPredictorType);
 
+  MVVector <VECTOR> vectors; // public to write MVs from DX12_ME
 
 private:
 
@@ -191,7 +192,7 @@ private:
 
   //std::vector <VECTOR>              /* motion vectors of the blocks */
   //  vectors;           /* before the search, contains the hierachal predictor */
-  MVVector <VECTOR> vectors;
+//  MVVector <VECTOR> vectors;
                        /* after the search, contains the best motion vector */
 
   bool           smallestPlane;     /* say whether vectors can use predictors from a smaller plane */

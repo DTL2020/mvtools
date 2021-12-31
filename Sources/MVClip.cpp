@@ -22,7 +22,7 @@
 #include <cassert>
 #include <algorithm>
 
-MVClip::MVClip(const PClip &vectors, sad_t _nSCD1, int _nSCD2, IScriptEnvironment *env, int group_len, int group_ofs)
+MVClip::MVClip(const PClip &vectors, sad_t _nSCD1, int _nSCD2, IScriptEnvironment *env, int group_len, int group_ofs, bool bMVsArrayOnly)
 :	GenericVideoFilter(vectors) 
 ,	_group_len (group_len)
 ,	_group_ofs (group_ofs)
@@ -72,7 +72,7 @@ MVClip::MVClip(const PClip &vectors, sad_t _nSCD1, int _nSCD2, IScriptEnvironmen
    // It is ranged from 0 to 255, 0 meaning 0 %, 255 meaning 100 %. Default is 130 (which means 51 %).
    nSCD2 = _nSCD2 * nBlkCount / 256; 
    // FakeGroupOfPlane creation
-   FakeGroupOfPlanes::Create(nBlkSizeX, nBlkSizeY, nLvCount, nPel, nOverlapX, nOverlapY, xRatioUV, yRatioUV, nBlkX, nBlkY);
+   FakeGroupOfPlanes::Create(nBlkSizeX, nBlkSizeY, nLvCount, nPel, nOverlapX, nOverlapY, xRatioUV, yRatioUV, nBlkX, nBlkY, bMVsArrayOnly);
 }
 
 

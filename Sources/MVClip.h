@@ -54,7 +54,7 @@ class MVClip
   bool				_frame_update_flag;
 
 public :
-  MVClip(const PClip &vectors, sad_t nSCD1, int nSCD2, IScriptEnvironment *env, int group_len, int group_ofs);
+  MVClip(const PClip &vectors, sad_t nSCD1, int nSCD2, IScriptEnvironment *env, int group_len, int group_ofs, bool bMVsArrayOnly = false);
    ~MVClip();
 
   int				get_child_frame_index (int n) const;

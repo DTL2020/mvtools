@@ -23,7 +23,7 @@
 #include "FakePlaneOfBlocks.h"
 
 // we need for _xRatioUV, but _yRatioUV is not used
-void FakeGroupOfPlanes::Create(int nBlkSizeX, int nBlkSizeY, int nLevelCount, int nPel, int nOverlapX, int nOverlapY, int _xRatioUV, int _yRatioUV, int _nBlkX, int _nBlkY)
+void FakeGroupOfPlanes::Create(int nBlkSizeX, int nBlkSizeY, int nLevelCount, int nPel, int nOverlapX, int nOverlapY, int _xRatioUV, int _yRatioUV, int _nBlkX, int _nBlkY, bool bMVsArrayOnly)
 {
    nLvCount_ = nLevelCount;
 //   nOverlap = 2;//_nOverlap;
@@ -42,12 +42,12 @@ void FakeGroupOfPlanes::Create(int nBlkSizeX, int nBlkSizeY, int nLevelCount, in
 //   nHeight_ = nHeight;
 
    planes = new FakePlaneOfBlocks*[nLevelCount];
-   planes[0] = new FakePlaneOfBlocks(nBlkSizeX, nBlkSizeY, 0, nPel, nOverlapX, nOverlapY, nBlkX1, nBlkY1);
+   planes[0] = new FakePlaneOfBlocks(nBlkSizeX, nBlkSizeY, 0, nPel, nOverlapX, nOverlapY, nBlkX1, nBlkY1, bMVsArrayOnly);
   for (int i = 1; i < nLevelCount; i++ )
   {
       nBlkX1 = ((nWidth_B>>i) - nOverlapX)/(nBlkSizeX-nOverlapX);
       nBlkY1 = ((nHeight_B>>i) - nOverlapY)/(nBlkSizeY-nOverlapY);
-    planes[i] = new FakePlaneOfBlocks(nBlkSizeX, nBlkSizeY, i, 1, nOverlapX, nOverlapY, nBlkX1, nBlkY1); // fixed bug with nOverlapX in v1.10.2
+    planes[i] = new FakePlaneOfBlocks(nBlkSizeX, nBlkSizeY, i, 1, nOverlapX, nOverlapY, nBlkX1, nBlkY1, bMVsArrayOnly); // fixed bug with nOverlapX in v1.10.2
   }
 //   InitializeCriticalSection(&cs); P.F.16.03.08 caused 0xC0000005! moved to the constructor!
 }

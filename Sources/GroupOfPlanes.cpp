@@ -122,7 +122,7 @@ void	GroupOfPlanes::SearchMVs(
   bool bDoPT3search = false;
   if (optPredictorType == 3)
   {
-    if (nLevelCount == 1 && optSearchOption != 5) // DX12_ME send found vectors at largest level
+    if (nLevelCount == 1) 
     {
       throw std::runtime_error(
         "MVTools: MAnalyse: optPredictorType=3 require levels > 1"
@@ -132,6 +132,7 @@ void	GroupOfPlanes::SearchMVs(
     // switch predictor type for all levels except finest to 1:
     optPredictorType = 1;
   }
+
   bool bDoPT4search = false;
   if (optPredictorType == 4)
   {

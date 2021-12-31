@@ -44,10 +44,11 @@ class FakePlaneOfBlocks
 
   VECTOR* pMVsArray; // working pointer
   BYTE* pbMVsArray_a; // allocated pointer
+  bool bnMVsArrayOnly;
 
 public :
 
-  FakePlaneOfBlocks(int sizex,  int sizey, int lv, int pel, int overlapx, int overlapy, int nBlkX, int nBlkY);
+  FakePlaneOfBlocks(int sizex,  int sizey, int lv, int pel, int overlapx, int overlapy, int nBlkX, int nBlkY, bool bMVsArrayOnly);
   ~FakePlaneOfBlocks();
 
   void Update(const int *array);

@@ -24,7 +24,7 @@
 #include <stdlib.h>
 
 
-FakePlaneOfBlocks::FakePlaneOfBlocks(int sizeX, int sizeY, int lv, int pel, int _nOverlapX, int _nOverlapY, int _nBlkX, int _nBlkY)
+FakePlaneOfBlocks::FakePlaneOfBlocks(int sizeX, int sizeY, int lv, int pel, int _nOverlapX, int _nOverlapY, int _nBlkX, int _nBlkY, bool bMVsArrayOnly)
 {
    nBlkSizeX = sizeX;
    nBlkSizeY = sizeY;
@@ -38,6 +38,7 @@ FakePlaneOfBlocks::FakePlaneOfBlocks(int sizeX, int sizeY, int lv, int pel, int 
 //   nBlkY = (nHeight_Bi - nOverlapY) / (nBlkSizeY - nOverlapY); //
    nBlkCount = nBlkX * nBlkY;
    nPel = pel;
+   bnMVsArrayOnly = bMVsArrayOnly;
 
 #ifdef _WIN32
    // to prevent cache set overloading when accessing fpob MVs arrays - add random L2L3_CACHE_LINE_SIZE-bytes sized offset to different allocations
@@ -82,14 +83,19 @@ FakePlaneOfBlocks::~FakePlaneOfBlocks()
 void FakePlaneOfBlocks::Update(const int *array)
 {
   // need to copy, pointer not keeped ?
-  memcpy(pMVsArray, array, nBlkCount * sizeof(VECTOR));
-/*
-  array += 0;
-  for ( int i = 0; i < nBlkCount; i++ )
+  if (bnMVsArrayOnly) // for faster MDegrain
   {
-    blocks[i].Update(array);
-    array += N_PER_BLOCK;
-  } */ // comment-out may be (?) not compatible with depan (and MDegrainX ?), to make - need to pass bool bForDepan, (and bForMDegrainX ?)
+    memcpy(pMVsArray, array, nBlkCount * sizeof(VECTOR));
+  }
+  else // for compatibility with old filters/functions
+  {
+    array += 0;
+    for (int i = 0; i < nBlkCount; i++)
+    {
+      blocks[i].Update(array);
+      array += N_PER_BLOCK;
+    }
+  }
 }
 
 bool FakePlaneOfBlocks::IsSceneChange(sad_t nTh1, int nTh2) const

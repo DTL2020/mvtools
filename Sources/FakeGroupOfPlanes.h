@@ -45,7 +45,7 @@ public :
 //	FakeGroupOfPlanes(int w, int h, int size, int lv, int pel);
   ~FakeGroupOfPlanes();
     // we need for _xRatioUV, but _yRatioUV is not used
-   void Create(int _nBlkSizeX, int _nBlkSizeY, int _nLevelCount, int _nPel, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int _nBlkX, int _nBlkY); 
+   void Create(int _nBlkSizeX, int _nBlkSizeY, int _nLevelCount, int _nPel, int _nOverlapX, int _nOverlapY, int _xRatioUV, int _yRatioUV, int _nBlkX, int _nBlkY, bool bMVsArrayOnly); 
 
   bool Update(const int *array, int data_size);
   bool IsSceneChange(sad_t nThSCD1, int nThSCD2) const;

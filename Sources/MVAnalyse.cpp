@@ -948,10 +948,9 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         WaitForSingleObject(m_fenceEventCopyBack, INFINITE);
       }
 
-      D3D12_RANGE readbackBufferRange{ 0, srd._analysis_data.nBlkX * srd._analysis_data.nBlkY * sizeof(short) * 2 }; // 2x16bit coordinates ?
-      short* pReadbackBufferData{};
+      int16_t* pReadbackBufferData{};
 
-      hr = spResolvedMotionVectorsReadBack->Map(0, &readbackBufferRange, reinterpret_cast<void**>(&pReadbackBufferData));
+      hr = spResolvedMotionVectorsReadBack->Map(0, nullptr, reinterpret_cast<void**>(&pReadbackBufferData));
       if (hr != S_OK)
       {
         env->ThrowError(
@@ -960,21 +959,36 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       }
 
       // make reading
-      uint64_t res = 0;
-      for (int i = 0; i < srd._analysis_data.nBlkX * srd._analysis_data.nBlkY; i++)
+      // copy to 'vectors' structure of plane 0 for sad calc only
+      PlaneOfBlocks* pob = _vectorfields_aptr->GetPlane(0);
+      VECTOR *pVectors = &pob->vectors[0];
+      int16_t* pSrcMVs = pReadbackBufferData;
+
+#ifdef _DEBUG
+      // debug check
+      if (iNumBlocksX * iNumBlocksY != pob->vectors.size())
       {
-        res += pReadbackBufferData[i];
+        env->ThrowError(
+          "MAnalyse: Error size of vectors buf != number of vectors"
+        );
       }
 
-      if (res != 0)
+#endif
+
+      for (int h = 0; h < iNumBlocksY; ++h)
       {
-        int idbr = 0;
+        for (int w = 0; w < iNumBlocksX; ++w)
+        {
+          pVectors[0].x = pSrcMVs[w * 2] / 4; // for pel=1, divide qpel by 4
+          pVectors[0].y = pSrcMVs[w * 2 + 1] / 4; // for pel=1, divide qpel by 4
+
+          pVectors++;
+        }
+        pSrcMVs += iRowPitch / 2; // pitch in bytes
       }
 
       spResolvedMotionVectorsReadBack->Unmap(0, NULL);
 
-      
-      optPredictorType = 3; // force SAD calculation only - no refine.
     }
 #endif
     
@@ -1267,7 +1281,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   DXGI_FORMAT_NV12,
   ME_BlockSize,
   D3D12_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_QUARTER_PEL,
-  {nWidth, nHeight, nWidth, nHeight} // D3D12_VIDEO_SIZE_RANGE
+  {(UINT)nWidth, (UINT)nHeight, (UINT)nWidth, (UINT)nHeight} // D3D12_VIDEO_SIZE_RANGE
   };
 
   HRESULT vid_est_result = dev_D3D12VideoDevice1->CreateVideoMotionEstimator(
@@ -1285,7 +1299,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   D3D12_VIDEO_MOTION_VECTOR_HEAP_DESC MotionVectorHeapDesc = {
   0, // NodeIndex 
   DXGI_FORMAT_NV12,
-  D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_8X8,
+  ME_BlockSize,
   D3D12_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_QUARTER_PEL,
   {nWidth, nHeight, nWidth, nHeight} // D3D12_VIDEO_SIZE_RANGE
   };
@@ -1323,8 +1337,6 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     );
   }
 
-  //D3D12_RESOURCE_DESC readbackBufferDesc{ CD3DX12_RESOURCE_DESC::Buffer((nWidth / iBlkSize) * (nHeight / iBlkSize)*sizeof(short) * 2) }; // 2x16bit ber coord ?
-
   int iNumBlocksX = nWidth / iBlkSize;
   int iRowPitchUA = iNumBlocksX * sizeof(int); // 2x16bit
   int iMod = iRowPitchUA % 256;
@@ -1337,21 +1349,12 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   bufferDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
   bufferDesc.Format = DXGI_FORMAT_UNKNOWN;
   bufferDesc.Height = 1;
-  bufferDesc.Width = iRowPitch * (nHeight / iBlkSize);
+  bufferDesc.Width = iRowPitch * (nHeight / iBlkSize) * 2; // x2 test ??
   bufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
   bufferDesc.MipLevels = 1;
   bufferDesc.SampleDesc.Count = 1;
 
-  /*
-  hr = m_D3D12device->CreateCommittedResource(
-    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK),
-    D3D12_HEAP_FLAG_NONE,
-    &readbackBufferDesc,
-    D3D12_RESOURCE_STATE_COPY_DEST,
-    nullptr,
-    IID_PPV_ARGS(&spResolvedMotionVectorsReadBack));
-    */
-    // Create a staging texture
+  // Create a staging texture
   hr = m_D3D12device->CreateCommittedResource(
     &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK),
     D3D12_HEAP_FLAG_NONE,
@@ -1381,7 +1384,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
     D3D12_HEAP_FLAG_NONE,
     &textureDesc,
-    D3D12_RESOURCE_STATE_COMMON,//D3D12_RESOURCE_STATE_COPY_DEST,
+    D3D12_RESOURCE_STATE_COMMON,
     nullptr,
     IID_PPV_ARGS(&spCurrentResource));
 
@@ -1396,7 +1399,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   hr = m_D3D12device->CreateCommittedResource(
     &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
     D3D12_HEAP_FLAG_NONE,
-    &CD3DX12_RESOURCE_DESC::Buffer(nWidth*nHeight*sizeof(int)), // size of NV12 format ??
+    &CD3DX12_RESOURCE_DESC::Buffer((uint64_t)nWidth*nHeight*sizeof(int)), // size of NV12 format ??
     D3D12_RESOURCE_STATE_GENERIC_READ,
     nullptr,
     IID_PPV_ARGS(&spCurrentResourceUpload));
@@ -1427,7 +1430,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   hr = m_D3D12device->CreateCommittedResource(
     &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
     D3D12_HEAP_FLAG_NONE,
-    &CD3DX12_RESOURCE_DESC::Buffer(nWidth * nHeight * sizeof(int)), // size of NV12 format ??
+    &CD3DX12_RESOURCE_DESC::Buffer((uint64_t)nWidth * nHeight * sizeof(int)), // size of NV12 format ??
     D3D12_RESOURCE_STATE_GENERIC_READ,
     nullptr,
     IID_PPV_ARGS(&spReferenceResourceUpload));

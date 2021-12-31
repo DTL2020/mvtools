@@ -71,6 +71,7 @@ public :
     SearchType _searchType, int _nSearchParam, int _nLambda, sad_t _lsad,
     int _pnew, int flags, int *out, short * outfilebuf, int fieldShift,
     sad_t thSAD, int smooth, bool meander, int optPredictorType);
+  PlaneOfBlocks* GetPlane(int iPlane) { return planes[iPlane]; };
 };
 
 #endif

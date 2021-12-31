@@ -697,7 +697,7 @@ MDegrainN::MDegrainN(
   for (int k = 0; k < _trad * 2; ++k)
   {
     _mv_clip_arr[k]._clip_sptr = SharedPtr <MVClip>(
-      new MVClip(mvmulti, nscd1, nscd2, env_ptr, _trad * 2, k)
+      new MVClip(mvmulti, nscd1, nscd2, env_ptr, _trad * 2, k, true) // use MVsArray only, not blocks[]
       );
 
     static const char *name_0[2] = { "mvbw", "mvfw" };
@@ -1186,8 +1186,8 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
         slicer.start(
           nBlkY,
           *this,
-          &MDegrainN::process_luma_normal_slice_softweight
-//            &MDegrainN::process_luma_normal_slice
+//          &MDegrainN::process_luma_normal_slice_softweight
+            &MDegrainN::process_luma_normal_slice
         );
       }
       slicer.wait();
@@ -2360,8 +2360,14 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
 {
   if (usable_flag)
   {
-    const int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
-    const int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
+     int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+     int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
+    // temp check - DX12_ME return invalid vectors sometime
+    if (blx < 0) blx = 0;
+    if (bly < 0) bly = 0;
+    if (blx > nBlkSizeX* nBlkX) blx = nBlkSizeX * nBlkX;
+    if (bly > nBlkSizeY* nBlkY) bly = nBlkSizeY * nBlkY;
+
     p = plane_ptr->GetPointer(blx, bly);
     np = plane_ptr->GetPitch();
     const sad_t block_sad = pMVsArray[i].sad;
@@ -2383,8 +2389,15 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv(
 {
   if (usable_flag)
   {
-    const int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
-    const int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
+     int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+     int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
+
+     // temp check - DX12_ME return invalid vectors sometime
+     if (blx < 0) blx = 0;
+     if (bly < 0) bly = 0;
+     if (blx > nBlkSizeX* nBlkX) blx = nBlkSizeX * nBlkX;
+     if (bly > nBlkSizeY* nBlkY) bly = nBlkSizeY * nBlkY;
+
     p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
     np = plane_ptr->GetPitch();
     const sad_t block_sad = pMVsArray[i].sad;
