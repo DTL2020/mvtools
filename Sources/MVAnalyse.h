@@ -159,7 +159,10 @@ private:
   void load_src_frame(MVGroupOfFrames &gof, ::PVideoFrame &src, const MVAnalysisData &ana_data);
 
 #if defined _WIN32 && defined DX12_ME
-//  ComPtr<ID3D12Device> m_device;
+
+  uint8_t* pNV12FrameData;
+  void LoadNV12(MVGroupOfFrames* pGOF, bool bChroma, int &iWidth, int &iHeight);
+
   inline UINT Align(UINT size, UINT alignment)
   {
     return (size + (alignment - 1)) & ~(alignment - 1);

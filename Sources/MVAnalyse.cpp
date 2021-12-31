@@ -185,6 +185,11 @@ MVAnalyse::MVAnalyse(
 
   if (optSearchOption == 5) // DX12_ME
   {
+    if (!vi.IsYV12())
+    {
+      env->ThrowError("MAnalyse: Unsupported format for DX12_ME, only YV12 supported");
+    }
+
     int iBlkSize = 8;
     if ((_blksizex == 8) && (_blksizey == 8))
       iBlkSize = 8;
@@ -193,13 +198,15 @@ MVAnalyse::MVAnalyse(
         iBlkSize = 16;
       else
       {
-         env->ThrowError("MAnalyse: Unsupported block size for DX12_ME, only 8x8 and 16x16 allowed");
+         env->ThrowError("MAnalyse: Unsupported block size for DX12_ME, only 8x8 and 16x16 supported");
       }
 
     Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize);
   }
 
   iUploadedCurrentFrameNum = -1; // is it non-existent frame num ?
+
+  pNV12FrameData = new uint8_t[vi.width * vi.height * 2]; // NV12 format 4:2:0, really WxH*1.5 sized ? pitch is multiply of 32 ??
 
 #endif
 
@@ -593,8 +600,9 @@ MVAnalyse::~MVAnalyse()
   delete pRefGOF;
   pRefGOF = 0;
   _RPT1(0, "MAnalyze destroyed %d\n",_instance_id);
-
-
+#ifdef _WIN32
+  delete pNV12FrameData;
+#endif
 }
 
 
@@ -730,13 +738,19 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         );
       }
 
+      int iWidth;
+      int iHeight;
+
       if (nsrc != iUploadedCurrentFrameNum) // do not upload current source on each src+ref pair
       {
         m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spCurrentResource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST));
+
+        LoadNV12(pSrcGOF, srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION, iWidth, iHeight);
+
         D3D12_SUBRESOURCE_DATA textureData_current = {};
-        textureData_current.pData = src->GetReadPtr(PLANAR_Y);
-        textureData_current.RowPitch = src->GetPitch(PLANAR_Y);
-        textureData_current.SlicePitch = textureData_current.RowPitch * src->GetHeight();
+        textureData_current.pData = pNV12FrameData;
+        textureData_current.RowPitch = iWidth;
+        textureData_current.SlicePitch = (uint64_t)iWidth * (uint64_t)iHeight + (uint64_t)iWidth * (uint64_t)iHeight / 2;
 
         size = UpdateSubresources(m_GraphicsCommandList.Get(), spCurrentResource.Get(), spCurrentResourceUpload.Get(), 0, 0, 1, &textureData_current);
         m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spCurrentResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON));
@@ -746,10 +760,12 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
       m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spReferenceResource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST));
 
+      LoadNV12(pRefGOF, srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION, iWidth, iHeight);
+
       D3D12_SUBRESOURCE_DATA textureData_ref = {};
-      textureData_ref.pData = ref->GetReadPtr(PLANAR_Y);
-      textureData_ref.RowPitch = ref->GetPitch(PLANAR_Y);
-      textureData_ref.SlicePitch = textureData_ref.RowPitch * ref->GetHeight();
+      textureData_ref.pData = pNV12FrameData;
+      textureData_ref.RowPitch = iWidth;
+      textureData_ref.SlicePitch = (uint64_t)iWidth * (uint64_t)iHeight + (uint64_t)iWidth * (uint64_t)iHeight / 2;
 
       size = UpdateSubresources(m_GraphicsCommandList.Get(), spReferenceResource.Get(), spReferenceResourceUpload.Get(), 0, 0, 1, &textureData_ref);
       m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spReferenceResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON));
@@ -944,6 +960,16 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       }
 
       // make reading
+      uint64_t res = 0;
+      for (int i = 0; i < srd._analysis_data.nBlkX * srd._analysis_data.nBlkY; i++)
+      {
+        res += pReadbackBufferData[i];
+      }
+
+      if (res != 0)
+      {
+        int idbr = 0;
+      }
 
       spResolvedMotionVectorsReadBack->Unmap(0, NULL);
 
@@ -1174,7 +1200,6 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   queueDescGraphics.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
 
   hr = m_D3D12device->CreateCommandQueue(&queueDescGraphics, IID_PPV_ARGS(&m_commandQueueGraphics));
-
   if (hr != S_OK)
   {
     env->ThrowError(
@@ -1183,7 +1208,13 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   }
 
 
-  HRESULT query_device1_result = m_D3D12device->QueryInterface(IID_PPV_ARGS(&dev_D3D12VideoDevice));
+  hr = m_D3D12device->QueryInterface(IID_PPV_ARGS(&dev_D3D12VideoDevice));
+  if (hr != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error m_D3D12device->QueryInterface(dev_D3D12VideoDevice)"
+    );
+  }
 
   D3D12_FEATURE_DATA_VIDEO_MOTION_ESTIMATOR MotionEstimatorSupport = { 0u, DXGI_FORMAT_NV12 };
   HRESULT feature_support = dev_D3D12VideoDevice->CheckFeatureSupport(D3D12_FEATURE_VIDEO_MOTION_ESTIMATOR, &MotionEstimatorSupport, sizeof(MotionEstimatorSupport));
@@ -1210,9 +1241,9 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     );
   }
 
-  HRESULT query_vid_device1_result = dev_D3D12VideoDevice->QueryInterface(IID_PPV_ARGS(&dev_D3D12VideoDevice1));
+  hr = dev_D3D12VideoDevice->QueryInterface(IID_PPV_ARGS(&dev_D3D12VideoDevice1));
 
-  if (query_device1_result != S_OK)
+  if (hr != S_OK)
   {
     env->ThrowError(
       "MAnalyse: Error QueryInterface -> dev_D3D12VideoDevice1"
@@ -1488,6 +1519,63 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     );
   }
   
+}
+
+void MVAnalyse::LoadNV12(MVGroupOfFrames* pGOF, bool bChroma, int& iWidth, int& iHeight)
+{
+  // convert input src to NV12 buffer for upload
+  uint8_t* pDstSrc = pNV12FrameData;
+
+  // copy Y plane 8bit
+  MVFrame* SrcFrame = pGOF->GetFrame(0); // use 0 - largest plane (original ?? or nPel enlarged ??)
+  int SrcYPitch = SrcFrame->GetPlane(YPLANE)->GetPitch();
+  int src_Yx0 = SrcFrame->GetPlane(YPLANE)->GetVPadding();
+  int src_Yy0 = SrcFrame->GetPlane(YPLANE)->GetHPadding();
+  const BYTE* pY = SrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(src_Yx0, src_Yy0);
+
+  iWidth = SrcFrame->GetPlane(YPLANE)->GetWidth();
+  iHeight = SrcFrame->GetPlane(YPLANE)->GetHeight();
+  // copy Y lines
+  for (int h = 0; h < iHeight; ++h)
+  {
+    memcpy(pDstSrc, pY, iWidth);
+    pDstSrc += iWidth;
+    pY += SrcYPitch;
+  }
+
+  if (bChroma)
+  {
+    // interleave U and V planes
+    const int src_Ux0 = SrcFrame->GetPlane(UPLANE)->GetHPadding();
+    const int src_Uy0 = SrcFrame->GetPlane(UPLANE)->GetVPadding();
+    const int src_Upitch = SrcFrame->GetPlane(UPLANE)->GetPitch();
+
+    const int src_Vx0 = SrcFrame->GetPlane(VPLANE)->GetHPadding();
+    const int src_Vy0 = SrcFrame->GetPlane(VPLANE)->GetVPadding();
+    const int src_Vpitch = SrcFrame->GetPlane(VPLANE)->GetPitch();
+
+    const uint8_t* pUsrc = SrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(src_Ux0, src_Uy0);
+    const uint8_t* pVsrc = SrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(src_Vx0, src_Vy0);
+
+    for (int h = 0; h < iHeight / 2; ++h)
+    {
+      for (int w = 0; w < iWidth / 2; ++w)
+      {
+        pDstSrc[w * 2] = pUsrc[w];
+        pDstSrc[w * 2 + 1] = pVsrc[w];
+      }
+
+      pDstSrc += iWidth;
+      pUsrc += src_Upitch;
+      pVsrc += src_Vpitch;
+
+    }
+  }
+  else // no chroma data avaialable - set grey UV
+  {
+    memset(pDstSrc, 128, iWidth * iHeight / 2);
+  }
+
 }
 
 
