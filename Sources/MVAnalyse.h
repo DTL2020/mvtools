@@ -196,7 +196,6 @@ private:
 
   ComPtr<ID3D12Debug> debugController;
 
-
   void GetHardwareAdapter(
     _In_ IDXGIFactory1* pFactory,
     _Outptr_result_maybenull_ IDXGIAdapter1** ppAdapter,

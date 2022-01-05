@@ -4494,7 +4494,16 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
           workarea.predictors[4] = ClipMV(workarea, zeroMV);
         }
 
-        if (optSearchOption != 5)
+        if (optSearchOption == 5 || optSearchOption == 6) // only calc sad for x,y from DX12_ME
+        {
+          sad_t sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
+          sad_t saduv = (chroma) ? ScaleSadChroma(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[1])
+            + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[2]), effective_chromaSADscale) : 0;
+          workarea.bestMV = workarea.predictor; // clip outside - no need in MDegrain 
+          workarea.bestMV.sad = sad + saduv;
+
+        }
+        else 
         {
           // Possible point of placement selection of 'predictors control'
           if (_predictorType == 0)
@@ -4505,14 +4514,6 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
             PseudoEPZSearch_no_pred<pixel_t>(workarea);
           else // DTL: no refine (at level = 0 typically)
             PseudoEPZSearch_no_refine<pixel_t>(workarea);
-        }
-        else // only calc sad for x,y from DX12_ME
-        {
-          sad_t sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
-          sad_t saduv = (chroma) ? ScaleSadChroma(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[1])
-            + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[2]), effective_chromaSADscale) : 0;
-          workarea.bestMV = vectors[workarea.blkIdx];
-          workarea.bestMV.sad = sad + saduv;
         }
 
         // workarea.bestMV = zeroMV; // debug

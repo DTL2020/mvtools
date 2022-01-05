@@ -234,17 +234,20 @@ void	GroupOfPlanes::SearchMVs(
       //			DebugPrintf("SearchMV globalMV %i, %i", globalMV.x, globalMV.y);
     }
 
-    if (pixelsize == 1) {
-      if (planes[i]->GetnBlkSizeX()*planes[i]->GetnBlkSizeY() < 280) // for why 280: see calculation inside InterpolatePrediction
-//        planes[i]->InterpolatePrediction<sad_t, sad_t>(*(planes[i + 1])); // use 32 bit intermediate for smallOverlap
-          planes[i]->InterpolatePrediction_sse<sad_t, sad_t>(*(planes[i + 1])); // use 32 bit intermediate for smallOverlap
-      else
-//        planes[i]->InterpolatePrediction<sad_t, bigsad_t>(*(planes[i + 1])); // use 64bit intermediate for smallOverLap
-      planes[i]->InterpolatePrediction_sse<sad_t, bigsad_t>(*(planes[i + 1])); // use 64bit intermediate for smallOverLap - only here with SSE, other need special version
-    }
-    else
-      planes[i]->InterpolatePrediction<bigsad_t, bigsad_t>(*(planes[i + 1])); // always use 64bit temporary inside
+    if (optSearchOption != 6) // some bad skipping overwriting DX12ME predictors table - need to make levels 2..2+ writing correct size of MVs file to read correctly at MVClip::Update
+    {
 
+      if (pixelsize == 1) {
+        if (planes[i]->GetnBlkSizeX() * planes[i]->GetnBlkSizeY() < 280) // for why 280: see calculation inside InterpolatePrediction
+  //        planes[i]->InterpolatePrediction<sad_t, sad_t>(*(planes[i + 1])); // use 32 bit intermediate for smallOverlap
+          planes[i]->InterpolatePrediction_sse<sad_t, sad_t>(*(planes[i + 1])); // use 32 bit intermediate for smallOverlap
+        else
+          //        planes[i]->InterpolatePrediction<sad_t, bigsad_t>(*(planes[i + 1])); // use 64bit intermediate for smallOverLap
+          planes[i]->InterpolatePrediction_sse<sad_t, bigsad_t>(*(planes[i + 1])); // use 64bit intermediate for smallOverLap - only here with SSE, other need special version
+      }
+      else
+        planes[i]->InterpolatePrediction<bigsad_t, bigsad_t>(*(planes[i + 1])); // always use 64bit temporary inside
+    }
 
     if (global) // can be moved after Interpolate, since it does not use the global mv results
     {

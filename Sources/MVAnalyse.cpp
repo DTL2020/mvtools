@@ -183,7 +183,7 @@ MVAnalyse::MVAnalyse(
 
 #if defined _WIN32 && defined DX12_ME
 
-  if (optSearchOption == 5) // DX12_ME
+  if (optSearchOption == 5 || optSearchOption == 6) // DX12_ME
   {
     if (!vi.IsYV12())
     {
@@ -709,7 +709,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
 #if defined _WIN32 && defined DX12_ME
     
-    if (optSearchOption == 5)
+    if (optSearchOption == 5 || optSearchOption == 6)
     {
       HRESULT hr;
       UINT64 size;
@@ -745,6 +745,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       {
         m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spCurrentResource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST));
 
+        // todo: make format conversion at time or UpdateSubresources for lesser memory copy
         LoadNV12(pSrcGOF, srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION, iWidth, iHeight);
 
         D3D12_SUBRESOURCE_DATA textureData_current = {};
@@ -756,7 +757,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spCurrentResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON));
 
         iUploadedCurrentFrameNum = nsrc;
-      }
+      } 
 
       m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spReferenceResource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST));
 
@@ -769,7 +770,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
       size = UpdateSubresources(m_GraphicsCommandList.Get(), spReferenceResource.Get(), spReferenceResourceUpload.Get(), 0, 0, 1, &textureData_ref);
       m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spReferenceResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON));
-      
+     
       hr = m_GraphicsCommandList->Close();
       if (hr != S_OK)
       {
@@ -807,13 +808,11 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         WaitForSingleObject(m_fenceEventGraphics, INFINITE);
       }
       
-      
+     
       hr = m_VideoEncodeCommandList->Reset(m_commandAllocatorVideo.Get());
 
       m_VideoEncodeCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spCurrentResource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ));
-
       m_VideoEncodeCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spReferenceResource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ));
-
       m_VideoEncodeCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spResolvedMotionVectors.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE));
       
       const D3D12_VIDEO_MOTION_ESTIMATOR_OUTPUT outputArgsEM = { spVideoMotionVectorHeap.Get() };
@@ -832,18 +831,28 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
           spResolvedMotionVectors.Get(),
           {} };
 
-      const D3D12_RESOLVE_VIDEO_MOTION_VECTOR_HEAP_INPUT inputArgsRMVH = {
-          spVideoMotionVectorHeap.Get(),
-          srd._analysis_data.nWidth,
-          srd._analysis_data.nHeight
-      };
+      D3D12_RESOLVE_VIDEO_MOTION_VECTOR_HEAP_INPUT inputArgsRMVH = {};
+      if (optSearchOption == 5)
+      {
+        inputArgsRMVH = {
+            spVideoMotionVectorHeap.Get(),
+            (UINT)srd._analysis_data.nWidth,
+            (UINT)srd._analysis_data.nHeight
+        };
+      }
+      else // SO==6
+      {
+        inputArgsRMVH = {
+            spVideoMotionVectorHeap.Get(),
+            (UINT)srd._analysis_data.nWidth / 2,
+            (UINT)srd._analysis_data.nHeight / 2
+        };
+      }
 
       m_VideoEncodeCommandList->ResolveMotionVectorHeap(&outputArgsRMVH, &inputArgsRMVH);
 
       m_VideoEncodeCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spResolvedMotionVectors.Get(), D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE, D3D12_RESOURCE_STATE_COMMON));
-
       m_VideoEncodeCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spCurrentResource.Get(), D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ, D3D12_RESOURCE_STATE_COMMON));
-
       m_VideoEncodeCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spReferenceResource.Get(), D3D12_RESOURCE_STATE_VIDEO_ENCODE_READ, D3D12_RESOURCE_STATE_COMMON));
       
 
@@ -975,19 +984,39 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
 #endif
 
-      for (int h = 0; h < iNumBlocksY; ++h)
+      if (optSearchOption == 5)
       {
-        for (int w = 0; w < iNumBlocksX; ++w)
+        for (int h = 0; h < iNumBlocksY; ++h)
         {
-          pVectors[0].x = pSrcMVs[w * 2] / 4; // for pel=1, divide qpel by 4
-          pVectors[0].y = pSrcMVs[w * 2 + 1] / 4; // for pel=1, divide qpel by 4
+          for (int w = 0; w < iNumBlocksX; ++w)
+          {
+            pVectors[0].x = pSrcMVs[w * 2] / 4; // for pel=1, divide qpel by 4
+            pVectors[0].y = pSrcMVs[w * 2 + 1] / 4; // for pel=1, divide qpel by 4
 
-          pVectors++;
+            pVectors++;
+          }
+          pSrcMVs += iRowPitch / 2; // pitch in bytes
         }
-        pSrcMVs += iRowPitch / 2; // pitch in bytes
+      }
+      else // if == 6
+      {
+        for (int h = 0; h < iNumBlocksY; ++h)
+        {
+          for (int w = 0; w < iNumBlocksX; ++w)
+          {
+            pVectors[0].x = pSrcMVs[w * 2] / 2; // for pel=1, divide qpel by 4
+            pVectors[0].y = pSrcMVs[w * 2 + 1] / 2; // for pel=1, divide qpel by 4
+
+            pVectors++;
+          }
+          pSrcMVs += iRowPitch / 2; // pitch in bytes
+        }
       }
 
       spResolvedMotionVectorsReadBack->Unmap(0, NULL);
+
+      // calc SADs using loaded resources D3D12 compute shader ?
+
 
     }
 #endif
@@ -999,7 +1028,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       outfilebuf, fieldShift, pzero, pglobal, badSAD, badrange,
       meander, pVecPrevOrNull, tryMany, optPredictorType
     );
-
+    
     if (divideExtra)
     {
       // make extra level with divided sublocks with median (not estimated)
@@ -1148,6 +1177,14 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   // check for hardware D3D12 motion estimator support and init
   UINT dxgiFactoryFlags = 0;
   HRESULT hr;
+
+  if (optSearchOption == 6)
+  {
+    nWidth /= 2; // nWidth must be divisible to 4 ?
+    nHeight /= 2; // nHeight must be divisible to 4 ?
+    iBlkSize /= 2; // BlkSize = 16 for MAnalyse, internally = 8 for half size search with qpel presicion
+  }
+
 
 #if defined(_DEBUG)
   // Enable the debug layer (requires the Graphics Tools "optional feature").
@@ -1349,7 +1386,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   bufferDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
   bufferDesc.Format = DXGI_FORMAT_UNKNOWN;
   bufferDesc.Height = 1;
-  bufferDesc.Width = iRowPitch * (nHeight / iBlkSize) * 2; // x2 test ??
+  bufferDesc.Width = (int64_t)iRowPitch * (nHeight / iBlkSize) * 2; // x2 test ??
   bufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
   bufferDesc.MipLevels = 1;
   bufferDesc.SampleDesc.Count = 1;
@@ -1396,8 +1433,17 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   }
 
   // Create the GPU upload buffer.
+  // test speed alt way:
+  // to make user-defined options: L0/L1 memory pool and WB/WC memory type
+  D3D12_HEAP_PROPERTIES hpRUpload = {};
+  hpRUpload.Type = D3D12_HEAP_TYPE_CUSTOM;
+//  hpRUpload.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
+  hpRUpload.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE;
+  hpRUpload.MemoryPoolPreference = D3D12_MEMORY_POOL_L0; // L0 for discrete HWAcc, L1 may be for CPU-integrated ?
+
   hr = m_D3D12device->CreateCommittedResource(
-    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+//    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+    &hpRUpload,
     D3D12_HEAP_FLAG_NONE,
     &CD3DX12_RESOURCE_DESC::Buffer((uint64_t)nWidth*nHeight*sizeof(int)), // size of NV12 format ??
     D3D12_RESOURCE_STATE_GENERIC_READ,
@@ -1428,7 +1474,8 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
 
   // Create the GPU upload buffer.
   hr = m_D3D12device->CreateCommittedResource(
-    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+//    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+    &hpRUpload,
     D3D12_HEAP_FLAG_NONE,
     &CD3DX12_RESOURCE_DESC::Buffer((uint64_t)nWidth * nHeight * sizeof(int)), // size of NV12 format ??
     D3D12_RESOURCE_STATE_GENERIC_READ,
@@ -1521,7 +1568,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
       "MAnalyse: Error createEvent -> m_fenceEventCopyBack "
     );
   }
-  
+
 }
 
 void MVAnalyse::LoadNV12(MVGroupOfFrames* pGOF, bool bChroma, int& iWidth, int& iHeight)
@@ -1530,7 +1577,12 @@ void MVAnalyse::LoadNV12(MVGroupOfFrames* pGOF, bool bChroma, int& iWidth, int& 
   uint8_t* pDstSrc = pNV12FrameData;
 
   // copy Y plane 8bit
-  MVFrame* SrcFrame = pGOF->GetFrame(0); // use 0 - largest plane (original ?? or nPel enlarged ??)
+  MVFrame* SrcFrame;
+  if (optSearchOption == 5)
+    SrcFrame = pGOF->GetFrame(0); // use 0 - largest plane (original ?? or nPel enlarged ??)
+  else// (optSearchOption == 6)
+    SrcFrame = pGOF->GetFrame(1); // use 1 - half sized plane (original ?? or nPel enlarged ??)
+
   int SrcYPitch = SrcFrame->GetPlane(YPLANE)->GetPitch();
   int src_Yx0 = SrcFrame->GetPlane(YPLANE)->GetVPadding();
   int src_Yy0 = SrcFrame->GetPlane(YPLANE)->GetHPadding();
