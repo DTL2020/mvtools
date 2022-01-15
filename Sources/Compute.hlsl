@@ -22,11 +22,12 @@ SamplerState Sampler : register(s0);
 
 cbuffer cb0
 {
-	float4 g_MaxThreadIter : packoffset(c0);
-	float4 g_Window : packoffset(c1);
+	int g_BlockSizeX : packoffset(c0.x);
+	int g_BlockSizeY : packoffset(c0.y);
+	int g_UseChroma : packoffset(c0.z);
+	int g_precisionMVs : packoffset(c0.w);
 }
 
-//[numthreads(8, 8, 1)]
 [numthreads(8, 8, 1)]
 RS
 void main(uint3 DTid : SV_DispatchThreadID)
@@ -37,11 +38,9 @@ void main(uint3 DTid : SV_DispatchThreadID)
 	i3Coord.y = DTid.y;
 	i3Coord.z = 0;
 
-	int iBlockSize = 8;
-
 	int2 i2MV = ResolvedMVsTexture.Load(i3Coord);
-	i2MV.r = i2MV.r >> 2; // full frame search qpel/4
-	i2MV.g = i2MV.g >> 2;
+	i2MV.r = i2MV.r >> g_precisionMVs;// 2 = full frame search qpel/4, 1 = half frame search qpel/2
+	i2MV.g = i2MV.g >> g_precisionMVs;
 
 	int iYsrc;
 	int iYref;
@@ -50,16 +49,16 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
 	int iSAD = 0;
 
-	for (int x = 0; x < iBlockSize; x++)
+	for (int y = 0; y < g_BlockSizeY; y++)
 	{
-		for (int y = 0; y < iBlockSize; y++)
+		for (int x = 0; x < g_BlockSizeX; x++)
 		{
-			i3Coord.x = DTid.x * iBlockSize + x;
-			i3Coord.y = DTid.y * iBlockSize + y;
+			i3Coord.x = DTid.x * g_BlockSizeX + x;
+			i3Coord.y = DTid.y * g_BlockSizeY + y;
 			iYsrc = CurrentTexture_Y.Load(i3Coord).r;
 
-			i3Coord.x = DTid.x * iBlockSize + x + i2MV.r;
-			i3Coord.y = DTid.y * iBlockSize + y + i2MV.g;
+			i3Coord.x = DTid.x * g_BlockSizeX + x + i2MV.r;
+			i3Coord.y = DTid.y * g_BlockSizeY + y + i2MV.g;
 
 			iYref = ReferenceTexture_Y.Load(i3Coord).r;
 
@@ -67,5 +66,5 @@ void main(uint3 DTid : SV_DispatchThreadID)
 		}
 	}
 
-	OutputTexture[DTid.xy] = iSAD; // i2MV.r;
+	OutputTexture[DTid.xy] = iSAD;
 }

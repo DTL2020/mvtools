@@ -201,7 +201,7 @@ MVAnalyse::MVAnalyse(
          env->ThrowError("MAnalyse: Unsupported block size for DX12_ME, only 8x8 and 16x16 supported");
       }
 
-    Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize);
+    Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize, chroma);
   }
 
   iUploadedCurrentFrameNum = -1; // is it non-existent frame num ?
@@ -1047,27 +1047,44 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
       spResolvedMotionVectorsReadBack->Unmap(0, NULL);
 
-      // calc SADs using loaded resources D3D12 compute shader ?
+      // calc SADs using loaded resources and D3D12 compute shader
       m_computeAllocator->Reset();
       m_computeCommandList->Reset(m_computeAllocator.Get(), m_computePSO.Get());
 
+/*      SharedGraphicsResource* pUploadHeap = &m_computeHeap;
+      SAD_CS_PARAMS* pCBsadCSparams = reinterpret_cast<SAD_CS_PARAMS*> (pUploadHeap->Memory());
+
+      pCBsadCSparams->blockSizeH = srd._analysis_data.GetBlkSizeX();
+      pCBsadCSparams->blockSizeV = srd._analysis_data.GetBlkSizeY();
+      pCBsadCSparams->useChroma = (int)((srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION) != 0);
+      if (optSearchOption == 5)
+      {
+        pCBsadCSparams->precisionMVs = 4;
+      }
+      else // ==6
+      {
+        pCBsadCSparams->precisionMVs = 2;
+      }
+      */
       ID3D12DescriptorHeap* pHeaps[] = { m_SRVDescriptorHeap->Heap(), m_samplerDescriptorHeap->Heap() };
       m_computeCommandList->SetDescriptorHeaps(_countof(pHeaps), pHeaps);
 
       m_computeCommandList->SetComputeRootSignature(m_computeRootSignature.Get());
 
-//      m_computeCommandList->SetComputeRootConstantBufferView(e_rootParameterCB, m_computeHeap.GpuAddress());
+      m_computeCommandList->SetComputeRootConstantBufferView(e_rootParameterCB, m_computeHeap.GpuAddress());
       m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterSampler, m_samplerDescriptorHeap->GetGpuHandle(0));
       m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterSRV, m_SRVDescriptorHeap->GetGpuHandle(e_iSRV + 0));					// rainbow sampler
       m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterUAV, m_SRVDescriptorHeap->GetGpuHandle(e_iUAV + 0)); // +0 ???
 
       m_computeCommandList->SetPipelineState(m_computePSO.Get());
       m_computeCommandList->Dispatch(m_ThreadGroupX, m_ThreadGroupY, 1);
-//      m_computeCommandList->Dispatch(1, 1, 1);
 
       // close and execute the command list
       m_computeCommandList->Close();
       ID3D12CommandList* computeList = m_computeCommandList.Get();
+
+//      m_graphicsMemory->Commit(m_computeCommandQueue.Get()); // upload constant buffer here ??? maybe in init ?
+
       m_computeCommandQueue->ExecuteCommandLists(1, &computeList);
 
       const uint64_t fence = m_fenceValue++;
@@ -1397,7 +1414,7 @@ void MVAnalyse::GetHardwareAdapter(
   *ppAdapter = adapter.Detach();
 }
 
-void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize)
+void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize, bool bChroma)
 {
   // check for hardware D3D12 motion estimator support and init
   UINT dxgiFactoryFlags = 0;
@@ -1793,7 +1810,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
 
 
   // compute init
-//  m_graphicsMemory = std::make_unique<GraphicsMemory>(m_D3D12device);
+  m_graphicsMemory = std::make_unique<GraphicsMemory>(m_D3D12device.Get());
 
   m_resourceState[0] = m_resourceState[1] = ResourceState_ReadyCompute;
 
@@ -1809,8 +1826,6 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   }
 
   // Initialize resource and descriptor heaps
-//  m_renderHeap = GraphicsMemory::Get().Allocate((size_t)(4 * 1024));
-//  m_computeHeap = GraphicsMemory::Get().Allocate((size_t)(4 * 1024));
 
   // sampler setup
   const D3D12_SAMPLER_DESC s_samplerType[] =
@@ -1865,6 +1880,8 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   m_ThreadGroupX = static_cast<uint32_t>(texDesc.Width) / s_numShaderThreads;
   m_ThreadGroupY = texDesc.Height / s_numShaderThreads;
 
+//  m_computeHeap = GraphicsMemory::Get().Allocate((size_t)(4 * 1024)); // MinAllocSize in GraphicsMemory.h ?
+  m_computeHeap = m_graphicsMemory->Allocate((size_t)(4 * 1024));
 
   // create uav
   m_D3D12device->CreateUnorderedAccessView(m_SADTexture.Get(), nullptr, nullptr, m_SRVDescriptorHeap->GetCpuHandle(e_iUAV));
@@ -1993,6 +2010,24 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   }
 
   m_computeCommandList->Close();
+
+  // try to upload sadCSparams
+  SharedGraphicsResource* pUploadHeap = &m_computeHeap;
+  SAD_CS_PARAMS* pCBsadCSparams = reinterpret_cast<SAD_CS_PARAMS*> (pUploadHeap->Memory());
+
+  pCBsadCSparams->blockSizeH = iBlkSize;// srd._analysis_data.GetBlkSizeX();
+  pCBsadCSparams->blockSizeV = iBlkSize;// srd._analysis_data.GetBlkSizeY();
+  pCBsadCSparams->useChroma = bChroma;// (int)((srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION) != 0);
+  if (optSearchOption == 5)
+  {
+    pCBsadCSparams->precisionMVs = 2; // bitshift 2= /4
+  }
+  else // ==6
+  {
+    pCBsadCSparams->precisionMVs = 1; // bitshift 1 = /2
+  }
+
+  m_graphicsMemory->Commit(m_computeCommandQueue.Get()); // upload constant buffer here ???
 
   hr = m_D3D12device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence));
   if (hr != S_OK)
