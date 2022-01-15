@@ -1051,30 +1051,16 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       m_computeAllocator->Reset();
       m_computeCommandList->Reset(m_computeAllocator.Get(), m_computePSO.Get());
 
-/*      SharedGraphicsResource* pUploadHeap = &m_computeHeap;
-      SAD_CS_PARAMS* pCBsadCSparams = reinterpret_cast<SAD_CS_PARAMS*> (pUploadHeap->Memory());
-
-      pCBsadCSparams->blockSizeH = srd._analysis_data.GetBlkSizeX();
-      pCBsadCSparams->blockSizeV = srd._analysis_data.GetBlkSizeY();
-      pCBsadCSparams->useChroma = (int)((srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION) != 0);
-      if (optSearchOption == 5)
-      {
-        pCBsadCSparams->precisionMVs = 4;
-      }
-      else // ==6
-      {
-        pCBsadCSparams->precisionMVs = 2;
-      }
-      */
       ID3D12DescriptorHeap* pHeaps[] = { m_SRVDescriptorHeap->Heap(), m_samplerDescriptorHeap->Heap() };
       m_computeCommandList->SetDescriptorHeaps(_countof(pHeaps), pHeaps);
 
       m_computeCommandList->SetComputeRootSignature(m_computeRootSignature.Get());
 
-      m_computeCommandList->SetComputeRootConstantBufferView(e_rootParameterCB, m_computeHeap.GpuAddress());
+//      m_computeCommandList->SetComputeRootConstantBufferView(e_rootParameterCB, m_computeHeap.GpuAddress());
+      m_computeCommandList->SetComputeRootConstantBufferView(e_rootParameterCB, sadCBparamsBV.BufferLocation);
       m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterSampler, m_samplerDescriptorHeap->GetGpuHandle(0));
-      m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterSRV, m_SRVDescriptorHeap->GetGpuHandle(e_iSRV + 0));					// rainbow sampler
-      m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterUAV, m_SRVDescriptorHeap->GetGpuHandle(e_iUAV + 0)); // +0 ???
+      m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterSRV, m_SRVDescriptorHeap->GetGpuHandle(e_iSRV + 0));				
+      m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterUAV, m_SRVDescriptorHeap->GetGpuHandle(e_iUAV + 0)); 
 
       m_computeCommandList->SetPipelineState(m_computePSO.Get());
       m_computeCommandList->Dispatch(m_ThreadGroupX, m_ThreadGroupY, 1);
@@ -1082,16 +1068,13 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       // close and execute the command list
       m_computeCommandList->Close();
       ID3D12CommandList* computeList = m_computeCommandList.Get();
-
-//      m_graphicsMemory->Commit(m_computeCommandQueue.Get()); // upload constant buffer here ??? maybe in init ?
-
       m_computeCommandQueue->ExecuteCommandLists(1, &computeList);
 
-      const uint64_t fence = m_fenceValue++;
-      m_computeCommandQueue->Signal(m_fence.Get(), fence);
-      if (m_fence->GetCompletedValue() < fence)								// block until async compute has completed using a fence
+      const uint64_t fenceCompute = m_fenceValue++;
+      m_computeCommandQueue->Signal(m_fence.Get(), fenceCompute);
+      if (m_fence->GetCompletedValue() < fenceCompute)								// block until async compute has completed using a fence
       {
-        m_fence->SetEventOnCompletion(fence, m_computeFenceEvent);
+        m_fence->SetEventOnCompletion(fenceCompute, m_computeFenceEvent);
         WaitForSingleObject(m_computeFenceEvent, INFINITE);
       }
 
@@ -1810,11 +1793,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
 
 
   // compute init
-  m_graphicsMemory = std::make_unique<GraphicsMemory>(m_D3D12device.Get());
-
   m_resourceState[0] = m_resourceState[1] = ResourceState_ReadyCompute;
-
-//  m_resourceDescriptors = std::make_unique<DescriptorHeap>(m_D3D12device, Descriptors::Count);
 
   // create compute fence and event
   m_computeFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -1879,9 +1858,6 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
 
   m_ThreadGroupX = static_cast<uint32_t>(texDesc.Width) / s_numShaderThreads;
   m_ThreadGroupY = texDesc.Height / s_numShaderThreads;
-
-//  m_computeHeap = GraphicsMemory::Get().Allocate((size_t)(4 * 1024)); // MinAllocSize in GraphicsMemory.h ?
-  m_computeHeap = m_graphicsMemory->Allocate((size_t)(4 * 1024));
 
   // create uav
   m_D3D12device->CreateUnorderedAccessView(m_SADTexture.Get(), nullptr, nullptr, m_SRVDescriptorHeap->GetCpuHandle(e_iUAV));
@@ -2011,23 +1987,55 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
 
   m_computeCommandList->Close();
 
-  // try to upload sadCSparams
-  SharedGraphicsResource* pUploadHeap = &m_computeHeap;
-  SAD_CS_PARAMS* pCBsadCSparams = reinterpret_cast<SAD_CS_PARAMS*> (pUploadHeap->Memory());
-
-  pCBsadCSparams->blockSizeH = iBlkSize;// srd._analysis_data.GetBlkSizeX();
-  pCBsadCSparams->blockSizeV = iBlkSize;// srd._analysis_data.GetBlkSizeY();
-  pCBsadCSparams->useChroma = bChroma;// (int)((srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION) != 0);
-  if (optSearchOption == 5)
+  // upload sadCSparams
   {
-    pCBsadCSparams->precisionMVs = 2; // bitshift 2= /4
-  }
-  else // ==6
-  {
-    pCBsadCSparams->precisionMVs = 1; // bitshift 1 = /2
-  }
+    CD3DX12_HEAP_PROPERTIES uploadCBHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
+    CD3DX12_RESOURCE_DESC bufferCBDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(SAD_CS_PARAMS)); // or 4KB mempage ?
 
-  m_graphicsMemory->Commit(m_computeCommandQueue.Get()); // upload constant buffer here ???
+    // Allocate the CB upload heap
+    hr = m_D3D12device->CreateCommittedResource(
+      &uploadCBHeapProperties,
+      D3D12_HEAP_FLAG_NONE,
+      &bufferCBDesc,
+      D3D12_RESOURCE_STATE_GENERIC_READ,
+      nullptr,
+      IID_PPV_ARGS(&spSADCBResource));
+    if (hr != S_OK)
+    {
+      env->ThrowError(
+        "MAnalyse: Error CreateCommittedResource -> spSADCBResource"
+      );
+    }
+
+    // Get a pointer to the memory
+    void* pSADCBMemory = nullptr;
+    hr = spSADCBResource->Map(0, nullptr, &pSADCBMemory);
+    if (hr != S_OK)
+    {
+      env->ThrowError(
+        "MAnalyse: Error spSADCBResource->Map"
+      );
+    }
+
+    sadCBparamsBV.BufferLocation = spSADCBResource->GetGPUVirtualAddress();
+
+    SAD_CS_PARAMS* pCBsadCSparams = reinterpret_cast<SAD_CS_PARAMS*> (pSADCBMemory);
+
+
+    pCBsadCSparams->blockSizeH = iBlkSize;// srd._analysis_data.GetBlkSizeX();
+    pCBsadCSparams->blockSizeV = iBlkSize;// srd._analysis_data.GetBlkSizeY();
+    pCBsadCSparams->useChroma = bChroma;// (int)((srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION) != 0);
+    if (optSearchOption == 5)
+    {
+      pCBsadCSparams->precisionMVs = 2; // bitshift 2= /4
+    }
+    else // ==6
+    {
+      pCBsadCSparams->precisionMVs = 1; // bitshift 1 = /2
+    }
+
+    spSADCBResource->Unmap(0, nullptr);
+  }
 
   hr = m_D3D12device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence));
   if (hr != S_OK)
@@ -2062,6 +2070,32 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     env->ThrowError(
       "MAnalyse: Error createEvent -> m_fenceEventCopyBack "
     );
+  }
+
+  // wait until CB upload finishes ?
+        // Signal and increment the fence value.
+  const UINT64 fence_Graphics = m_fenceValue;
+  hr = m_computeCommandQueue->Signal(m_fence.Get(), fence_Graphics); // can reuse it ?
+  if (hr != S_OK)
+  {
+    env->ThrowError(
+      "MAnalyse: Error m_computeCommandQueue->Signal fence_Graphics"
+    );
+  }
+
+  m_fenceValue++;
+
+  // Wait until the previous op is finished.
+  if (m_fence->GetCompletedValue() < fence_Graphics)
+  {
+    hr = m_fence->SetEventOnCompletion(fence_Graphics, m_computeFenceEvent);
+    if (hr != S_OK)
+    {
+      env->ThrowError(
+        "MAnalyse: Error m_fence->SetEventOnCompletion -> EventGraphics (sadCBparams upload)"
+      );
+    }
+    WaitForSingleObject(m_computeFenceEvent, INFINITE);
   }
 
 }

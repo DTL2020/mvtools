@@ -42,7 +42,6 @@
 #include "d3d12video.h"
 #include "DirectXHelpers.h"
 #include "ReadData.h"
-#include "GraphicsMemory.h"
 #include "DescriptorHeap.h"
 
 #include <string>
@@ -249,8 +248,6 @@ private:
     e_iHeapEnd = e_iSRV + e_cSRV
   };
 
-//  ComPtr<ID3D12DescriptorHeap> m_SRVDescriptorHeap;    // shader resource views for the texture and data
-//  ComPtr<ID3D12DescriptorHeap> m_samplerDescriptorHeap;// shader resource views for the samplers used by the compute shader
   ComPtr<ID3D12PipelineState> m_computePSO; // Pipeline state object
   ComPtr<ID3D12RootSignature> m_computeRootSignature;
   ComPtr<ID3D12CommandAllocator> m_computeAllocator;
@@ -259,14 +256,13 @@ private:
 
   HANDLE m_computeFenceEvent;
 
-  std::unique_ptr<DirectX::GraphicsMemory>    m_graphicsMemory;
-//  std::unique_ptr<DirectX::DescriptorHeap>    m_resourceDescriptors;
   std::unique_ptr<DirectX::DescriptorHeap>    m_SRVDescriptorHeap;    // shader resource views for the fractal texture and data
   std::unique_ptr<DirectX::DescriptorHeap>    m_samplerDescriptorHeap;// shader resource views for the samplers used by the compute shader
-//  DirectX::SharedGraphicsResource             m_renderHeap;           // renderer version of the fractal constant data
-  DirectX::SharedGraphicsResource             m_computeHeap;          // async compute version of the fractal constant data
 
   D3D12_RESOURCE_STATES                       m_resourceStateSADTexture;   // current state of the SAD texture, unordered or texture view
+
+  D3D12_CONSTANT_BUFFER_VIEW_DESC sadCBparamsBV;
+  ComPtr<ID3D12Resource> spSADCBResource;
 
  struct SAD_CS_PARAMS
   {
