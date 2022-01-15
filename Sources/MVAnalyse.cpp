@@ -190,6 +190,11 @@ MVAnalyse::MVAnalyse(
       env->ThrowError("MAnalyse: Unsupported format for DX12_ME, only YV12 supported");
     }
 
+    if ((_overlapx != 0) || (_overlapy != 0))
+    {
+      env->ThrowError("MAnalyse: Overlap processing currently not supported with DX12_ME");
+    }
+
     int iBlkSize = 8;
     if ((_blksizex == 8) && (_blksizey == 8))
       iBlkSize = 8;
@@ -206,7 +211,8 @@ MVAnalyse::MVAnalyse(
 
   iUploadedCurrentFrameNum = -1; // is it non-existent frame num ?
 
-  pNV12FrameData = new uint8_t[vi.width * vi.height * 2]; // NV12 format 4:2:0, really WxH*1.5 sized ? pitch is multiply of 32 ??
+  //pNV12FrameData = new uint8_t[vi.width * vi.height * 2]; // NV12 format 4:2:0, really WxH*1.5 sized ? pitch is multiply of 32 ??
+  pNV12FrameData = (uint8_t*)VirtualAlloc(0, vi.width * vi.height * 2, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 
 #endif
 
@@ -601,7 +607,8 @@ MVAnalyse::~MVAnalyse()
   pRefGOF = 0;
   _RPT1(0, "MAnalyze destroyed %d\n",_instance_id);
 #ifdef _WIN32
-  delete pNV12FrameData;
+//  delete pNV12FrameData;
+  VirtualFree(pNV12FrameData, 0, MEM_RELEASE);
 #endif
 }
 
@@ -709,6 +716,8 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
 #if defined _WIN32 && defined DX12_ME
 
+    int16_t* pSADReadbackBufferData{}; // temp here 
+
     if (optSearchOption == 5 || optSearchOption == 6)
     {
       HRESULT hr;
@@ -770,7 +779,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
       size = UpdateSubresources(m_GraphicsCommandList.Get(), spReferenceResource.Get(), spReferenceResourceUpload.Get(), 0, 0, 1, &textureData_ref);
       m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spReferenceResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON));
-     
+
       hr = m_GraphicsCommandList->Close();
       if (hr != S_OK)
       {
@@ -1142,7 +1151,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         WaitForSingleObject(m_fenceEventCopyBack, INFINITE);
       }
 
-      int16_t* pSADReadbackBufferData{};
+//      int16_t* pSADReadbackBufferData{};
 
       hr = spSADReadBack->Map(0, nullptr, reinterpret_cast<void**>(&pSADReadbackBufferData));
       if (hr != S_OK)
@@ -1190,12 +1199,12 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       }
 
       // unmap finally
-      spSADReadBack->Unmap(0, NULL);
+//      spSADReadBack->Unmap(0, NULL);
  
     }
 #endif
 
-    if ((optSearchOption != 5) && (optSearchOption != 6)) // do not call search from PlaneofBlocks - all done with DX12
+//    if ((optSearchOption != 5) && (optSearchOption != 6)) // do not call search from PlaneofBlocks - all done with DX12
     {
       _vectorfields_aptr->SearchMVs(
         pSrcGOF, pRefGOF,
@@ -1207,7 +1216,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
     }
 
     // compare shader SAD with MAnalyse SAD
-/*
+
     if ((optSearchOption == 5) || (optSearchOption == 6))
     {
       int16_t* pSrcSADs = pSADReadbackBufferData;
@@ -1253,7 +1262,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       // unmap finally
       spSADReadBack->Unmap(0, NULL);
     }
-    */
+    
     if (divideExtra)
     {
       // make extra level with divided sublocks with median (not estimated)
@@ -1694,13 +1703,13 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   // to make user-defined options: L0/L1 memory pool and WB/WC memory type
   D3D12_HEAP_PROPERTIES hpRUpload = {};
   hpRUpload.Type = D3D12_HEAP_TYPE_CUSTOM;
-//  hpRUpload.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
-  hpRUpload.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE;
+  hpRUpload.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
+//  hpRUpload.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE;
   hpRUpload.MemoryPoolPreference = D3D12_MEMORY_POOL_L0; // L0 for discrete HWAcc, L1 may be for CPU-integrated ?
 
   hr = m_D3D12device->CreateCommittedResource(
-//    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-    &hpRUpload,
+    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+//    &hpRUpload,
     D3D12_HEAP_FLAG_NONE,
     &CD3DX12_RESOURCE_DESC::Buffer((uint64_t)nWidth*nHeight*sizeof(int)), // size of NV12 format ??
     D3D12_RESOURCE_STATE_GENERIC_READ,
@@ -1718,7 +1727,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
     D3D12_HEAP_FLAG_NONE,
     &textureDesc,
-    D3D12_RESOURCE_STATE_COMMON,//D3D12_RESOURCE_STATE_COPY_DEST,
+    D3D12_RESOURCE_STATE_COMMON,
     nullptr,
     IID_PPV_ARGS(&spReferenceResource));
 
@@ -1731,8 +1740,8 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
 
   // Create the GPU upload buffer.
   hr = m_D3D12device->CreateCommittedResource(
-//    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-    &hpRUpload,
+    &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+//    &hpRUpload,
     D3D12_HEAP_FLAG_NONE,
     &CD3DX12_RESOURCE_DESC::Buffer((uint64_t)nWidth * nHeight * sizeof(int)), // size of NV12 format ??
     D3D12_RESOURCE_STATE_GENERIC_READ,

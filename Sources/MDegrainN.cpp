@@ -1182,7 +1182,7 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
     if (nOverlapX == 0 && nOverlapY == 0)
     {
       {
-        CreateFrameWeightsArr();
+//        CreateFrameWeightsArr();
         slicer.start(
           nBlkY,
           *this,

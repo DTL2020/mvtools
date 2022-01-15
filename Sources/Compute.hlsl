@@ -66,5 +66,27 @@ void main(uint3 DTid : SV_DispatchThreadID)
 		}
 	}
 
+	if (g_UseChroma != 0) // add chroma SAD
+	{
+		int iBS_X_d2 = g_BlockSizeX >> 1;
+		int iBS_Y_d2 = g_BlockSizeY >> 1;
+
+		for (int y = 0; y < iBS_Y_d2; y++)
+		{
+			for (int x = 0; x < iBS_X_d2; x++)
+			{
+				i3Coord.x = DTid.x * iBS_X_d2 + x;
+				i3Coord.y = DTid.y * iBS_Y_d2 + y;
+				iUVsrc = CurrentTexture_UV.Load(i3Coord).r;
+
+				i3Coord.x = DTid.x * iBS_X_d2 + x + (i2MV.r >> 1);
+				i3Coord.y = DTid.y * iBS_Y_d2 + y + (i2MV.g >> 1);
+
+				iUVref = ReferenceTexture_UV.Load(i3Coord).r;
+
+				iSAD += (abs(iUVsrc.r - iUVref.r) + abs(iUVsrc.g - iUVref.g));
+			}
+		}
+	}
 	OutputTexture[DTid.xy] = iSAD;
 }
