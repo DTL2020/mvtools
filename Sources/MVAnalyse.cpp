@@ -213,7 +213,19 @@ MVAnalyse::MVAnalyse(
          env->ThrowError("MAnalyse: Unsupported block size for DX12_ME, only 8x8 and 16x16 supported");
       }
 
-    Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize, chroma, analysisData.chromaSADScale);
+    if (_multi_flag)
+    {
+      iNumFrameResources = 2 * df + 1; // number of frames to operate in the accelerator's pool
+      ppFramesResources = new ComPtr<ID3D12Resource>*[iNumFrameResources];
+      for (int i = 0; i < iNumFrameResources; i++)
+      {
+        ComPtr<ID3D12Resource>* pRes = new ComPtr<ID3D12Resource>;
+        ppFramesResources[i] = pRes;
+      }
+
+    }
+
+    Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize, chroma, analysisData.chromaSADScale, _multi_flag);
   }
 
   iUploadedCurrentFrameNum = -1; // is it non-existent frame num ?
@@ -1436,7 +1448,7 @@ void MVAnalyse::GetHardwareAdapter(
   *ppAdapter = adapter.Detach();
 }
 
-void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize, bool bChroma, int iChromaSADScale)
+void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize, bool bChroma, int iChromaSADScale, bool bMulti)
 {
   // check for hardware D3D12 motion estimator support and init
   UINT dxgiFactoryFlags = 0;
@@ -1673,7 +1685,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   // SAD readback buffer
   int iSADRowPitchUA = iNumBlocksX * sizeof(short); // 16bit samples ?
   int iSADMod = iSADRowPitchUA % 256;
-  int iSADRowPitch = iSADRowPitchUA + (256 - iMod); // must be multiply of 256
+  int iSADRowPitch = iSADRowPitchUA + (256 - iSADMod); // must be multiply of 256
 
   // Readback resources must be buffers
   D3D12_RESOURCE_DESC bufferSADDesc = {};
@@ -1784,6 +1796,31 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
       "MAnalyse: Error CreateCommittedResource -> spReferenceResourceUpload"
     );
   }
+
+  // Multi frames pool
+/*if (bMulti) - still work in progress
+  {
+    for (int i = 0; i < iNumFrameResources; i++)
+    {
+      ID3D12Resource* pTextureResource = ppFramesResources[i]->Get();
+
+      hr = m_D3D12device->CreateCommittedResource(
+        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+        D3D12_HEAP_FLAG_NONE,
+        &textureDesc,
+        D3D12_RESOURCE_STATE_COMMON,
+        nullptr,
+        IID_PPV_ARGS(&pTextureResource));
+
+      if (hr != S_OK)
+      {
+        env->ThrowError(
+          "MAnalyse: Error CreateCommittedResource -> Multi Resource, number %d", i
+        );
+      }
+    }
+  }
+  */
 
   hr = m_D3D12device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE, IID_PPV_ARGS(&m_commandAllocatorVideo));
 
@@ -2059,7 +2096,6 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     sadCBparamsBV.BufferLocation = spSADCBResource->GetGPUVirtualAddress();
 
     SAD_CS_PARAMS* pCBsadCSparams = reinterpret_cast<SAD_CS_PARAMS*> (pSADCBMemory);
-
 
     pCBsadCSparams->blockSizeH = iBlkSize;// srd._analysis_data.GetBlkSizeX();
     pCBsadCSparams->blockSizeV = iBlkSize;// srd._analysis_data.GetBlkSizeY();
