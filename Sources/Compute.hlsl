@@ -26,6 +26,7 @@ cbuffer cb0
 	int g_BlockSizeY : packoffset(c0.y);
 	int g_UseChroma : packoffset(c0.z);
 	int g_precisionMVs : packoffset(c0.w);
+	int g_chromaSADscale : packoffset(c1.x);
 }
 
 [numthreads(8, 8, 1)]
@@ -48,6 +49,8 @@ void main(uint3 DTid : SV_DispatchThreadID)
 	int2 iUVref;
 
 	int iSAD = 0;
+	int iChromaSAD = 0;
+	int iChromaSADAdd = 0;
 
 	for (int y = 0; y < g_BlockSizeY; y++)
 	{
@@ -66,7 +69,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
 		}
 	}
 	
-	if (g_UseChroma != 0) // add chroma SAD
+	if (g_UseChroma != 0) // chroma SAD
 	{
 		int iBS_X_d2 = g_BlockSizeX >> 1;
 		int iBS_Y_d2 = g_BlockSizeY >> 1;
@@ -84,15 +87,27 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
 				iUVref = ReferenceTexture_UV.Load(i3Coord);
 
-				iSAD += (abs(iUVsrc.r - iUVref.r) + abs(iUVsrc.g - iUVref.g));
+				iChromaSAD += (abs(iUVsrc.r - iUVref.r) + abs(iUVsrc.g - iUVref.g));
 			}
 		}
+
+		if (g_chromaSADscale > 0)
+		{
+			iChromaSADAdd = iChromaSAD >> g_chromaSADscale;
+		}
+
+		if (g_chromaSADscale < 0)
+		{
+			iChromaSADAdd = iChromaSAD << (-g_chromaSADscale);
+		}
+
+		if (g_chromaSADscale == 0)
+		{
+			iChromaSADAdd = iChromaSAD;
+		}
+
+		iSAD += iChromaSADAdd;
 	}
-	
-	// debug
-//	i3Coord.x = 2;
-//	i3Coord.y = 2;
-//	iUVsrc = CurrentTexture_UV.Load(i3Coord);
 
 	OutputTexture[DTid.xy] = iSAD;
 }

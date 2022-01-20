@@ -181,6 +181,13 @@ MVAnalyse::MVAnalyse(
   analysisData.pixelsize = pixelsize;
   analysisData.bits_per_pixel = bits_per_pixel;
 
+  if (_chromaSADScale < -2 || _chromaSADScale>2)
+    env->ThrowError(
+      "MAnalyze: scaleCSAD must be -2..2"
+    );
+
+  analysisData.chromaSADScale = _chromaSADScale;
+
 #if defined _WIN32 && defined DX12_ME
 
   if (optSearchOption == 5 || optSearchOption == 6) // DX12_ME
@@ -206,22 +213,14 @@ MVAnalyse::MVAnalyse(
          env->ThrowError("MAnalyse: Unsupported block size for DX12_ME, only 8x8 and 16x16 supported");
       }
 
-    Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize, chroma);
+    Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize, chroma, analysisData.chromaSADScale);
   }
 
   iUploadedCurrentFrameNum = -1; // is it non-existent frame num ?
 
-  //pNV12FrameData = new uint8_t[vi.width * vi.height * 2]; // NV12 format 4:2:0, really WxH*1.5 sized ? pitch is multiply of 32 ??
-  pNV12FrameData = (uint8_t*)VirtualAlloc(0, vi.width * vi.height * 2, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+  pNV12FrameDataUV = (uint8_t*)VirtualAlloc(0, vi.width * vi.height, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // UV only size ?
 
 #endif
-
-  if (_chromaSADScale < -2 || _chromaSADScale>2)
-    env->ThrowError(
-      "MAnalyze: scaleCSAD must be -2..2"
-    );
-
-  analysisData.chromaSADScale = _chromaSADScale;
 
   pSrcGOF = new MVGroupOfFrames(
     nSuperLevels, analysisData.nWidth, analysisData.nHeight,
@@ -608,7 +607,7 @@ MVAnalyse::~MVAnalyse()
   _RPT1(0, "MAnalyze destroyed %d\n",_instance_id);
 #ifdef _WIN32
 //  delete pNV12FrameData;
-  VirtualFree(pNV12FrameData, 0, MEM_RELEASE);
+  VirtualFree(pNV12FrameDataUV, 0, MEM_RELEASE);
 #endif
 }
 
@@ -757,13 +756,25 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         // todo: make format conversion at time or UpdateSubresources for lesser memory copy
         LoadNV12(pSrcGOF, srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION, iWidth, iHeight);
 
+        // load Y plane directly
+        MVFrame* SrcFrame;
+        if (optSearchOption == 5)
+          SrcFrame = pSrcGOF->GetFrame(0); // use 0 - largest plane (original ?? or nPel enlarged ??)
+        else// (optSearchOption == 6)
+          SrcFrame = pSrcGOF->GetFrame(1); // use 1 - half sized plane (original ?? or nPel enlarged ??)
+
+        int SrcYPitch = SrcFrame->GetPlane(YPLANE)->GetPitch();
+        int src_Yx0 = SrcFrame->GetPlane(YPLANE)->GetVPadding();
+        int src_Yy0 = SrcFrame->GetPlane(YPLANE)->GetHPadding();
+        const BYTE* pY = SrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(src_Yx0, src_Yy0);
+
         D3D12_SUBRESOURCE_DATA textureData_currentY = {}; // no need to copy Y in LoadNV12 ?
-        textureData_currentY.pData = pNV12FrameData;
-        textureData_currentY.RowPitch = iWidth;
-        textureData_currentY.SlicePitch = (uint64_t)iWidth * (uint64_t)iHeight;//(uint64_t)iWidth * (uint64_t)iHeight + (uint64_t)iWidth * (uint64_t)iHeight / 2; - Y only
+        textureData_currentY.pData = pY;
+        textureData_currentY.RowPitch = SrcYPitch;
+        textureData_currentY.SlicePitch = (uint64_t)SrcYPitch * (uint64_t)iHeight;//(uint64_t)iWidth or SrcYPitch ? * (uint64_t)iHeight - Y only
 
         D3D12_SUBRESOURCE_DATA textureData_currentUV = {};
-        textureData_currentUV.pData = pNV12FrameData + (uint64_t)iWidth * (uint64_t)iHeight; // skip Y data, todo: better use separate UV buffer ?
+        textureData_currentUV.pData = pNV12FrameDataUV;// only UV 
         textureData_currentUV.RowPitch = iWidth;
         textureData_currentUV.SlicePitch = (uint64_t)iWidth * (uint64_t)iHeight / 2;
 
@@ -778,13 +789,25 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
       LoadNV12(pRefGOF, srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION, iWidth, iHeight);
 
+      // load Y plane directly
+      MVFrame* SrcFrameRef;
+      if (optSearchOption == 5)
+        SrcFrameRef = pRefGOF->GetFrame(0); // use 0 - largest plane (original ?? or nPel enlarged ??)
+      else// (optSearchOption == 6)
+        SrcFrameRef = pRefGOF->GetFrame(1); // use 1 - half sized plane (original ?? or nPel enlarged ??)
+
+      int SrcYPitchRef = SrcFrameRef->GetPlane(YPLANE)->GetPitch();
+      int src_Yx0_Ref = SrcFrameRef->GetPlane(YPLANE)->GetVPadding();
+      int src_Yy0_Ref = SrcFrameRef->GetPlane(YPLANE)->GetHPadding();
+      const BYTE* pY_Ref = SrcFrameRef->GetPlane(YPLANE)->GetAbsolutePelPointer(src_Yx0_Ref, src_Yy0_Ref);
+
       D3D12_SUBRESOURCE_DATA textureData_refY = {}; // no need to copy Y in LoadNV12 ?
-      textureData_refY.pData = pNV12FrameData;
-      textureData_refY.RowPitch = iWidth;
-      textureData_refY.SlicePitch = (uint64_t)iWidth * (uint64_t)iHeight; // +(uint64_t)iWidth * (uint64_t)iHeight / 2; Y only
+      textureData_refY.pData = pY_Ref;
+      textureData_refY.RowPitch = SrcYPitchRef;
+      textureData_refY.SlicePitch = (uint64_t)SrcYPitchRef * (uint64_t)iHeight; // SrcYPitchRef or iWidth ?
 
       D3D12_SUBRESOURCE_DATA textureData_refUV = {};
-      textureData_refUV.pData = pNV12FrameData + (uint64_t)iWidth * (uint64_t)iHeight;
+      textureData_refUV.pData = pNV12FrameDataUV;
       textureData_refUV.RowPitch = iWidth;
       textureData_refUV.SlicePitch = (uint64_t)iWidth * (uint64_t)iHeight / 2; // UV size of YV12
 
@@ -1077,7 +1100,6 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
       m_computeCommandList->SetComputeRootSignature(m_computeRootSignature.Get());
 
-//      m_computeCommandList->SetComputeRootConstantBufferView(e_rootParameterCB, m_computeHeap.GpuAddress());
       m_computeCommandList->SetComputeRootConstantBufferView(e_rootParameterCB, sadCBparamsBV.BufferLocation);
       m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterSampler, m_samplerDescriptorHeap->GetGpuHandle(0));
       m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterSRV, m_SRVDescriptorHeap->GetGpuHandle(e_iSRV + 0));				
@@ -1414,7 +1436,7 @@ void MVAnalyse::GetHardwareAdapter(
   *ppAdapter = adapter.Detach();
 }
 
-void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize, bool bChroma)
+void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize, bool bChroma, int iChromaSADScale)
 {
   // check for hardware D3D12 motion estimator support and init
   UINT dxgiFactoryFlags = 0;
@@ -1580,7 +1602,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   DXGI_FORMAT_NV12,
   ME_BlockSize,
   D3D12_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_QUARTER_PEL,
-  {nWidth, nHeight, nWidth, nHeight} // D3D12_VIDEO_SIZE_RANGE
+  {(UINT)nWidth, (UINT)nHeight, (UINT)nWidth, (UINT)nHeight} // D3D12_VIDEO_SIZE_RANGE
   };
 
   HRESULT vect_heap_result = dev_D3D12VideoDevice1->CreateVideoMotionVectorHeap(
@@ -2042,6 +2064,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     pCBsadCSparams->blockSizeH = iBlkSize;// srd._analysis_data.GetBlkSizeX();
     pCBsadCSparams->blockSizeV = iBlkSize;// srd._analysis_data.GetBlkSizeY();
     pCBsadCSparams->useChroma = bChroma;// (int)((srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION) != 0);
+    pCBsadCSparams->chromaSADscale = iChromaSADScale;
     if (optSearchOption == 5)
     {
       pCBsadCSparams->precisionMVs = 2; // bitshift 2= /4
@@ -2119,8 +2142,8 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
 
 void MVAnalyse::LoadNV12(MVGroupOfFrames* pGOF, bool bChroma, int& iWidth, int& iHeight)
 {
-  // convert input src to NV12 buffer for upload
-  uint8_t* pDstSrc = pNV12FrameData;
+  // interleave input src UV to NV12 buffer for upload
+  uint8_t* pDstSrc = pNV12FrameDataUV;
 
   // copy Y plane 8bit
   MVFrame* SrcFrame;
@@ -2129,20 +2152,8 @@ void MVAnalyse::LoadNV12(MVGroupOfFrames* pGOF, bool bChroma, int& iWidth, int& 
   else// (optSearchOption == 6)
     SrcFrame = pGOF->GetFrame(1); // use 1 - half sized plane (original ?? or nPel enlarged ??)
 
-  int SrcYPitch = SrcFrame->GetPlane(YPLANE)->GetPitch();
-  int src_Yx0 = SrcFrame->GetPlane(YPLANE)->GetVPadding();
-  int src_Yy0 = SrcFrame->GetPlane(YPLANE)->GetHPadding();
-  const BYTE* pY = SrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(src_Yx0, src_Yy0);
-
   iWidth = SrcFrame->GetPlane(YPLANE)->GetWidth();
   iHeight = SrcFrame->GetPlane(YPLANE)->GetHeight();
-  // copy Y lines
-  for (int h = 0; h < iHeight; ++h)
-  {
-    memcpy(pDstSrc, pY, iWidth);
-    pDstSrc += iWidth;
-    pY += SrcYPitch;
-  }
 
   if (bChroma)
   {
@@ -2171,36 +2182,7 @@ void MVAnalyse::LoadNV12(MVGroupOfFrames* pGOF, bool bChroma, int& iWidth, int& 
       pVsrc += src_Vpitch;
 
     }
-    /*
-    // debug
-    // set 4x4 UV 0 block
-    pDstSrc = pNV12FrameData + iHeight * iWidth; // + Y plane size in bytes
 
-    uint8_t* pUsrc_wr = (uint8_t*)SrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(src_Ux0, src_Uy0);
-    uint8_t* pVsrc_wr = (uint8_t*)SrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(src_Vx0, src_Vy0);
-
-    for (int h = 0; h < 4; ++h)
-    {
-      for (int w = 0; w < 4; ++w)
-      {
-        pDstSrc[w * 2] = 128 + w + h*4; //pUsrc[w];
-        pUsrc_wr[w] = 128 + w + h*4;
-
-        pDstSrc[w * 2 + 1] = 128 - w - h*4; // pVsrc[w];
-        pVsrc_wr[w] = 128 - w - h*4;
-      }
-
-      pDstSrc += iWidth;
-      pUsrc_wr += src_Upitch;
-      pVsrc_wr += src_Vpitch;
-
-    }
-    */
-
-  }
-  else // no chroma data avaialable - set grey UV
-  {
-    memset(pDstSrc, 128, iWidth * iHeight / 2);
   }
 
 }
