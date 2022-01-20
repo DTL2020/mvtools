@@ -757,12 +757,18 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         // todo: make format conversion at time or UpdateSubresources for lesser memory copy
         LoadNV12(pSrcGOF, srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION, iWidth, iHeight);
 
-        D3D12_SUBRESOURCE_DATA textureData_current = {};
-        textureData_current.pData = pNV12FrameData;
-        textureData_current.RowPitch = iWidth;
-        textureData_current.SlicePitch = (uint64_t)iWidth * (uint64_t)iHeight + (uint64_t)iWidth * (uint64_t)iHeight / 2;
+        D3D12_SUBRESOURCE_DATA textureData_currentY = {}; // no need to copy Y in LoadNV12 ?
+        textureData_currentY.pData = pNV12FrameData;
+        textureData_currentY.RowPitch = iWidth;
+        textureData_currentY.SlicePitch = (uint64_t)iWidth * (uint64_t)iHeight;//(uint64_t)iWidth * (uint64_t)iHeight + (uint64_t)iWidth * (uint64_t)iHeight / 2; - Y only
 
-        size = UpdateSubresources(m_GraphicsCommandList.Get(), spCurrentResource.Get(), spCurrentResourceUpload.Get(), 0, 0, 1, &textureData_current);
+        D3D12_SUBRESOURCE_DATA textureData_currentUV = {};
+        textureData_currentUV.pData = pNV12FrameData + (uint64_t)iWidth * (uint64_t)iHeight; // skip Y data, todo: better use separate UV buffer ?
+        textureData_currentUV.RowPitch = iWidth;
+        textureData_currentUV.SlicePitch = (uint64_t)iWidth * (uint64_t)iHeight / 2;
+
+        D3D12_SUBRESOURCE_DATA pSRD_current[] = {textureData_currentY, textureData_currentUV };
+        size = UpdateSubresources(m_GraphicsCommandList.Get(), spCurrentResource.Get(), spCurrentResourceUpload.Get(), 0, 0, 2, pSRD_current);
         m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spCurrentResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON));
 
         iUploadedCurrentFrameNum = nsrc;
@@ -772,12 +778,18 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
       LoadNV12(pRefGOF, srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION, iWidth, iHeight);
 
-      D3D12_SUBRESOURCE_DATA textureData_ref = {};
-      textureData_ref.pData = pNV12FrameData;
-      textureData_ref.RowPitch = iWidth;
-      textureData_ref.SlicePitch = (uint64_t)iWidth * (uint64_t)iHeight + (uint64_t)iWidth * (uint64_t)iHeight / 2;
+      D3D12_SUBRESOURCE_DATA textureData_refY = {}; // no need to copy Y in LoadNV12 ?
+      textureData_refY.pData = pNV12FrameData;
+      textureData_refY.RowPitch = iWidth;
+      textureData_refY.SlicePitch = (uint64_t)iWidth * (uint64_t)iHeight; // +(uint64_t)iWidth * (uint64_t)iHeight / 2; Y only
 
-      size = UpdateSubresources(m_GraphicsCommandList.Get(), spReferenceResource.Get(), spReferenceResourceUpload.Get(), 0, 0, 1, &textureData_ref);
+      D3D12_SUBRESOURCE_DATA textureData_refUV = {};
+      textureData_refUV.pData = pNV12FrameData + (uint64_t)iWidth * (uint64_t)iHeight;
+      textureData_refUV.RowPitch = iWidth;
+      textureData_refUV.SlicePitch = (uint64_t)iWidth * (uint64_t)iHeight / 2; // UV size of YV12
+
+      D3D12_SUBRESOURCE_DATA pSRD_ref[] = { textureData_refY, textureData_refUV };
+      size = UpdateSubresources(m_GraphicsCommandList.Get(), spReferenceResource.Get(), spReferenceResourceUpload.Get(), 0, 0, 2, pSRD_ref);
       m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spReferenceResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON));
 
       hr = m_GraphicsCommandList->Close();
@@ -1182,10 +1194,6 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         {
           for (int w = 0; w < iNumBlocksX; ++w)
           {
-/*            if (piDstSAD[0] != (int)pSrcSADs[w])
-            {
-              int idbr = 0;
-            }*/
             piDstSAD[0] = (int)pSrcSADs[w];
 
             piDstSAD += 3;
@@ -1199,12 +1207,12 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       }
 
       // unmap finally
-//      spSADReadBack->Unmap(0, NULL);
+      spSADReadBack->Unmap(0, NULL);
  
     }
 #endif
 
-//    if ((optSearchOption != 5) && (optSearchOption != 6)) // do not call search from PlaneofBlocks - all done with DX12
+    if ((optSearchOption != 5) && (optSearchOption != 6)) // do not call search from PlaneofBlocks - all done with DX12
     {
       _vectorfields_aptr->SearchMVs(
         pSrcGOF, pRefGOF,
@@ -1216,7 +1224,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
     }
 
     // compare shader SAD with MAnalyse SAD
-
+    /*
     if ((optSearchOption == 5) || (optSearchOption == 6))
     {
       int16_t* pSrcSADs = pSADReadbackBufferData;
@@ -1262,7 +1270,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       // unmap finally
       spSADReadBack->Unmap(0, NULL);
     }
-    
+    */
     if (divideExtra)
     {
       // make extra level with divided sublocks with median (not estimated)
@@ -2163,6 +2171,32 @@ void MVAnalyse::LoadNV12(MVGroupOfFrames* pGOF, bool bChroma, int& iWidth, int& 
       pVsrc += src_Vpitch;
 
     }
+    /*
+    // debug
+    // set 4x4 UV 0 block
+    pDstSrc = pNV12FrameData + iHeight * iWidth; // + Y plane size in bytes
+
+    uint8_t* pUsrc_wr = (uint8_t*)SrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(src_Ux0, src_Uy0);
+    uint8_t* pVsrc_wr = (uint8_t*)SrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(src_Vx0, src_Vy0);
+
+    for (int h = 0; h < 4; ++h)
+    {
+      for (int w = 0; w < 4; ++w)
+      {
+        pDstSrc[w * 2] = 128 + w + h*4; //pUsrc[w];
+        pUsrc_wr[w] = 128 + w + h*4;
+
+        pDstSrc[w * 2 + 1] = 128 - w - h*4; // pVsrc[w];
+        pVsrc_wr[w] = 128 - w - h*4;
+      }
+
+      pDstSrc += iWidth;
+      pUsrc_wr += src_Upitch;
+      pVsrc_wr += src_Vpitch;
+
+    }
+    */
+
   }
   else // no chroma data avaialable - set grey UV
   {
