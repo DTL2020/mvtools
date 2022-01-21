@@ -216,13 +216,6 @@ MVAnalyse::MVAnalyse(
     if (_multi_flag)
     {
       iNumFrameResources = 2 * df + 1; // number of frames to operate in the accelerator's pool
-      ppFramesResources = new ComPtr<ID3D12Resource>*[iNumFrameResources];
-      for (int i = 0; i < iNumFrameResources; i++)
-      {
-        ComPtr<ID3D12Resource>* pRes = new ComPtr<ID3D12Resource>;
-        ppFramesResources[i] = pRes;
-      }
-
     }
 
     Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize, chroma, analysisData.chromaSADScale, _multi_flag);
@@ -1798,12 +1791,11 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   }
 
   // Multi frames pool
-/*if (bMulti) - still work in progress
+/*if (bMulti) //- still work in progress
   {
     for (int i = 0; i < iNumFrameResources; i++)
     {
-      ID3D12Resource* pTextureResource = ppFramesResources[i]->Get();
-
+      ComPtr<ID3D12Resource> pTextureResource = nullptr;
       hr = m_D3D12device->CreateCommittedResource(
         &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
         D3D12_HEAP_FLAG_NONE,
@@ -1818,6 +1810,9 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
           "MAnalyse: Error CreateCommittedResource -> Multi Resource, number %d", i
         );
       }
+
+      // save it
+      FramesResources.push_back(pTextureResource);
     }
   }
   */

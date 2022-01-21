@@ -194,7 +194,7 @@ private:
 
   // pool of resources in accelerator
   int iNumFrameResources;
-  Microsoft::WRL::ComPtr<ID3D12Resource>** ppFramesResources; // pointer to array of frames textures resources
+  std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> FramesResources;
 
   HANDLE m_fenceEventGraphics;
   HANDLE m_fenceEventVideo;
