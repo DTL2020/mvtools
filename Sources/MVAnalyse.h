@@ -31,7 +31,7 @@
 #include <memory>
 #include <vector>
 
-#if defined _WIN32 //&& defined DX_12ME
+#if defined _WIN32 // && defined DX_12ME
 
 #include <initguid.h>
 #include <d3d12.h>
