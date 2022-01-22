@@ -2104,7 +2104,11 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     pCBsadCSparams->blockSizeH = iBlkSize;// srd._analysis_data.GetBlkSizeX();
     pCBsadCSparams->blockSizeV = iBlkSize;// srd._analysis_data.GetBlkSizeY();
     pCBsadCSparams->useChroma = bChroma;// (int)((srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION) != 0);
-    pCBsadCSparams->chromaSADscale = iChromaSADScale;
+    // from PlaneofBlocks.cpp:
+    // effective_chromaSADscale = (2 - (nLogxRatioUV + nLogyRatioUV)); = 0 for YV12 - only currently supported
+    // effective_chromaSADscale -= chromaSADscale;
+    pCBsadCSparams->chromaSADscale = 0 - iChromaSADScale;
+
     if (optSearchOption == 5)
     {
       pCBsadCSparams->precisionMVs = 2; // bitshift 2= /4
