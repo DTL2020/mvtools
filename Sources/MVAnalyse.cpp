@@ -1971,7 +1971,16 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   m_D3D12device->CreateShaderResourceView(spResolvedMotionVectors.Get(), &srv_desc_RMVs, m_SRVDescriptorHeap->GetCpuHandle(e_iSRV + 4));
 
   // load compute shader
-  auto computeShaderBlob = DX::ReadData(L"Compute.cso");
+  std::vector<uint8_t> computeShaderBlob;
+  try {
+    computeShaderBlob = DX::ReadData(L"Compute.cso");
+  }
+  catch (std::exception& e)
+  {
+    env->ThrowError(
+      "MAnalyse: Can not load file Compute.cso %s", e.what()
+    ); 
+  }
   // Define root table layout
   {
     CD3DX12_DESCRIPTOR_RANGE descRange[e_numRootParameters];
