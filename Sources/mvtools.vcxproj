@@ -1729,6 +1729,7 @@
     <ClCompile Include="DCTFactory.cpp" />
     <ClCompile Include="DCTFFTW.cpp" />
     <ClCompile Include="DCTINT.cpp" />
+    <ClCompile Include="DescriptorHeap.cpp" />
     <ClCompile Include="FakeBlockData.cpp" />
     <ClCompile Include="FakeGroupOfPlanes.cpp" />
     <ClCompile Include="FakePlaneOfBlocks.cpp" />
@@ -1907,6 +1908,7 @@
     <ClInclude Include="DCTINT.h" />
     <ClInclude Include="debugprintf.h" />
     <ClInclude Include="def.h" />
+    <ClInclude Include="DescriptorHeap.h" />
     <ClInclude Include="FakeBlockData.h" />
     <ClInclude Include="FakeGroupOfPlanes.h" />
     <ClInclude Include="FakePlaneOfBlocks.h" />
@@ -2249,6 +2251,12 @@
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release_v141_xp|x64'">PREFIX;private_prefix=x264_10;ARCH_X86_64=1;BIT_DEPTH=10;HIGH_BIT_DEPTH=1</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64'">PREFIX;private_prefix=x264_10;ARCH_X86_64=1;BIT_DEPTH=10;HIGH_BIT_DEPTH=1</PreprocessorDefinitions>
     </NASM>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="Compute.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compute</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">5.1</ShaderModel>
+    </FxCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

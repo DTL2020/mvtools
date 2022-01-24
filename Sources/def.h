@@ -130,6 +130,30 @@ static MV_FORCEINLINE sad_t ScaleSadChroma(sad_t sad, int effective_scale) {
   return sad << (-effective_scale);
 }
 
+
+static MV_FORCEINLINE sad_t ScaleSadChroma_f(sad_t sad, int effective_scale, float scaleCSADfine) {
+  // effective scale: 1 -> div 2
+  //                  2 -> div 4 (YV24 default)
+  //                 -2 -> *4
+  //                 -1 -> *2
+  if (scaleCSADfine == 1.0f)
+  {
+    if (effective_scale == 0) return sad;
+    if (effective_scale > 0) return sad >> effective_scale;
+    return sad << (-effective_scale);
+  }
+  else
+  {
+    sad_t sad_tmp;
+    if (effective_scale == 0) sad_tmp = sad;
+    else if (effective_scale > 0) sad_tmp = sad >> effective_scale;
+    else
+    sad_tmp = sad << (-effective_scale);
+
+    return (sad_t)((float)sad_tmp * scaleCSADfine);
+  }
+}
+
 #endif	// def_HEADER_INCLUDED
 
 

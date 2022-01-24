@@ -334,6 +334,7 @@ MVRecalculate::MVRecalculate(
     _mt_flag,
     analysisData.chromaSADScale,
     _optSearchOption,
+    1.0f, // scaleCSADfine default (no op)
     env
   ));
 

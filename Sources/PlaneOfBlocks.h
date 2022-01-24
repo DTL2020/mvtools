@@ -103,7 +103,7 @@ public:
   PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int _nFlags, int _nOverlapX, int _nOverlapY,
     int _xRatioUV, int _yRatioUV, int _pixelsize, int _bits_per_pixel,
     conc::ObjPool <DCTClass> *dct_pool_ptr,
-    bool mt_flag, int _chromaSADscale, int _optSearchOption,
+    bool mt_flag, int _chromaSADscale, int _optSearchOption, float _scaleCSADfine,
   IScriptEnvironment* env);
 
   ~PlaneOfBlocks();
@@ -174,6 +174,7 @@ private:
   const int      chromaSADscale;   // PF experimental 2.7.18.22 allow e.g. YV24 chroma to have the same magnitude as for YV12
   int            effective_chromaSADscale;   // PF experimental 2.7.18.22 allow e.g. YV24 chroma to have the same magnitude as for YV12
   const int      optSearchOption; // DTL test != 0: allow
+  const float    scaleCSADfine; // DTL test - float finetune of luma/chroma SADs ratio in total SAD
 
   SADFunction *  SAD;              /* function which computes the sad */
   LUMAFunction * LUMA;             /* function which computes the mean luma */

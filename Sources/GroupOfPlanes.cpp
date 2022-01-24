@@ -31,7 +31,7 @@ GroupOfPlanes::GroupOfPlanes(
   int _nOverlapX, int _nOverlapY, int _nBlkX, int _nBlkY, int _xRatioUV, int _yRatioUV,
   int _divideExtra, int _pixelsize, int _bits_per_pixel,
   conc::ObjPool <DCTClass> *dct_pool_ptr,
-  bool mt_flag, int _chromaSADScale, int _optSearchOption,
+  bool mt_flag, int _chromaSADScale, int _optSearchOption, float _scaleCSADfine,
   IScriptEnvironment* env
 )
   : nBlkSizeX(_nBlkSizeX)
@@ -49,6 +49,7 @@ GroupOfPlanes::GroupOfPlanes(
   , _mt_flag(mt_flag)
   , chromaSADScale(_chromaSADScale)
   , optSearchOption(_optSearchOption)
+  , scaleCSADfine(_scaleCSADfine)
   , _dct_pool_ptr(dct_pool_ptr)
 {
   planes = new PlaneOfBlocks*[nLevelCount];
@@ -72,7 +73,7 @@ GroupOfPlanes::GroupOfPlanes(
     nBlkY = ((nHeight_B >> i) - nOverlapY) / (nBlkSizeY - nOverlapY);
     planes[i] = new PlaneOfBlocks(nBlkX, nBlkY, nBlkSizeX, nBlkSizeY, nPelCurrent, i, nFlagsCurrent, nOverlapX, nOverlapY,
       xRatioUV, yRatioUV, pixelsize, bits_per_pixel, dct_pool_ptr,
-      mt_flag, chromaSADScale, optSearchOption, env);
+      mt_flag, chromaSADScale, optSearchOption, scaleCSADfine, env);
     nPelCurrent = 1;
   }
 }

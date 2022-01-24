@@ -48,7 +48,7 @@ MVAnalyse::MVAnalyse(
   int _overlapx, int _overlapy, const char* _outfilename, int _dctmode,
   int _divide, int _sadx264, sad_t _badSAD, int _badrange, bool _isse,
   bool _meander, bool temporal_flag, bool _tryMany, bool multi_flag,
-  bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType, IScriptEnvironment* env
+  bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType, float _scaleCSADfine, IScriptEnvironment* env
 )
   : ::GenericVideoFilter(_child)
   , _srd_arr(1)
@@ -61,6 +61,7 @@ MVAnalyse::MVAnalyse(
   , _delta_max(0)
   , optSearchOption(_optSearchOption)
   , optPredictorType(_optPredictorType)
+  , scaleCSADfine(_scaleCSADfine)
 
 {
   has_at_least_v8 = true;
@@ -218,7 +219,7 @@ MVAnalyse::MVAnalyse(
       iNumFrameResources = 2 * df + 1; // number of frames to operate in the accelerator's pool
     }
 
-    Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize, chroma, analysisData.chromaSADScale, _multi_flag);
+    Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize, chroma, analysisData.chromaSADScale, scaleCSADfine, _multi_flag);
   }
 
   iUploadedCurrentFrameNum = -1; // is it non-existent frame num ?
@@ -473,6 +474,7 @@ MVAnalyse::MVAnalyse(
     _mt_flag,
     analysisData.chromaSADScale,
     optSearchOption,
+    scaleCSADfine,
     env
   ));
 
@@ -1441,7 +1443,7 @@ void MVAnalyse::GetHardwareAdapter(
   *ppAdapter = adapter.Detach();
 }
 
-void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize, bool bChroma, int iChromaSADScale, bool bMulti)
+void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize, bool bChroma, int iChromaSADScale, float scaleCSADfine, bool bMulti)
 {
   // check for hardware D3D12 motion estimator support and init
   UINT dxgiFactoryFlags = 0;
@@ -2108,6 +2110,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     // effective_chromaSADscale = (2 - (nLogxRatioUV + nLogyRatioUV)); = 0 for YV12 - only currently supported
     // effective_chromaSADscale -= chromaSADscale;
     pCBsadCSparams->chromaSADscale = 0 - iChromaSADScale;
+    pCBsadCSparams->chromaSADscale_fine = scaleCSADfine;
 
     if (optSearchOption == 5)
     {

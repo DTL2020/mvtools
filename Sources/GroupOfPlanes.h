@@ -43,6 +43,7 @@ class GroupOfPlanes
   int            divideExtra;
   bool           _mt_flag;
   int optSearchOption; // DTL test
+  float scaleCSADfine; //DTL test
 
   conc::ObjPool <DCTClass> *
                  _dct_pool_ptr;
@@ -54,7 +55,7 @@ public :
     int _nBlkSizeX, int _nBlkSizeY, int _nLevelCount, int _nPel, int _nFlags,
     int _nOverlapX, int _nOverlapY, int _nBlkX, int _nBlkY, int _xRatioUV, int _yRatioUV, int _divideExtra, int _pixelsize, int _bits_per_pixel, 
     conc::ObjPool <DCTClass> *dct_pool_ptr,
-    bool mt_flag, int _chromaSADScale, int _optSearchOption,
+    bool mt_flag, int _chromaSADScale, int _optSearchOption, float _scaleCSADfine,
     IScriptEnvironment *env);
   ~GroupOfPlanes ();
   void           SearchMVs (

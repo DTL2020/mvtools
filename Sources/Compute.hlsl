@@ -27,6 +27,7 @@ cbuffer cb0
 	int g_UseChroma : packoffset(c0.z);
 	int g_precisionMVs : packoffset(c0.w);
 	int g_chromaSADscale : packoffset(c1.x);
+	float g_chromaSADscale_fine : packoffset(c1.y);
 }
 
 [numthreads(8, 8, 1)]
@@ -95,16 +96,14 @@ void main(uint3 DTid : SV_DispatchThreadID)
 		{
 			iChromaSADAdd = iChromaSAD >> g_chromaSADscale;
 		}
-
-		if (g_chromaSADscale < 0)
+		else if (g_chromaSADscale < 0)
 		{
 			iChromaSADAdd = iChromaSAD << (-g_chromaSADscale);
 		}
-
-		if (g_chromaSADscale == 0)
-		{
+		else
 			iChromaSADAdd = iChromaSAD;
-		}
+
+		iChromaSADAdd = (float)iChromaSADAdd * g_chromaSADscale_fine;
 
 		iSAD += iChromaSADAdd;
 	}

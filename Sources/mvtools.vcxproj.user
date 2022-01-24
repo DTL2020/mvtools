@@ -11,7 +11,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <RemoteDebuggerCommand>I:\Distr\rem_debug\rem_debug\x64\AVSMeter64.exe</RemoteDebuggerCommand>
-    <RemoteDebuggerCommandArguments>src_spt.avs</RemoteDebuggerCommandArguments>
+    <RemoteDebuggerCommandArguments>src.avs</RemoteDebuggerCommandArguments>
     <RemoteDebuggerWorkingDirectory>I:\Distr\rem_debug\rem_debug\x64\</RemoteDebuggerWorkingDirectory>
     <RemoteDebuggerServerName>192.168.126.97:4024</RemoteDebuggerServerName>
     <RemoteDebuggerConnection>RemoteWithoutAuthentication</RemoteDebuggerConnection>
