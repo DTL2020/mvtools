@@ -2372,7 +2372,38 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
 
     p = plane_ptr->GetPointer(blx, bly);
     np = plane_ptr->GetPitch();
-    const sad_t block_sad = pMVsArray[i].sad;
+    sad_t block_sad = pMVsArray[i].sad;
+
+    // test: pull SAD at static areas ?
+    if ((pMVsArray[i].x == 0) && (pMVsArray[i].y == 0))
+    {
+      block_sad = block_sad / 2;
+    }
+    else
+    {
+      // test: pull SAD at common motion blocks ?
+      int x_cur = pMVsArray[i].x, y_cur = pMVsArray[i].y;
+      // upper block
+      VECTOR v_upper, v_left, v_right, v_lower;
+      int i_upper = i - nBlkX;
+      if (i_upper < 0) i_upper = 0;
+      v_upper = pMVsArray[i_upper];
+
+      int i_left = i - 1;
+      if (i_left < 0) i_left = 0;
+      v_left = pMVsArray[i_left];
+
+      int i_right = i + 1;
+      if (i_right > nBlkX* nBlkY) i_right = nBlkX * nBlkY;
+      v_right = pMVsArray[i_right];
+
+      int i_lower = i + nBlkX;
+      if (i_lower > nBlkX* nBlkY) i_lower = i;
+      v_lower = pMVsArray[i_lower];
+
+      if ((v_upper.x == x_cur) && (v_left.x == x_cur) && (v_right.x == x_cur) && (v_lower.x == x_cur) && \
+        (v_upper.y == y_cur) && (v_left.y == y_cur) && (v_right.y == y_cur) && (v_lower.y == y_cur)) block_sad = block_sad / 2;
+    }
 
     wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
   }
@@ -2402,7 +2433,39 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv(
      
     p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
     np = plane_ptr->GetPitch();
-    const sad_t block_sad = pMVsArray[i].sad;
+    sad_t block_sad = pMVsArray[i].sad;
+
+    // test: pull SAD at static areas ?
+    if ((pMVsArray[i].x == 0) && (pMVsArray[i].y == 0))
+    {
+      block_sad = block_sad / 2;
+    }
+    else
+    {
+
+      // test: pull SAD at common motion blocks ?
+      int x_cur = pMVsArray[i].x, y_cur = pMVsArray[i].y;
+      // upper block
+      VECTOR v_upper, v_left, v_right, v_lower;
+      int i_upper = i - nBlkX;
+      if (i_upper < 0) i_upper = 0;
+      v_upper = pMVsArray[i_upper];
+
+      int i_left = i - 1;
+      if (i_left < 0) i_left = 0;
+      v_left = pMVsArray[i_left];
+
+      int i_right = i + 1;
+      if (i_right > nBlkX* nBlkY) i_right = nBlkX * nBlkY;
+      v_right = pMVsArray[i_right];
+
+      int i_lower = i + nBlkX;
+      if (i_lower > nBlkX* nBlkY) i_lower = i;
+      v_lower = pMVsArray[i_lower];
+
+      if ((v_upper.x == x_cur) && (v_left.x == x_cur) && (v_right.x == x_cur) && (v_lower.x == x_cur) && \
+        (v_upper.y == y_cur) && (v_left.y == y_cur) && (v_right.y == y_cur) && (v_lower.y == y_cur)) block_sad = block_sad / 2;
+    }
 
     wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
   }
