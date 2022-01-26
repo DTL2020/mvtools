@@ -35,7 +35,8 @@ public:
     ::PClip child, ::PClip super, ::PClip mvmulti, int trad,
     sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
     sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
-    sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, ::IScriptEnvironment* env_ptr
+    sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow,
+    float adjSADzeromv, float adjSADcohmv, int thCohMV, ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
 
@@ -142,10 +143,33 @@ private:
     );
 
   MV_FORCEINLINE void
+    use_block_y_thSADzeromv_thSADcohmv(
+      const BYTE*& p, int& np, int& wref, bool usable_flag, const MvClipInfo& c_info,
+      int i, const MVPlane* plane_ptr, const BYTE* src_ptr, int xx, int src_pitch, int ibx, int iby, const VECTOR* pMVsArray
+    );
+
+  MV_FORCEINLINE void
     use_block_uv(
       const BYTE * &p, int &np, int &wref, bool usable_flag, const MvClipInfo &c_info,
       int i, const MVPlane *plane_ptr, const BYTE *src_ptr, int xx, int src_pitch, int ibx, int iby, const VECTOR* pMVsArray
     );
+
+  MV_FORCEINLINE void
+    use_block_uv_thSADzeromv_thSADcohmv(
+      const BYTE*& p, int& np, int& wref, bool usable_flag, const MvClipInfo& c_info,
+      int i, const MVPlane* plane_ptr, const BYTE* src_ptr, int xx, int src_pitch, int ibx, int iby, const VECTOR* pMVsArray
+  );
+
+  void(MDegrainN::* use_block_y_func)(
+    const BYTE*& p, int& np, int& wref, bool usable_flag, const MvClipInfo& c_info,
+    int i, const MVPlane* plane_ptr, const BYTE* src_ptr, int xx, int src_pitch, int ibx, int iby, const VECTOR* pMVsArray
+    ); // selector for old and alt proc
+
+  void(MDegrainN::* use_block_uv_func)(
+    const BYTE*& p, int& np, int& wref, bool usable_flag, const MvClipInfo& c_info,
+    int i, const MVPlane* plane_ptr, const BYTE* src_ptr, int xx, int src_pitch, int ibx, int iby, const VECTOR* pMVsArray
+    ); // selector for old and alt proc
+
 
   static MV_FORCEINLINE void
     norm_weights(int wref_arr[], int trad);
@@ -190,7 +214,9 @@ private:
   uint16_t* pui16SoftWeightsArr;
   uint16_t* pui16WeightsFrameArr;
   const VECTOR* pMVsPlanesArrays[MAX_TEMP_RAD * 2];
-
+  float fadjSADzeromv;
+  float fadjSADcohmv;
+  int ithCohMV;
 
   std::unique_ptr <YUY2Planes> _dst_planes;
   std::unique_ptr <YUY2Planes> _src_planes;
@@ -240,5 +266,7 @@ private:
 };
 
 MV_FORCEINLINE int DegrainWeightN(int thSAD, double thSAD_pow, int blockSAD, int wpow);
+
+MV_FORCEINLINE unsigned int SADABS(int x) { return (x < 0) ? -x : x; }
 
 #endif

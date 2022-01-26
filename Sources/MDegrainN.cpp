@@ -625,7 +625,7 @@ MDegrainN::MDegrainN(
   PClip child, PClip super, PClip mvmulti, int trad,
   sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
-  sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, IScriptEnvironment* env_ptr
+  sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV, IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
   , MVFilter(mvmulti, "MDegrainN", env_ptr, 1, 0)
@@ -669,6 +669,9 @@ MDegrainN::MDegrainN(
   , _covered_width(0)
   , _covered_height(0)
   , _boundary_cnt_arr()
+  , fadjSADzeromv(adjSADzeromv)
+  , fadjSADcohmv(adjSADcohmv)
+  , ithCohMV(thCohMV) // need to scale to pel value like /pel ?
 {
   has_at_least_v8 = true;
   try { env_ptr->CheckVersion(8); }
@@ -950,6 +953,17 @@ MDegrainN::MDegrainN(
 
   pui16SoftWeightsArr = new uint16_t[(_trad + 1) * 2 * (nBlkSizeX*nBlkSizeY) * pixelsize_super * sizeof(uint16_t)]; // pixelsize already set ?
   pui16WeightsFrameArr = new uint16_t[(_trad + 1) * 2 * nBlkX *nBlkY * sizeof(uint16_t)];
+
+  if ((fadjSADzeromv != 1.0f) || (fadjSADcohmv != 1.0f))
+  {
+    use_block_y_func = &MDegrainN::use_block_y_thSADzeromv_thSADcohmv;
+    use_block_uv_func = &MDegrainN::use_block_uv_thSADzeromv_thSADcohmv;
+  }
+  else // old funcs
+  {
+    use_block_y_func = &MDegrainN::use_block_y;
+    use_block_uv_func = &MDegrainN::use_block_uv;
+  }
 }
 
 
@@ -1618,7 +1632,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
         */
       for (int k = 0; k < _trad * 2; ++k)
       {
-        use_block_y(
+        (this->*use_block_y_func)(
           ref_data_ptr_arr[k],
           pitch_arr[k],
           weight_arr[k + 1],
@@ -1970,7 +1984,7 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
       */
       for (int k = 0; k < _trad * 2; ++k)
       {
-        use_block_y(
+        (this->*use_block_y_func)(
           ref_data_ptr_arr[k],
           pitch_arr[k],
           weight_arr[k + 1],
@@ -2082,7 +2096,7 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
 
       for (int k = 0; k < _trad * 2; ++k)
       {
-        use_block_uv(
+        (this->*use_block_uv_func)(
           ref_data_ptr_arr[k],
           pitch_arr[k],
           weight_arr[k + 1],
@@ -2277,7 +2291,7 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
 
       for (int k = 0; k < _trad * 2; ++k)
       {
-        use_block_uv(
+        (this->*use_block_uv_func)(
           ref_data_ptr_arr[k],
           pitch_arr[k],
           weight_arr[k + 1], // from 1st
@@ -2374,35 +2388,75 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
     np = plane_ptr->GetPitch();
     sad_t block_sad = pMVsArray[i].sad;
 
-    // test: pull SAD at static areas ?
+    wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
+  }
+  else
+  {
+    p = src_ptr + xx;
+    np = src_pitch;
+    wref = 0;
+  }
+}
+
+
+MV_FORCEINLINE void	MDegrainN::use_block_y_thSADzeromv_thSADcohmv(
+  const BYTE*& p, int& np, int& wref, bool usable_flag, const MvClipInfo& c_info,
+  int i, const MVPlane* plane_ptr, const BYTE* src_ptr, int xx, int src_pitch, int ibx, int iby, const VECTOR* pMVsArray
+)
+{
+  if (usable_flag)
+  {
+    int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+    int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
+
+    // temp check - DX12_ME return invalid vectors sometime
+    if (blx < 0) blx = 0;
+    if (bly < 0) bly = 0;
+    if (blx > nBlkSizeX* nBlkX) blx = nBlkSizeX * nBlkX;
+    if (bly > nBlkSizeY* nBlkY) bly = nBlkSizeY * nBlkY;
+
+
+    p = plane_ptr->GetPointer(blx, bly);
+    np = plane_ptr->GetPitch();
+    sad_t block_sad = pMVsArray[i].sad;
+
+    // pull SAD at static areas 
     if ((pMVsArray[i].x == 0) && (pMVsArray[i].y == 0))
     {
-      block_sad = block_sad / 2;
+      block_sad = (sad_t)((float)block_sad * fadjSADzeromv);
     }
     else
     {
-      // test: pull SAD at common motion blocks ?
-      int x_cur = pMVsArray[i].x, y_cur = pMVsArray[i].y;
-      // upper block
-      VECTOR v_upper, v_left, v_right, v_lower;
-      int i_upper = i - nBlkX;
-      if (i_upper < 0) i_upper = 0;
-      v_upper = pMVsArray[i_upper];
+      if (ithCohMV >= 0) // skip long calc if ithCohV<0
+      {
+        // pull SAD at common motion blocks 
+        int x_cur = pMVsArray[i].x, y_cur = pMVsArray[i].y;
+        // upper block
+        VECTOR v_upper, v_left, v_right, v_lower;
+        int i_upper = i - nBlkX;
+        if (i_upper < 0) i_upper = 0;
+        v_upper = pMVsArray[i_upper];
 
-      int i_left = i - 1;
-      if (i_left < 0) i_left = 0;
-      v_left = pMVsArray[i_left];
+        int i_left = i - 1;
+        if (i_left < 0) i_left = 0;
+        v_left = pMVsArray[i_left];
 
-      int i_right = i + 1;
-      if (i_right > nBlkX* nBlkY) i_right = nBlkX * nBlkY;
-      v_right = pMVsArray[i_right];
+        int i_right = i + 1;
+        if (i_right > nBlkX* nBlkY) i_right = nBlkX * nBlkY;
+        v_right = pMVsArray[i_right];
 
-      int i_lower = i + nBlkX;
-      if (i_lower > nBlkX* nBlkY) i_lower = i;
-      v_lower = pMVsArray[i_lower];
+        int i_lower = i + nBlkX;
+        if (i_lower > nBlkX* nBlkY) i_lower = i;
+        v_lower = pMVsArray[i_lower];
 
-      if ((v_upper.x == x_cur) && (v_left.x == x_cur) && (v_right.x == x_cur) && (v_lower.x == x_cur) && \
-        (v_upper.y == y_cur) && (v_left.y == y_cur) && (v_right.y == y_cur) && (v_lower.y == y_cur)) block_sad = block_sad / 2;
+        int iabs_dc_x = SADABS(v_upper.x - x_cur) + SADABS(v_left.x - x_cur) + SADABS(v_right.x - x_cur) + SADABS(v_lower.x - x_cur);
+        int iabs_dc_y = SADABS(v_upper.y - y_cur) + SADABS(v_left.y - y_cur) + SADABS(v_right.y - y_cur) + SADABS(v_lower.y - y_cur);
+
+        if ((iabs_dc_x + iabs_dc_y) <= ithCohMV)
+        {
+          block_sad = (sad_t)((float)block_sad * fadjSADcohmv);
+        }
+      }
     }
 
     wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
@@ -2435,36 +2489,74 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv(
     np = plane_ptr->GetPitch();
     sad_t block_sad = pMVsArray[i].sad;
 
-    // test: pull SAD at static areas ?
+    wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
+  }
+  else
+  {
+    // just to have a valid data pointer, will not count, weight is zero
+    p = src_ptr + xx; // done: kill  >> nLogxRatioUV_super from here and put it in the caller like in MDegrainX
+    np = src_pitch;
+    wref = 0;
+  }
+}
+
+MV_FORCEINLINE void	MDegrainN::use_block_uv_thSADzeromv_thSADcohmv(
+  const BYTE*& p, int& np, int& wref, bool usable_flag, const MvClipInfo& c_info,
+  int i, const MVPlane* plane_ptr, const BYTE* src_ptr, int xx, int src_pitch, int ibx, int iby, const VECTOR* pMVsArray
+)
+{
+  if (usable_flag)
+  {
+    int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+    int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
+
+    // temp check - DX12_ME return invalid vectors sometime 
+    if (blx < 0) blx = 0;
+    if (bly < 0) bly = 0;
+    if (blx > nBlkSizeX* nBlkX) blx = nBlkSizeX * nBlkX;
+    if (bly > nBlkSizeY* nBlkY) bly = nBlkSizeY * nBlkY;
+
+    p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
+    np = plane_ptr->GetPitch();
+    sad_t block_sad = pMVsArray[i].sad;
+
+    // pull SAD at static areas 
     if ((pMVsArray[i].x == 0) && (pMVsArray[i].y == 0))
     {
-      block_sad = block_sad / 2;
+      block_sad = (sad_t)((float)block_sad * fadjSADzeromv);
     }
     else
     {
+      if (ithCohMV >= 0) // skip long calc if ithCohV<0
+      {
+        // pull SAD at common motion blocks 
+        int x_cur = pMVsArray[i].x, y_cur = pMVsArray[i].y;
+        // upper block
+        VECTOR v_upper, v_left, v_right, v_lower;
+        int i_upper = i - nBlkX;
+        if (i_upper < 0) i_upper = 0;
+        v_upper = pMVsArray[i_upper];
 
-      // test: pull SAD at common motion blocks ?
-      int x_cur = pMVsArray[i].x, y_cur = pMVsArray[i].y;
-      // upper block
-      VECTOR v_upper, v_left, v_right, v_lower;
-      int i_upper = i - nBlkX;
-      if (i_upper < 0) i_upper = 0;
-      v_upper = pMVsArray[i_upper];
+        int i_left = i - 1;
+        if (i_left < 0) i_left = 0;
+        v_left = pMVsArray[i_left];
 
-      int i_left = i - 1;
-      if (i_left < 0) i_left = 0;
-      v_left = pMVsArray[i_left];
+        int i_right = i + 1;
+        if (i_right > nBlkX* nBlkY) i_right = nBlkX * nBlkY;
+        v_right = pMVsArray[i_right];
 
-      int i_right = i + 1;
-      if (i_right > nBlkX* nBlkY) i_right = nBlkX * nBlkY;
-      v_right = pMVsArray[i_right];
+        int i_lower = i + nBlkX;
+        if (i_lower > nBlkX* nBlkY) i_lower = i;
+        v_lower = pMVsArray[i_lower];
 
-      int i_lower = i + nBlkX;
-      if (i_lower > nBlkX* nBlkY) i_lower = i;
-      v_lower = pMVsArray[i_lower];
+        int iabs_dc_x = SADABS(v_upper.x - x_cur) + SADABS(v_left.x - x_cur) + SADABS(v_right.x - x_cur) + SADABS(v_lower.x - x_cur);
+        int iabs_dc_y = SADABS(v_upper.y - y_cur) + SADABS(v_left.y - y_cur) + SADABS(v_right.y - y_cur) + SADABS(v_lower.y - y_cur);
 
-      if ((v_upper.x == x_cur) && (v_left.x == x_cur) && (v_right.x == x_cur) && (v_lower.x == x_cur) && \
-        (v_upper.y == y_cur) && (v_left.y == y_cur) && (v_right.y == y_cur) && (v_lower.y == y_cur)) block_sad = block_sad / 2;
+        if ((iabs_dc_x + iabs_dc_y) <= ithCohMV)
+        {
+          block_sad = (sad_t)((float)block_sad * fadjSADcohmv);
+        }
+      }
     }
 
     wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);

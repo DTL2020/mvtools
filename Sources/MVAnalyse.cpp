@@ -612,7 +612,7 @@ MVAnalyse::~MVAnalyse()
   delete pRefGOF;
   pRefGOF = 0;
   _RPT1(0, "MAnalyze destroyed %d\n",_instance_id);
-#ifdef _WIN32
+#if defined _WIN32 && defined DX12_ME
 //  delete pNV12FrameData;
   VirtualFree(pNV12FrameDataUV, 0, MEM_RELEASE);
 #endif
