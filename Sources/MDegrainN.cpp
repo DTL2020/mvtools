@@ -671,7 +671,7 @@ MDegrainN::MDegrainN(
   , _boundary_cnt_arr()
   , fadjSADzeromv(adjSADzeromv)
   , fadjSADcohmv(adjSADcohmv)
-  , ithCohMV(thCohMV) // need to scale to pel value like /pel ?
+  , ithCohMV(thCohMV) // need to scale to pel value ?
 {
   has_at_least_v8 = true;
   try { env_ptr->CheckVersion(8); }
@@ -2378,10 +2378,10 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
      int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
 
   // temp check - DX12_ME return invalid vectors sometime
-    if (blx < 0) blx = 0;
-    if (bly < 0) bly = 0;
-    if (blx > nBlkSizeX* nBlkX) blx = nBlkSizeX * nBlkX;
-    if (bly > nBlkSizeY* nBlkY) bly = nBlkSizeY * nBlkY;
+     if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
+     if (bly < -nBlkSizeY * nPel) bly = -nBlkSizeY * nPel;
+     if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
+     if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;
     
 
     p = plane_ptr->GetPointer(blx, bly);
@@ -2410,10 +2410,10 @@ MV_FORCEINLINE void	MDegrainN::use_block_y_thSADzeromv_thSADcohmv(
     int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
 
     // temp check - DX12_ME return invalid vectors sometime
-    if (blx < 0) blx = 0;
-    if (bly < 0) bly = 0;
-    if (blx > nBlkSizeX* nBlkX) blx = nBlkSizeX * nBlkX;
-    if (bly > nBlkSizeY* nBlkY) bly = nBlkSizeY * nBlkY;
+    if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
+    if (bly < -nBlkSizeY * nPel) bly = -nBlkSizeY * nPel;
+    if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
+    if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;
 
 
     p = plane_ptr->GetPointer(blx, bly);
@@ -2480,10 +2480,10 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv(
      int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
 
      // temp check - DX12_ME return invalid vectors sometime 
-     if (blx < 0) blx = 0;
-     if (bly < 0) bly = 0;
-     if (blx > nBlkSizeX* nBlkX) blx = nBlkSizeX * nBlkX;
-     if (bly > nBlkSizeY* nBlkY) bly = nBlkSizeY * nBlkY;
+     if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
+     if (bly < -nBlkSizeY * nPel) bly = -nBlkSizeY * nPel;
+     if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
+     if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;
      
     p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
     np = plane_ptr->GetPitch();
@@ -2511,10 +2511,10 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv_thSADzeromv_thSADcohmv(
     int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
 
     // temp check - DX12_ME return invalid vectors sometime 
-    if (blx < 0) blx = 0;
-    if (bly < 0) bly = 0;
-    if (blx > nBlkSizeX* nBlkX) blx = nBlkSizeX * nBlkX;
-    if (bly > nBlkSizeY* nBlkY) bly = nBlkSizeY * nBlkY;
+    if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
+    if (bly < -nBlkSizeY * nPel) bly = -nBlkSizeY * nPel;
+    if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
+    if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;
 
     p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
     np = plane_ptr->GetPitch();

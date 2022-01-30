@@ -1032,216 +1032,267 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
       if (optSearchOption == 5)
       {
-        for (int h = 0; h < iNumBlocksY; ++h)
+        if (srd._analysis_data.nPel == 1)
         {
-          for (int w = 0; w < iNumBlocksX; ++w)
+          for (int h = 0; h < iNumBlocksY; ++h)
           {
-            piDstMVs[0] = pSrcMVs[w * 2] / 4; // for pel=1, divide qpel by 4
-            piDstMVs[1] = pSrcMVs[w * 2 + 1] / 4; // for pel=1, divide qpel by 4
+            for (int w = 0; w < iNumBlocksX; ++w)
+            {
+              piDstMVs[0] = pSrcMVs[w * 2] / 4; // for pel=1, divide qpel by 4
+              piDstMVs[1] = pSrcMVs[w * 2 + 1] / 4; // for pel=1, divide qpel by 4
 
-            piDstMVs += 3;
+              piDstMVs += 3;
+            }
+            pSrcMVs += iRowPitch / 2; // pitch in bytes ?
           }
-          pSrcMVs += iRowPitch / 2; // pitch in bytes ?
         }
+/*        else if (srd._analysis_data.nPel == 2)
+        {
+          for (int h = 0; h < iNumBlocksY; ++h)
+          {
+            for (int w = 0; w < iNumBlocksX; ++w)
+            {
+              piDstMVs[0] = pSrcMVs[w * 2] / 2; // for pel=2, divide qpel by 2
+              piDstMVs[1] = pSrcMVs[w * 2 + 1] / 2; // for pel=2, divide qpel by 2
+
+              piDstMVs += 3;
+            }
+            pSrcMVs += iRowPitch / 2; // pitch in bytes ?
+          }
+        }
+        else
+        {
+          for (int h = 0; h < iNumBlocksY; ++h)
+          {
+            for (int w = 0; w < iNumBlocksX; ++w)
+            {
+              piDstMVs[0] = pSrcMVs[w * 2]; // for pel=4, qpel 
+              piDstMVs[1] = pSrcMVs[w * 2 + 1]; // for pel=4, qpel
+
+              piDstMVs += 3;
+            }
+            pSrcMVs += iRowPitch / 2; // pitch in bytes ?
+          }
+        }
+        */
       }
       else // if == 6
       {
 
       }
 
-/*      // copy to 'vectors' structure of plane 0 for sad calc only
-      PlaneOfBlocks* pob = _vectorfields_aptr->GetPlane(0);
-      VECTOR *pVectors = &pob->vectors[0];
-      int16_t* pSrcMVs = pReadbackBufferData;
+      if (srd._analysis_data.nPel != 1) // pel = 2 or pel = 4
+      {
+        // copy to 'vectors' structure of plane 0 for sad calc only
+        PlaneOfBlocks* pob = _vectorfields_aptr->GetPlane(0);
+        VECTOR* pVectors = &pob->vectors[0];
+        int16_t* pSrcMVs = pReadbackBufferData;
 
 #ifdef _DEBUG
-      // debug check
-      if (iNumBlocksX * iNumBlocksY != pob->vectors.size())
-      {
-        env->ThrowError(
-          "MAnalyse: Error size of vectors buf != number of vectors"
-        );
-      }
+        // debug check
+        if (iNumBlocksX * iNumBlocksY != pob->vectors.size())
+        {
+          env->ThrowError(
+            "MAnalyse: Error size of vectors buf != number of vectors"
+          );
+        }
 
 #endif
-
-      if (optSearchOption == 5)
-      {
-        for (int h = 0; h < iNumBlocksY; ++h)
+        if (optSearchOption == 5)
         {
-          for (int w = 0; w < iNumBlocksX; ++w)
+          if (srd._analysis_data.nPel == 2)
           {
-            pVectors[0].x = pSrcMVs[w * 2] / 4; // for pel=1, divide qpel by 4
-            pVectors[0].y = pSrcMVs[w * 2 + 1] / 4; // for pel=1, divide qpel by 4
+            for (int h = 0; h < iNumBlocksY; ++h)
+            {
+              for (int w = 0; w < iNumBlocksX; ++w)
+              {
+                pVectors[0].x = pSrcMVs[w * 2] / 2; // for pel=2, qpel/2
+                pVectors[0].y = pSrcMVs[w * 2 + 1] / 2; // for pel=2, qpel/2 
 
-            pVectors++;
+                pVectors++;
+              }
+              pSrcMVs += iRowPitch / 2; // pitch in bytes ?
+            }
           }
-          pSrcMVs += iRowPitch / 2; // pitch in bytes
+          else // nPel = 4
+          {
+            for (int h = 0; h < iNumBlocksY; ++h)
+            {
+              for (int w = 0; w < iNumBlocksX; ++w)
+              {
+                pVectors[0].x = pSrcMVs[w * 2]; // for pel=4, qpel
+                pVectors[0].y = pSrcMVs[w * 2 + 1]; // for pel=4, qpel 
+
+                pVectors++;
+              }
+              pSrcMVs += iRowPitch / 2; // pitch in bytes ?
+            }
+          }
+        }
+        else // if == 6
+        {
+          for (int h = 0; h < iNumBlocksY; ++h)
+          {
+            for (int w = 0; w < iNumBlocksX; ++w)
+            {
+              pVectors[0].x = pSrcMVs[w * 2] / 2; // for pel=1, divide qpel by 4
+              pVectors[0].y = pSrcMVs[w * 2 + 1] / 2; // for pel=1, divide qpel by 4
+
+              pVectors++;
+            }
+            pSrcMVs += iRowPitch / 2; // pitch in bytes
+          }
         }
       }
-      else // if == 6
-      {
-        for (int h = 0; h < iNumBlocksY; ++h)
-        {
-          for (int w = 0; w < iNumBlocksX; ++w)
-          {
-            pVectors[0].x = pSrcMVs[w * 2] / 2; // for pel=1, divide qpel by 4
-            pVectors[0].y = pSrcMVs[w * 2 + 1] / 2; // for pel=1, divide qpel by 4
-
-            pVectors++;
-          }
-          pSrcMVs += iRowPitch / 2; // pitch in bytes
-        }
-      }
-      */
-
 
       spResolvedMotionVectorsReadBack->Unmap(0, NULL);
 
-      // calc SADs using loaded resources and D3D12 compute shader
-      m_computeAllocator->Reset();
-      m_computeCommandList->Reset(m_computeAllocator.Get(), m_computePSO.Get());
-
-      ID3D12DescriptorHeap* pHeaps[] = { m_SRVDescriptorHeap->Heap(), m_samplerDescriptorHeap->Heap() };
-      m_computeCommandList->SetDescriptorHeaps(_countof(pHeaps), pHeaps);
-
-      m_computeCommandList->SetComputeRootSignature(m_computeRootSignature.Get());
-
-      m_computeCommandList->SetComputeRootConstantBufferView(e_rootParameterCB, sadCBparamsBV.BufferLocation);
-      m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterSampler, m_samplerDescriptorHeap->GetGpuHandle(0));
-      m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterSRV, m_SRVDescriptorHeap->GetGpuHandle(e_iSRV + 0));				
-      m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterUAV, m_SRVDescriptorHeap->GetGpuHandle(e_iUAV + 0)); 
-
-      m_computeCommandList->SetPipelineState(m_computePSO.Get());
-      m_computeCommandList->Dispatch(m_ThreadGroupX, m_ThreadGroupY, 1);
-
-      // close and execute the command list
-      m_computeCommandList->Close();
-      ID3D12CommandList* computeList = m_computeCommandList.Get();
-      m_computeCommandQueue->ExecuteCommandLists(1, &computeList);
-
-      const uint64_t fenceCompute = m_fenceValue++;
-      m_computeCommandQueue->Signal(m_fence.Get(), fenceCompute);
-      if (m_fence->GetCompletedValue() < fenceCompute)								// block until async compute has completed using a fence
+      if (srd._analysis_data.nPel == 1)
       {
-        m_fence->SetEventOnCompletion(fenceCompute, m_computeFenceEvent);
-        WaitForSingleObject(m_computeFenceEvent, INFINITE);
-      }
+        // calc SADs using loaded resources and D3D12 compute shader
+        m_computeAllocator->Reset();
+        m_computeCommandList->Reset(m_computeAllocator.Get(), m_computePSO.Get());
 
+        ID3D12DescriptorHeap* pHeaps[] = { m_SRVDescriptorHeap->Heap(), m_samplerDescriptorHeap->Heap() };
+        m_computeCommandList->SetDescriptorHeaps(_countof(pHeaps), pHeaps);
 
-      // readback computed SAD to CPU memory
-      hr = m_GraphicsCommandList->Reset(m_commandAllocatorGraphics.Get(), 0);
+        m_computeCommandList->SetComputeRootSignature(m_computeRootSignature.Get());
 
-      m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_SADTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
+        m_computeCommandList->SetComputeRootConstantBufferView(e_rootParameterCB, sadCBparamsBV.BufferLocation);
+        m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterSampler, m_samplerDescriptorHeap->GetGpuHandle(0));
+        m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterSRV, m_SRVDescriptorHeap->GetGpuHandle(e_iSRV + 0));
+        m_computeCommandList->SetComputeRootDescriptorTable(e_rootParameterUAV, m_SRVDescriptorHeap->GetGpuHandle(e_iUAV + 0));
 
-//      int iNumBlocksX = srd._analysis_data.GetBlkX();
-//      int iNumBlocksY = srd._analysis_data.GetBlkY();
+        m_computeCommandList->SetPipelineState(m_computePSO.Get());
+        m_computeCommandList->Dispatch(m_ThreadGroupX, m_ThreadGroupY, 1);
 
-      int iSADRowPitchUA = iNumBlocksX * sizeof(short); // 16bit
-      int iSADRowPitch = iSADRowPitchUA + (256 - (iSADRowPitchUA % 256)); // must be multiply of 256
+        // close and execute the command list
+        m_computeCommandList->Close();
+        ID3D12CommandList* computeList = m_computeCommandList.Get();
+        m_computeCommandQueue->ExecuteCommandLists(1, &computeList);
 
-      // Get the copy target location
-      D3D12_PLACED_SUBRESOURCE_FOOTPRINT bufferSADFootprint = {};
-      bufferSADFootprint.Footprint.Width = iNumBlocksX; // num blocks W 
-      bufferSADFootprint.Footprint.Height = iNumBlocksY; // num Blocks H
-      bufferSADFootprint.Footprint.Depth = 1;
-      bufferSADFootprint.Footprint.RowPitch = iSADRowPitch; // 16+16 * num blocks W and multiply of 256 ?
-      bufferSADFootprint.Footprint.Format = DXGI_FORMAT_R16_UINT;
+        const uint64_t fenceCompute = m_fenceValue++;
+        m_computeCommandQueue->Signal(m_fence.Get(), fenceCompute);
+        if (m_fence->GetCompletedValue() < fenceCompute)								// block until async compute has completed using a fence
+        {
+          m_fence->SetEventOnCompletion(fenceCompute, m_computeFenceEvent);
+          WaitForSingleObject(m_computeFenceEvent, INFINITE);
+        }
 
-      CD3DX12_TEXTURE_COPY_LOCATION copySADDest(spSADReadBack.Get(), bufferSADFootprint);
-      CD3DX12_TEXTURE_COPY_LOCATION copySADSrc(m_SADTexture.Get(), 0);
+        // readback computed SAD to CPU memory
+        hr = m_GraphicsCommandList->Reset(m_commandAllocatorGraphics.Get(), 0);
 
-      // Copy the texture
-      m_GraphicsCommandList->CopyTextureRegion(&copySADDest, 0, 0, 0, &copySADSrc, nullptr);
+        m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_SADTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
 
-      m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_SADTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+        //      int iNumBlocksX = srd._analysis_data.GetBlkX();
+        //      int iNumBlocksY = srd._analysis_data.GetBlkY();
 
-      hr = m_GraphicsCommandList->Close();
-      if (hr != S_OK)
-      {
-        env->ThrowError(
-          "MAnalyse: Error m_GraphicsCommandList->Close readback SAD"
-        );
-      }
-      // Execute Commandlist.
-      ID3D12CommandList* ppSADCopyBackCommandLists[1] = { m_GraphicsCommandList.Get() };
-      m_commandQueueGraphics->ExecuteCommandLists(1, ppSADCopyBackCommandLists);
+        int iSADRowPitchUA = iNumBlocksX * sizeof(short); // 16bit
+        int iSADRowPitch = iSADRowPitchUA + (256 - (iSADRowPitchUA % 256)); // must be multiply of 256
 
-      // Signal and increment the fence value.
-      const UINT64 fence_SADCopyBack = m_fenceValue;
-      hr = m_commandQueueGraphics->Signal(m_fence.Get(), fence_SADCopyBack);
-      if (hr != S_OK)
-      {
-        env->ThrowError(
-          "MAnalyse: Error m_commandQueue->Signal fence_SADCopyBack"
-        );
-      }
+        // Get the copy target location
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT bufferSADFootprint = {};
+        bufferSADFootprint.Footprint.Width = iNumBlocksX; // num blocks W 
+        bufferSADFootprint.Footprint.Height = iNumBlocksY; // num Blocks H
+        bufferSADFootprint.Footprint.Depth = 1;
+        bufferSADFootprint.Footprint.RowPitch = iSADRowPitch; // 16+16 * num blocks W and multiply of 256 ?
+        bufferSADFootprint.Footprint.Format = DXGI_FORMAT_R16_UINT;
 
-      m_fenceValue++;
+        CD3DX12_TEXTURE_COPY_LOCATION copySADDest(spSADReadBack.Get(), bufferSADFootprint);
+        CD3DX12_TEXTURE_COPY_LOCATION copySADSrc(m_SADTexture.Get(), 0);
 
-      // Wait until the previous frame is finished.
-      if (m_fence->GetCompletedValue() < fence_SADCopyBack)
-      {
-        hr = m_fence->SetEventOnCompletion(fence_SADCopyBack, m_fenceEventCopyBack);
+        // Copy the texture
+        m_GraphicsCommandList->CopyTextureRegion(&copySADDest, 0, 0, 0, &copySADSrc, nullptr);
+
+        m_GraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_SADTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+
+        hr = m_GraphicsCommandList->Close();
         if (hr != S_OK)
         {
           env->ThrowError(
-            "MAnalyse: Error m_fence->SetEventOnCompletion -> EventCopyBack SAD"
+            "MAnalyse: Error m_GraphicsCommandList->Close readback SAD"
           );
         }
-        WaitForSingleObject(m_fenceEventCopyBack, INFINITE);
-      }
+        // Execute Commandlist.
+        ID3D12CommandList* ppSADCopyBackCommandLists[1] = { m_GraphicsCommandList.Get() };
+        m_commandQueueGraphics->ExecuteCommandLists(1, ppSADCopyBackCommandLists);
 
-//      int16_t* pSADReadbackBufferData{};
-
-      hr = spSADReadBack->Map(0, nullptr, reinterpret_cast<void**>(&pSADReadbackBufferData));
-      if (hr != S_OK)
-      {
-        env->ThrowError(
-          "MAnalyse: Error spSADReadBack->Map"
-        );
-      }
-
-      // make reading
-      // scatter to 'out' structure of MAnalyse output
-      int16_t* pSrcSADs = pSADReadbackBufferData;
-      int* piDstSAD = (int*)pDst;
-
-      // skip group's size
-      piDstSAD++;
-
-      // skip validity : 1 in that case
-      piDstSAD++;
-
-      piDstSAD++; // +1 in search_mv_slice
-
-      piDstSAD += 2; // SAD part
-
-      if (optSearchOption == 5)
-      {
-        for (int h = 0; h < iNumBlocksY; ++h)
+        // Signal and increment the fence value.
+        const UINT64 fence_SADCopyBack = m_fenceValue;
+        hr = m_commandQueueGraphics->Signal(m_fence.Get(), fence_SADCopyBack);
+        if (hr != S_OK)
         {
-          for (int w = 0; w < iNumBlocksX; ++w)
-          {
-            piDstSAD[0] = (int)pSrcSADs[w];
-
-            piDstSAD += 3;
-          }
-          pSrcSADs += iSADRowPitch / 2; // pitch in bytes ?
+          env->ThrowError(
+            "MAnalyse: Error m_commandQueue->Signal fence_SADCopyBack"
+          );
         }
-      }
-      else // if == 6
-      {
 
-      }
+        m_fenceValue++;
 
-      // unmap finally
-      spSADReadBack->Unmap(0, NULL);
+        // Wait until the previous frame is finished.
+        if (m_fence->GetCompletedValue() < fence_SADCopyBack)
+        {
+          hr = m_fence->SetEventOnCompletion(fence_SADCopyBack, m_fenceEventCopyBack);
+          if (hr != S_OK)
+          {
+            env->ThrowError(
+              "MAnalyse: Error m_fence->SetEventOnCompletion -> EventCopyBack SAD"
+            );
+          }
+          WaitForSingleObject(m_fenceEventCopyBack, INFINITE);
+        }
+
+        //      int16_t* pSADReadbackBufferData{};
+
+        hr = spSADReadBack->Map(0, nullptr, reinterpret_cast<void**>(&pSADReadbackBufferData));
+        if (hr != S_OK)
+        {
+          env->ThrowError(
+            "MAnalyse: Error spSADReadBack->Map"
+          );
+        }
+
+        // make reading
+        // scatter to 'out' structure of MAnalyse output
+        int16_t* pSrcSADs = pSADReadbackBufferData;
+        int* piDstSAD = (int*)pDst;
+
+        // skip group's size
+        piDstSAD++;
+
+        // skip validity : 1 in that case
+        piDstSAD++;
+
+        piDstSAD++; // +1 in search_mv_slice
+
+        piDstSAD += 2; // SAD part
+
+        if (optSearchOption == 5)
+        {
+          for (int h = 0; h < iNumBlocksY; ++h)
+          {
+            for (int w = 0; w < iNumBlocksX; ++w)
+            {
+              piDstSAD[0] = (int)pSrcSADs[w];
+
+              piDstSAD += 3;
+            }
+            pSrcSADs += iSADRowPitch / 2; // pitch in bytes ?
+          }
+        }
+        else // if == 6
+        {
+
+        }
+
+        // unmap finally
+        spSADReadBack->Unmap(0, NULL);
+      }
  
     }
 #endif
 
-    if ((optSearchOption != 5) && (optSearchOption != 6)) // do not call search from PlaneofBlocks - all done with DX12
+    if (((optSearchOption != 5) || (srd._analysis_data.nPel != 1)) && (optSearchOption != 6) ) // do not call search from PlaneofBlocks if nPel=1 - all done with DX12
     {
       _vectorfields_aptr->SearchMVs(
         pSrcGOF, pRefGOF,

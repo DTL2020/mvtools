@@ -101,9 +101,17 @@ void FakePlaneOfBlocks::Update(const int *array)
 bool FakePlaneOfBlocks::IsSceneChange(sad_t nTh1, int nTh2) const
 {
   int sum = 0;
-  for (int i = 0; i < nBlkCount; i++)
-    //    sum += ( blocks[i].GetSAD() > nTh1 ) ? 1 : 0;
-    sum += (pMVsArray[i].sad > nTh1) ? 1 : 0;
+
+  if (bnMVsArrayOnly) // for faster MDegrain
+  {
+    for (int i = 0; i < nBlkCount; i++)
+      sum += (pMVsArray[i].sad > nTh1) ? 1 : 0; // only used in MDegrain ?
+  }
+  else
+  {
+    for (int i = 0; i < nBlkCount; i++)
+      sum += ( blocks[i].GetSAD() > nTh1 ) ? 1 : 0;
+  }
 
   return ( sum > nTh2 );
 }
