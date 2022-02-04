@@ -219,7 +219,7 @@ MVAnalyse::MVAnalyse(
       iNumFrameResources = 2 * df + 1; // number of frames to operate in the accelerator's pool
     }
 
-    Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize, chroma, analysisData.chromaSADScale, scaleCSADfine, _multi_flag);
+    Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize, chroma, analysisData.chromaSADScale, scaleCSADfine, _multi_flag, nSuperPel);
   }
 
   iUploadedCurrentFrameNum = -1; // is it non-existent frame num ?
@@ -1046,7 +1046,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
             pSrcMVs += iRowPitch / 2; // pitch in bytes ?
           }
         }
-/*        else if (srd._analysis_data.nPel == 2)
+        else if (srd._analysis_data.nPel == 2)
         {
           for (int h = 0; h < iNumBlocksY; ++h)
           {
@@ -1060,7 +1060,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
             pSrcMVs += iRowPitch / 2; // pitch in bytes ?
           }
         }
-        else
+/*        else
         {
           for (int h = 0; h < iNumBlocksY; ++h)
           {
@@ -1147,7 +1147,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
       spResolvedMotionVectorsReadBack->Unmap(0, NULL);
 
-      if (srd._analysis_data.nPel == 1)
+      if ((srd._analysis_data.nPel == 1) || (srd._analysis_data.nPel == 2))
       {
         // calc SADs using loaded resources and D3D12 compute shader
         m_computeAllocator->Reset();
@@ -1292,7 +1292,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
     }
 #endif
 
-    if (((optSearchOption != 5) || (srd._analysis_data.nPel != 1)) && (optSearchOption != 6) ) // do not call search from PlaneofBlocks if nPel=1 - all done with DX12
+    if (((optSearchOption != 5) || (srd._analysis_data.nPel != 1) || (srd._analysis_data.nPel != 2)) && (optSearchOption != 6) ) // do not call search from PlaneofBlocks if nPel=1 - all done with DX12
     {
       _vectorfields_aptr->SearchMVs(
         pSrcGOF, pRefGOF,
@@ -1494,7 +1494,7 @@ void MVAnalyse::GetHardwareAdapter(
   *ppAdapter = adapter.Detach();
 }
 
-void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize, bool bChroma, int iChromaSADScale, float scaleCSADfine, bool bMulti)
+void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize, bool bChroma, int iChromaSADScale, float scaleCSADfine, bool bMulti, int _nPel)
 {
   // check for hardware D3D12 motion estimator support and init
   UINT dxgiFactoryFlags = 0;
@@ -2162,6 +2162,49 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     // effective_chromaSADscale -= chromaSADscale;
     pCBsadCSparams->chromaSADscale = 0 - iChromaSADScale;
     pCBsadCSparams->chromaSADscale_fine = scaleCSADfine;
+    pCBsadCSparams->nPel = _nPel;
+    pCBsadCSparams->iPadding0 = 0;
+
+    // kernel sub2
+    float fPi = 3.14159265f;
+    float fKrn[12];
+    for (int x = -6; x < 7; x++)
+    {
+      fKrn[x + 6] = fSinc((float(x) / 2) * fPi);
+    }
+
+    float fNorm = 0.0f;
+/*    for (int x = -6; x < 7; x++)
+    {
+      fNorm += fKrn[x + 6];
+    }
+    
+    for (int x = -6; x < 7; x++)
+    {
+      fKrn[x + 6] /= fNorm;
+    }
+    */
+    float fKrn_pel2[5];
+    fKrn_pel2[0] = fKrn[5];// k(2+1/2)
+    fKrn_pel2[1] = fKrn[3];// k(1+1/2)
+    fKrn_pel2[2] = fKrn[1];// k(0+1/2)
+    fKrn_pel2[3] = fKrn[1];// k(0-1/2)=k(0+1/2)
+    fKrn_pel2[4] = fKrn[3];// k(1-1/2)=k(1+1/2)
+
+    for (int x = 0; x < 5; x++)
+    {
+      fNorm += fKrn_pel2[x];
+    }
+
+    for (int x = 0; x < 5; x++)
+    {
+      fKrn_pel2[x] /= fNorm;
+    }
+
+    pCBsadCSparams->fKernel_sub2[0] = fKrn_pel2[0]; // K0 = k(2+(1/2))
+    pCBsadCSparams->fKernel_sub2[1] = fKrn_pel2[1]; // K1 = k(1+(1/2)) = k(0-1/2)
+    pCBsadCSparams->fKernel_sub2[2] = fKrn_pel2[2]; // K2 = k(0+(1/2)) = k(-1-1/2)
+
 
     if (optSearchOption == 5)
     {
