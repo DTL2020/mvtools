@@ -28,7 +28,7 @@
 #include <stdint.h>
 #include "def.h"
 
-
+#define SHIFTKERNELSIZE 8
 
 class MVPlane
 {
@@ -146,6 +146,32 @@ private:
 
   SlicerReduce	_slicer_reduce;
   MVPlane *		_redp_ptr;			// The plane where the reduction is rendered.
+
+  // 2.7.46
+  int iHShiftedStride;
+  int iHVShiftedStride;
+
+  float* pBlockShiftH;
+  uint8_t* puiBlockShiftHV; // 8bit samples
+  uint16_t* pusBlockShiftHV; // 16bit samples
+  float* pfBlockShiftHV; // float samples
+
+  float fSinc(float x);
+  void CalcShiftKernel(float* fKernel, float fPelShift);
+
+  float fKernelSh_01[SHIFTKERNELSIZE];
+  float fKernelSh_10[SHIFTKERNELSIZE];
+  float fKernelSh_11[SHIFTKERNELSIZE];
+    
+  void SubShiftBlock_C(const unsigned char* pSrc, const unsigned char* pDst, float* fKernelH, float* fKernelV);
+
+  typedef void (*SubShiftFncPtr) (
+    const unsigned char* pSrc, const unsigned char* pDst,
+    float* fKernelH, float* fKernelV
+    );
+
+  SubShiftFncPtr	_sub_shift_ptr;
+
 };
 
 template <int NPELL2>

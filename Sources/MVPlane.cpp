@@ -69,6 +69,7 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
 {
   bool _isse = !!(cpuFlags & CPUF_SSE2);
   bool hasSSE41 = !!(cpuFlags & CPUF_SSE4_1);
+  bool hasAVX2 = !!(cpuFlags & CPUF_AVX2);
 
   if (pixelsize == 1) {
     _bilin_hor_ptr = _isse ? HorizontalBilin_sse2<uint8_t> : HorizontalBilin<uint8_t>;
