@@ -1060,7 +1060,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
             pSrcMVs += iRowPitch / 2; // pitch in bytes ?
           }
         }
-/*        else
+        else
         {
           for (int h = 0; h < iNumBlocksY; ++h)
           {
@@ -1074,14 +1074,14 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
             pSrcMVs += iRowPitch / 2; // pitch in bytes ?
           }
         }
-        */
+        
       }
       else // if == 6
       {
 
       }
-
-      if (srd._analysis_data.nPel != 1) // pel = 2 or pel = 4
+      /*
+      if ((srd._analysis_data.nPel != 1) && (srd._analysis_data.nPel != 2)) // pel = 2 or pel = 4
       {
         // copy to 'vectors' structure of plane 0 for sad calc only
         PlaneOfBlocks* pob = _vectorfields_aptr->GetPlane(0);
@@ -1146,9 +1146,10 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       }
 
       spResolvedMotionVectorsReadBack->Unmap(0, NULL);
+      */
 
-      if ((srd._analysis_data.nPel == 1) || (srd._analysis_data.nPel == 2))
-      {
+//      if ((srd._analysis_data.nPel == 1) || (srd._analysis_data.nPel == 2) ) // all pels now
+//      {
         // calc SADs using loaded resources and D3D12 compute shader
         m_computeAllocator->Reset();
         m_computeCommandList->Reset(m_computeAllocator.Get(), m_computePSO.Get());
@@ -1287,12 +1288,12 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
         // unmap finally
         spSADReadBack->Unmap(0, NULL);
-      }
+//      } // if pel ==1 or pel ==2
  
     }
 #endif
 
-    if (((optSearchOption != 5) || (srd._analysis_data.nPel != 1) || (srd._analysis_data.nPel != 2)) && (optSearchOption != 6) ) // do not call search from PlaneofBlocks if nPel=1 - all done with DX12
+    if (((optSearchOption != 5) /*|| (srd._analysis_data.nPel != 1) || (srd._analysis_data.nPel != 2)*/) && (optSearchOption != 6) ) // do not call search from PlaneofBlocks if nPel=1 - all done with DX12
     {
       _vectorfields_aptr->SearchMVs(
         pSrcGOF, pRefGOF,
@@ -1304,8 +1305,8 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
     }
 
     // compare shader SAD with MAnalyse SAD
-    /*
-    if ((optSearchOption == 5) || (optSearchOption == 6))
+    
+/*    if ((optSearchOption == 5) || (optSearchOption == 6))
     {
       int16_t* pSrcSADs = pSADReadbackBufferData;
       int* piDstSAD = (int*)pDst;
@@ -1346,7 +1347,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       {
 
       }
-
+      
       // unmap finally
       spSADReadBack->Unmap(0, NULL);
     }
@@ -1978,7 +1979,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     }
 
 
-    const uint32_t s_numShaderThreads = 8;		// make sure to update value in shader if this changes
+    const uint32_t s_numShaderThreads = 4;		// make sure to update value in shader if this changes
 
   m_ThreadGroupX = static_cast<uint32_t>(texDesc.Width) / s_numShaderThreads;
   m_ThreadGroupY = texDesc.Height / s_numShaderThreads;
@@ -2163,47 +2164,44 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     pCBsadCSparams->chromaSADscale = 0 - iChromaSADScale;
     pCBsadCSparams->chromaSADscale_fine = scaleCSADfine;
     pCBsadCSparams->nPel = _nPel;
-    pCBsadCSparams->iPadding0 = 0;
+    pCBsadCSparams->iKernelSize = SHIFTKERNELSIZE;
 
-    // kernel sub2
-    float fPi = 3.14159265f;
-    float fKrn[12];
-    for (int x = -6; x < 7; x++)
-    {
-      fKrn[x + 6] = fSinc((float(x) / 2) * fPi);
-    }
+    float fKrn[8]; // max 8
+    // shift 0.25f 10
+    CalcShiftKernel(fKrn, 0.25f, SHIFTKERNELSIZE);
 
-    float fNorm = 0.0f;
-/*    for (int x = -6; x < 7; x++)
-    {
-      fNorm += fKrn[x + 6];
-    }
-    
-    for (int x = -6; x < 7; x++)
-    {
-      fKrn[x + 6] /= fNorm;
-    }
-    */
-    float fKrn_pel2[5];
-    fKrn_pel2[0] = fKrn[5];// k(2+1/2)
-    fKrn_pel2[1] = fKrn[3];// k(1+1/2)
-    fKrn_pel2[2] = fKrn[1];// k(0+1/2)
-    fKrn_pel2[3] = fKrn[1];// k(0-1/2)=k(0+1/2)
-    fKrn_pel2[4] = fKrn[3];// k(1-1/2)=k(1+1/2)
+    pCBsadCSparams->fKernelShift_01_0[0] = fKrn[0];
+    pCBsadCSparams->fKernelShift_01_0[1] = fKrn[1];
+    pCBsadCSparams->fKernelShift_01_0[2] = fKrn[2];
+    pCBsadCSparams->fKernelShift_01_0[3] = fKrn[3];
+    pCBsadCSparams->fKernelShift_01_1[0] = fKrn[4];
+    pCBsadCSparams->fKernelShift_01_1[1] = fKrn[5];
+    pCBsadCSparams->fKernelShift_01_1[2] = fKrn[6];
+    pCBsadCSparams->fKernelShift_01_1[3] = fKrn[7];
 
-    for (int x = 0; x < 5; x++)
-    {
-      fNorm += fKrn_pel2[x];
-    }
+    // shift 0.5f 10
+    CalcShiftKernel(fKrn, 0.5f, SHIFTKERNELSIZE);
 
-    for (int x = 0; x < 5; x++)
-    {
-      fKrn_pel2[x] /= fNorm;
-    }
+    pCBsadCSparams->fKernelShift_10_0[0] = fKrn[0];
+    pCBsadCSparams->fKernelShift_10_0[1] = fKrn[1];
+    pCBsadCSparams->fKernelShift_10_0[2] = fKrn[2];
+    pCBsadCSparams->fKernelShift_10_0[3] = fKrn[3];
+    pCBsadCSparams->fKernelShift_10_1[0] = fKrn[4];
+    pCBsadCSparams->fKernelShift_10_1[1] = fKrn[5];
+    pCBsadCSparams->fKernelShift_10_1[2] = fKrn[6];
+    pCBsadCSparams->fKernelShift_10_1[3] = fKrn[7];
 
-    pCBsadCSparams->fKernel_sub2[0] = fKrn_pel2[0]; // K0 = k(2+(1/2))
-    pCBsadCSparams->fKernel_sub2[1] = fKrn_pel2[1]; // K1 = k(1+(1/2)) = k(0-1/2)
-    pCBsadCSparams->fKernel_sub2[2] = fKrn_pel2[2]; // K2 = k(0+(1/2)) = k(-1-1/2)
+    // shift 0.75f 11
+    CalcShiftKernel(fKrn, 0.75f, SHIFTKERNELSIZE);
+
+    pCBsadCSparams->fKernelShift_11_0[0] = fKrn[0];
+    pCBsadCSparams->fKernelShift_11_0[1] = fKrn[1];
+    pCBsadCSparams->fKernelShift_11_0[2] = fKrn[2];
+    pCBsadCSparams->fKernelShift_11_0[3] = fKrn[3];
+    pCBsadCSparams->fKernelShift_11_1[0] = fKrn[4];
+    pCBsadCSparams->fKernelShift_11_1[1] = fKrn[5];
+    pCBsadCSparams->fKernelShift_11_1[2] = fKrn[6];
+    pCBsadCSparams->fKernelShift_11_1[3] = fKrn[7];
 
 
     if (optSearchOption == 5)
@@ -2326,6 +2324,33 @@ void MVAnalyse::LoadNV12(MVGroupOfFrames* pGOF, bool bChroma, int& iWidth, int& 
 
   }
 
+}
+
+void MVAnalyse::CalcShiftKernel(float* fKernel, float fPelShift, int iKS)
+{
+  float fPi = 3.14159265f;
+  int iKS_d2 = iKS / 2;
+
+  for (int i = 0; i < iKS; i++)
+  {
+    float fArg = (float)(i - iKS_d2) * fPi + fPelShift;
+    fKernel[i] = fSinc(fArg);
+
+    // Lanczos weighting
+    float fArgLz = (float)(i - iKS_d2) * fPi / (float)(iKS_d2);
+    fKernel[i] *= fSinc(fArgLz);;
+  }
+
+  float fSum = 0.0f;
+  for (int i = 0; i < iKS; i++)
+  {
+    fSum += fKernel[i];
+  }
+
+  for (int i = 0; i < iKS; i++)
+  {
+    fKernel[i] /= fSum;
+  }
 }
 
 
