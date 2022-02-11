@@ -156,7 +156,6 @@ private:
   uint16_t* pusBlockShiftHV; // 16bit samples
   float* pfBlockShiftHV; // float samples
 
-  float fSinc(float x);
   void CalcShiftKernel(float* fKernel, float fPelShift);
 
   float fKernelSh_01[SHIFTKERNELSIZE];

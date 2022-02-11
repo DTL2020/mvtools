@@ -625,7 +625,9 @@ MDegrainN::MDegrainN(
   PClip child, PClip super, PClip mvmulti, int trad,
   sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
-  sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV, IScriptEnvironment* env_ptr
+  sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
+  float MVLPFCutoff, float MVLPFSlope,
+  IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
   , MVFilter(mvmulti, "MDegrainN", env_ptr, 1, 0)
@@ -672,6 +674,8 @@ MDegrainN::MDegrainN(
   , fadjSADzeromv(adjSADzeromv)
   , fadjSADcohmv(adjSADcohmv)
   , ithCohMV(thCohMV) // need to scale to pel value ?
+  , fMVLPFCutoff(MVLPFCutoff)
+  , fMVLPFSlope(MVLPFSlope)
 {
   has_at_least_v8 = true;
   try { env_ptr->CheckVersion(8); }
@@ -964,6 +968,33 @@ MDegrainN::MDegrainN(
     use_block_y_func = &MDegrainN::use_block_y;
     use_block_uv_func = &MDegrainN::use_block_uv;
   }
+
+  // calculate MV LPF filter kernel (from fMVLPFCutoff and (in future) fMVLPFSlope params)
+  // for interlaced field-based content the +-0.5 V shift should be added after filtering ?
+  float fPi = 3.14159265f;
+  int iKS_d2 = MVLPFKERNELSIZE / 2;
+
+  for (int i = 0; i < MVLPFKERNELSIZE; i++)
+  {
+    float fArg = (float)(i - iKS_d2) * fPi * fMVLPFCutoff;
+    fMVLPFKernel[i] = fSinc(fArg);
+
+    // Lanczos weighting
+    float fArgLz = (float)(i - iKS_d2) * fPi / (float)(iKS_d2);
+    fMVLPFKernel[i] *= fSinc(fArgLz);;
+  }
+
+  float fSum = 0.0f;
+  for (int i = 0; i < MVLPFKERNELSIZE; i++)
+  {
+    fSum += fMVLPFKernel[i];
+  }
+
+  for (int i = 0; i < MVLPFKERNELSIZE; i++)
+  {
+    fMVLPFKernel[i] /= fSum;
+  }
+
 }
 
 
@@ -2725,4 +2756,16 @@ void MDegrainN::CreateFrameWeightsArr(void)
     }	// for bx
   }	// for by
 }
+
+float MDegrainN::fSinc(float x)
+{
+  x = fabsf(x);
+
+  if (x > 0.000001f)
+  {
+    return sinf(x) / x;
+  }
+  else return 1.0f;
+}
+
 

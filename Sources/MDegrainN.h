@@ -19,6 +19,7 @@
 #include	<vector>
 
 #define CACHE_LINE_SIZE 64
+#define MVLPFKERNELSIZE 11 // 10+1 odd number, 10 - just some medium number relative to typical tr and allow to have some variance in slope
 
 class MVPlane;
 
@@ -36,7 +37,9 @@ public:
     sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
     sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
     sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow,
-    float adjSADzeromv, float adjSADcohmv, int thCohMV, ::IScriptEnvironment* env_ptr
+    float adjSADzeromv, float adjSADcohmv, int thCohMV,
+    float fMVLPFCutoff, float fMVLPFSlope,
+    ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
 
@@ -214,9 +217,16 @@ private:
   uint16_t* pui16SoftWeightsArr;
   uint16_t* pui16WeightsFrameArr;
   const VECTOR* pMVsPlanesArrays[MAX_TEMP_RAD * 2];
+
   float fadjSADzeromv;
   float fadjSADcohmv;
   int ithCohMV;
+
+  float fMVLPFCutoff;
+  float fMVLPFSlope;
+  float fMVLPFKernel[MVLPFKERNELSIZE];// 10+1 odd numbered
+
+  float fSinc(float x);
 
   std::unique_ptr <YUY2Planes> _dst_planes;
   std::unique_ptr <YUY2Planes> _src_planes;
