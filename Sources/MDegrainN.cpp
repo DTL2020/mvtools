@@ -981,7 +981,7 @@ MDegrainN::MDegrainN(
 
     // Lanczos weighting
     float fArgLz = (float)(i - iKS_d2) * fPi / (float)(iKS_d2);
-    fMVLPFKernel[i] *= fSinc(fArgLz);;
+    fMVLPFKernel[i] *= fSinc(fArgLz);
   }
 
   float fSum = 0.0f;
@@ -1004,6 +1004,15 @@ MDegrainN::~MDegrainN()
   // Nothing
   delete pui16SoftWeightsArr;
   delete pui16WeightsFrameArr;
+  for (int k = 0; k < _trad * 2; ++k)
+  {
+#ifdef _WIN32
+    VirtualFree((LPVOID)pFilteredMVsPlanesArrays_a[k], 0, MEM_FREE);
+#else
+    delete pFilteredMVsPlanesArrays_a[k];
+#endif
+  }
+
 }
 
 static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *srcp, int srcpitch, int width, int height)
@@ -1198,6 +1207,32 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
   {
     pMVsPlanesArrays[k] = _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0);
   }
+
+  // allocate filtered MVs arrays
+  for (int k = 0; k < _trad * 2; ++k)
+  {
+    uint8_t* pTmp_a;
+    VECTOR* pTmp;
+#ifdef _WIN32
+    // to prevent cache set overloading when accessing fpob MVs arrays - add random L2L3_CACHE_LINE_SIZE-bytes sized offset to different allocations
+    size_t random = rand();
+    random *= RAND_OFFSET_MAX;
+    random /= RAND_MAX;
+    random *= L2L3_CACHE_LINE_SIZE;
+
+    SIZE_T stSizeToAlloc = nBlkCount * sizeof(VECTOR) + RAND_OFFSET_MAX * L2L3_CACHE_LINE_SIZE;
+
+    pTmp_a = (BYTE*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+    pFilteredMVsPlanesArrays_a[k] = pTmp_a;
+    pTmp = (VECTOR*)(pTmp_a + random);
+#else
+    pTmp = new VECTOR[nBlkCount]; // allocate in heap ?
+    pFilteredMVsPlanesArrays_a[k] = pTmp;
+#endif
+    pFilteredMVsPlanesArrays[k] = pTmp;
+
+  }
+
 
   PROFILE_START(MOTION_PROFILE_COMPENSATION);
 
@@ -1594,6 +1629,11 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
   const int rowsize = nBlkSizeY;
   BYTE *pDstCur = _dst_ptr_arr[0] + td._y_beg * rowsize * _dst_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
   const BYTE *pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
+  
+  if (fMVLPFCutoff < 1.0f)
+  {
+    FilterMVs();
+  }
 
   for (int by = td._y_beg; by < td._y_end; ++by)
   {
@@ -1663,21 +1703,42 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
         */
       for (int k = 0; k < _trad * 2; ++k)
       {
-        (this->*use_block_y_func)(
-          ref_data_ptr_arr[k],
-          pitch_arr[k],
-          weight_arr[k + 1],
-          _usable_flag_arr[k],
-          _mv_clip_arr[k],
-          i,
-          _planes_ptr[k][0],
-          pSrcCur,
-          xx << pixelsize_super_shift,
-          _src_pitch_arr[0],
-          bx,
-          by,
-          pMVsPlanesArrays[k]
-        );
+        if (fMVLPFCutoff == 1.0f)
+        {
+          (this->*use_block_y_func)(
+            ref_data_ptr_arr[k],
+            pitch_arr[k],
+            weight_arr[k + 1],
+            _usable_flag_arr[k],
+            _mv_clip_arr[k],
+            i,
+            _planes_ptr[k][0],
+            pSrcCur,
+            xx << pixelsize_super_shift,
+            _src_pitch_arr[0],
+            bx,
+            by,
+            pMVsPlanesArrays[k]
+            );
+        }
+        else
+        {
+          (this->*use_block_y_func)(
+            ref_data_ptr_arr[k],
+            pitch_arr[k],
+            weight_arr[k + 1],
+            _usable_flag_arr[k],
+            _mv_clip_arr[k],
+            i,
+            _planes_ptr[k][0],
+            pSrcCur,
+            xx << pixelsize_super_shift,
+            _src_pitch_arr[0],
+            bx,
+            by,
+            (const VECTOR*)pFilteredMVsPlanesArrays[k]
+            );
+        }
       }
 
       norm_weights(weight_arr, _trad);
@@ -2768,4 +2829,103 @@ float MDegrainN::fSinc(float x)
   else return 1.0f;
 }
 
+void MDegrainN::FilterMVs(void)
+{
+  VECTOR currMV;
+  float fZeroMV_th = 1 * nPel;
+  
+  int badvectors_idx[MAX_TEMP_RAD * 2];
+  VECTOR badvectors[MAX_TEMP_RAD * 2]; // store
+
+  VECTOR filteredp2fvectors[(MAX_TEMP_RAD * 2) + 1];
+
+  VECTOR p2fvectors[(MAX_TEMP_RAD * 2) + 1];
+
+  for (int by = 0; by < nBlkY; by++)
+  {
+    for (int bx = 0; bx < nBlkX; bx++)
+    {
+      int i = by * nBlkX + bx;
+      int iBadvectors_num = 0;
+
+      for (int k = 0; k < _trad * 2; ++k)
+      {
+        currMV = pMVsPlanesArrays[k][i];
+        if (currMV.sad > _mv_clip_arr[k]._thsad) 
+        {
+          badvectors[k] = currMV;
+          badvectors_idx[k] = k;
+          iBadvectors_num++;
+        }
+      }
+
+      if (iBadvectors_num != 0) // to do: try interpolate bad vectors if there are many (>50% ?) good
+      {
+//        if (iBadvectors_num > _trad) // most vectors are not useful
+//        {
+          for (int k = 0; k < _trad * 2; ++k)
+          {
+            currMV = pMVsPlanesArrays[k][i];
+            pFilteredMVsPlanesArrays[k][i] = currMV;
+          }
+          continue; // next block
+//        }
+      }
+
+      // convert +1, -1, +2, -2, +3, -3 ... to
+      // -3, -2, -1, 0, +1, +2, +3 timed sequence
+      for (int k = 0; k < _trad; ++k)
+      {
+        p2fvectors[k] = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
+      }
+
+      p2fvectors[_trad].x = 0;
+      p2fvectors[_trad].y = 0;
+      p2fvectors[_trad].sad = 0;
+
+      for (int k = 1; k < _trad; ++k)
+      {
+        p2fvectors[k + _trad] = pMVsPlanesArrays[(k-1) * 2][i];
+      }
+
+      // perform lpf of all good vectors in tr-scope
+      for (int pos = 0; pos < (_trad * 2 + 1); pos++)
+      {
+        float fSumX = 0.0f;
+        float fSumY = 0.0f;
+        for (int kpos = 0; kpos < MVLPFKERNELSIZE; kpos++)
+        {
+          int src_pos = pos + kpos - MVLPFKERNELSIZE / 2;
+          if (src_pos < 0) src_pos = 0;
+          if (src_pos > _trad * 2) src_pos = (_trad * 2); // total valid samples in vector of VECTORs is _trad*2+1
+          fSumX += p2fvectors[src_pos].x * fMVLPFKernel[kpos];
+          fSumY += p2fvectors[src_pos].y * fMVLPFKernel[kpos];
+        }
+
+        filteredp2fvectors[pos].x = (int)fSumX;
+        filteredp2fvectors[pos].y = (int)fSumY;
+        filteredp2fvectors[pos].sad = p2fvectors[pos].sad;
+      }
+
+      // re-check sad ?
+
+      // final copy output
+      for (int k = 0; k < _trad; ++k)
+      {
+        pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = filteredp2fvectors[k];
+      }
+
+      p2fvectors[_trad].x = 0;
+      p2fvectors[_trad].y = 0;
+      p2fvectors[_trad].sad = 0;
+
+      for (int k = 1; k <= _trad; ++k)
+      {
+        pFilteredMVsPlanesArrays[(k-1) * 2][i] = p2fvectors[k + _trad];
+      }
+
+    } // bx
+  } // by
+
+}
 
