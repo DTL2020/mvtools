@@ -1673,10 +1673,21 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
 
       if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
       {
-        for (int k = 0; k < _trad * 2; ++k)
+        if (fMVLPFCutoff == 1.0f)
         {
-          const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
-          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
+          for (int k = 0; k < _trad * 2; ++k)
+          {
+            const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+            _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
+          }
+        }
+        else
+        {
+          for (int k = 0; k < _trad * 2; ++k)
+          {
+            const VECTOR* pMVsArrayPref = pFilteredMVsPlanesArrays[k];
+            _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
+          }
         }
       }
 /*
@@ -2914,10 +2925,6 @@ void MDegrainN::FilterMVs(void)
       {
         pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = filteredp2fvectors[k];
       }
-
-      p2fvectors[_trad].x = 0;
-      p2fvectors[_trad].y = 0;
-      p2fvectors[_trad].sad = 0;
 
       for (int k = 1; k <= _trad; ++k)
       {
