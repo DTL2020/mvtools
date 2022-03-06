@@ -48,7 +48,8 @@ MVAnalyse::MVAnalyse(
   int _overlapx, int _overlapy, const char* _outfilename, int _dctmode,
   int _divide, int _sadx264, sad_t _badSAD, int _badrange, bool _isse,
   bool _meander, bool temporal_flag, bool _tryMany, bool multi_flag,
-  bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType, float _scaleCSADfine, IScriptEnvironment* env
+  bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType,
+  float _scaleCSADfine, int _accnum, IScriptEnvironment* env
 )
   : ::GenericVideoFilter(_child)
   , _srd_arr(1)
@@ -219,7 +220,7 @@ MVAnalyse::MVAnalyse(
       iNumFrameResources = 2 * df + 1; // number of frames to operate in the accelerator's pool
     }
 
-    Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize, chroma, analysisData.chromaSADScale, scaleCSADfine, _multi_flag, nSuperPel);
+    Init_DX12_ME(env, analysisData.nWidth, analysisData.nHeight, iBlkSize, chroma, analysisData.chromaSADScale, scaleCSADfine, _multi_flag, nSuperPel, _accnum);
   }
 
   iUploadedCurrentFrameNum = -1; // is it non-existent frame num ?
@@ -1433,7 +1434,8 @@ void	MVAnalyse::load_src_frame(MVGroupOfFrames &gof, ::PVideoFrame &src, const M
 void MVAnalyse::GetHardwareAdapter(
   IDXGIFactory1* pFactory,
   IDXGIAdapter1** ppAdapter,
-  bool requestHighPerformanceAdapter)
+  bool requestHighPerformanceAdapter,
+  int iAdapterNum)
 {
   *ppAdapter = nullptr;
 
@@ -1442,6 +1444,8 @@ void MVAnalyse::GetHardwareAdapter(
   ComPtr<IDXGIFactory6> factory6;
   if (SUCCEEDED(pFactory->QueryInterface(IID_PPV_ARGS(&factory6))))
   {
+    int iFoundAdapter = 0;
+
     for (
       UINT adapterIndex = 0;
       SUCCEEDED(factory6->EnumAdapterByGpuPreference(
@@ -1449,28 +1453,31 @@ void MVAnalyse::GetHardwareAdapter(
         requestHighPerformanceAdapter == true ? DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE : DXGI_GPU_PREFERENCE_UNSPECIFIED,
         IID_PPV_ARGS(&adapter)));
       ++adapterIndex)
-    {
-      DXGI_ADAPTER_DESC1 desc;
-      adapter->GetDesc1(&desc);
-
-      if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
       {
-        // Don't select the Basic Render Driver adapter.
-        // If you want a software adapter, pass in "/warp" on the command line.
-        continue;
-      }
+        DXGI_ADAPTER_DESC1 desc;
+        adapter->GetDesc1(&desc);
 
-      // Check to see whether the adapter supports Direct3D 12, but don't create the
-      // actual device yet.
-      if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr)))
-      {
-        break;
+        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
+        {
+          // Don't select the Basic Render Driver adapter.
+          continue;
+        }
+
+        // Check to see whether the adapter supports Direct3D 12, but don't create the
+        // actual device yet.
+        if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr)))
+        {
+          if (iFoundAdapter == iAdapterNum)
+            break;
+          iFoundAdapter++;
+        }
       }
-    }
   }
 
   if (adapter.Get() == nullptr)
   {
+    int iFoundAdapter = 0;
+
     for (UINT adapterIndex = 0; SUCCEEDED(pFactory->EnumAdapters1(adapterIndex, &adapter)); ++adapterIndex)
     {
       DXGI_ADAPTER_DESC1 desc;
@@ -1479,7 +1486,6 @@ void MVAnalyse::GetHardwareAdapter(
       if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
       {
         // Don't select the Basic Render Driver adapter.
-        // If you want a software adapter, pass in "/warp" on the command line.
         continue;
       }
 
@@ -1487,7 +1493,9 @@ void MVAnalyse::GetHardwareAdapter(
       // actual device yet.
       if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr)))
       {
-        break;
+        if (iFoundAdapter == iAdapterNum)
+          break;
+        iFoundAdapter++;
       }
     }
   }
@@ -1495,11 +1503,17 @@ void MVAnalyse::GetHardwareAdapter(
   *ppAdapter = adapter.Detach();
 }
 
-void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize, bool bChroma, int iChromaSADScale, float scaleCSADfine, bool bMulti, int _nPel)
+void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize, bool bChroma, int iChromaSADScale, float scaleCSADfine, bool bMulti, int _nPel, int iAccNum)
 {
   // check for hardware D3D12 motion estimator support and init
   UINT dxgiFactoryFlags = 0;
   HRESULT hr;
+
+  int iHWNodeIndex = 0;
+  if (iAccNum > 0)
+  {
+    iHWNodeIndex = 1 << iAccNum; // is it correct ?? 0 = 1 adapter, mask=10b is 2nd adapter ???
+  }
 
   if (optSearchOption == 6)
   {
@@ -1532,7 +1546,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     );
   }
 
-  GetHardwareAdapter(factory.Get(), &hardwareAdapter);
+  GetHardwareAdapter(factory.Get(), &hardwareAdapter, true, iAccNum);
 
   if (hardwareAdapter == NULL)
   {
@@ -1558,6 +1572,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   D3D12_COMMAND_QUEUE_DESC queueDescVideo = {};
   queueDescVideo.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
   queueDescVideo.Type = D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE;
+  queueDescVideo.NodeMask = iHWNodeIndex;
 
   hr = m_D3D12device->CreateCommandQueue(&queueDescVideo, IID_PPV_ARGS(&m_commandQueueVideo));
 
@@ -1572,6 +1587,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   D3D12_COMMAND_QUEUE_DESC queueDescGraphics = {};
   queueDescGraphics.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
   queueDescGraphics.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+  queueDescGraphics.NodeMask = iHWNodeIndex;
 
   hr = m_D3D12device->CreateCommandQueue(&queueDescGraphics, IID_PPV_ARGS(&m_commandQueueGraphics));
   if (hr != S_OK)
@@ -1637,7 +1653,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     }
 
   D3D12_VIDEO_MOTION_ESTIMATOR_DESC motionEstimatorDesc = {
-  0, //NodeIndex
+  iHWNodeIndex, //NodeIndex
   DXGI_FORMAT_NV12,
   ME_BlockSize,
   D3D12_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_QUARTER_PEL,
@@ -1657,7 +1673,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   }
 
   D3D12_VIDEO_MOTION_VECTOR_HEAP_DESC MotionVectorHeapDesc = {
-  0, // NodeIndex 
+  iHWNodeIndex, // NodeIndex 
   DXGI_FORMAT_NV12,
   ME_BlockSize,
   D3D12_VIDEO_MOTION_ESTIMATOR_VECTOR_PRECISION_QUARTER_PEL,
@@ -1890,7 +1906,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   }
 
   hr = m_D3D12device->CreateCommandList(
-    0,
+    iHWNodeIndex,
     D3D12_COMMAND_LIST_TYPE_VIDEO_ENCODE,
     m_commandAllocatorVideo.Get(),
     NULL,
@@ -1906,7 +1922,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
 
   m_VideoEncodeCommandList->Close();
 
-  hr = m_D3D12device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocatorGraphics.Get(), 0, IID_PPV_ARGS(&m_GraphicsCommandList));
+  hr = m_D3D12device->CreateCommandList(iHWNodeIndex, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocatorGraphics.Get(), 0, IID_PPV_ARGS(&m_GraphicsCommandList));
   if (hr != S_OK)
   {
     env->ThrowError(
@@ -1950,14 +1966,20 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   };
   
   {
-    m_samplerDescriptorHeap = std::make_unique<DescriptorHeap>(m_D3D12device.Get(),
+    const D3D12_DESCRIPTOR_HEAP_DESC samplerDescriptorHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER , 1, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, iHWNodeIndex};
+
+  /*  m_samplerDescriptorHeap = std::make_unique<DescriptorHeap>(m_D3D12device.Get(),
       D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
       D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-      1);
+      1); */
+    m_samplerDescriptorHeap = std::make_unique<DescriptorHeap>(m_D3D12device.Get(), &samplerDescriptorHeapDesc);
     m_D3D12device->CreateSampler(s_samplerType, m_samplerDescriptorHeap->GetCpuHandle(0));
   }
 
-  m_SRVDescriptorHeap = std::make_unique<DescriptorHeap>(m_D3D12device.Get(), e_iHeapEnd);
+  const D3D12_DESCRIPTOR_HEAP_DESC SRV_DescriptorHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, e_iHeapEnd, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, iHWNodeIndex};
+
+//  m_SRVDescriptorHeap = std::make_unique<DescriptorHeap>(m_D3D12device.Get(), e_iHeapEnd);
+  m_SRVDescriptorHeap = std::make_unique<DescriptorHeap>(m_D3D12device.Get(), &SRV_DescriptorHeapDesc);
 
   // create SAD texture and views
   const D3D12_HEAP_PROPERTIES defaultHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
@@ -1974,7 +1996,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     if (hr != S_OK)
     {
       env->ThrowError(
-        "MAnalyse: Error CreateCommandList -> D3D12_COMMAND_LIST_TYPE_DIRECT"
+        "MAnalyse: Error CreateCommitedResource -> m_SADTexture"
       );
     }
 
@@ -2061,7 +2083,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
 
     // Create the root signature
     hr = m_D3D12device->CreateRootSignature(
-        0,
+        iHWNodeIndex,
         serializedSignature->GetBufferPointer(),
         serializedSignature->GetBufferSize(),
         IID_PPV_ARGS(&m_computeRootSignature));
@@ -2079,6 +2101,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   descComputePSO.pRootSignature = m_computeRootSignature.Get();
   descComputePSO.CS.pShaderBytecode = computeShaderBlob.data();
   descComputePSO.CS.BytecodeLength = computeShaderBlob.size();
+  descComputePSO.NodeMask = iHWNodeIndex;
 
   hr = m_D3D12device->CreateComputePipelineState(&descComputePSO, IID_PPV_ARGS(&m_computePSO));
   if (hr != S_OK)
@@ -2089,7 +2112,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   }
 
   // Create compute allocator, command queue and command list
-  D3D12_COMMAND_QUEUE_DESC descCommandQueue = { D3D12_COMMAND_LIST_TYPE_COMPUTE, 0, D3D12_COMMAND_QUEUE_FLAG_NONE };
+  D3D12_COMMAND_QUEUE_DESC descCommandQueue = { D3D12_COMMAND_LIST_TYPE_COMPUTE, 0, D3D12_COMMAND_QUEUE_FLAG_NONE, iHWNodeIndex };
   hr = m_D3D12device->CreateCommandQueue(&descCommandQueue, IID_PPV_ARGS(&m_computeCommandQueue));
   if (hr != S_OK)
   {
@@ -2107,7 +2130,7 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
   }
 
   hr = m_D3D12device->CreateCommandList(
-    0,
+    iHWNodeIndex,
     D3D12_COMMAND_LIST_TYPE_COMPUTE,
     m_computeAllocator.Get(),
     m_computePSO.Get(),

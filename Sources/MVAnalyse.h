@@ -147,7 +147,8 @@ public:
     int _overlapx, int _overlapy, const char* _outfilename, int _dctmode,
     int _divide, int _sadx264, sad_t _badSAD, int _badrange, bool _isse,
     bool _meander, bool temporal_flag, bool _tryMany, bool multi_flag,
-    bool mt_flag, int _chromaSADScale, int _optSearchOption, int _predictorType, float _scaleCSADfine, IScriptEnvironment* env);
+    bool mt_flag, int _chromaSADScale, int _optSearchOption, int _predictorType,
+    float _scaleCSADfine, int _accnum, IScriptEnvironment* env);
   ~MVAnalyse();
 
   ::PVideoFrame __stdcall	GetFrame(int n, ::IScriptEnvironment* env) override;
@@ -292,9 +293,11 @@ private:
   void GetHardwareAdapter(
     _In_ IDXGIFactory1* pFactory,
     _Outptr_result_maybenull_ IDXGIAdapter1** ppAdapter,
-    bool requestHighPerformanceAdapter = false);
+    bool requestHighPerformanceAdapter = false, // better true ?
+    int iAdapterNum = 0
+    ); 
 
-  void Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize, bool bChroma, int iChromaSADScale, float scaleCSADfine, bool bMulti, int _nPel);
+  void Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize, bool bChroma, int iChromaSADScale, float scaleCSADfine, bool bMulti, int _nPel, int iAccNum);
 
   float fSinc(float x)
   {
