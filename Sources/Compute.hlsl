@@ -150,7 +150,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
   case 2:
 
     // if any half shift required - fill kernel
-    if ((((i2MV.r >> 1) && 1) == 1) || (((i2MV.g >> 1) && 1) == 1))
+    if ((((i2MV.r >> 1) & 1) == 1) || (((i2MV.g >> 1) & 1) == 1))
     {
       // fill kernel vector with half pel shift kernel
       fKernelShift[0] = g_KernelShift_10_0.x;
@@ -164,7 +164,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
     }
 
     // check if half shifts required
-    if (((i2MV.r >> 1) && 1) == 1) // h half sub != 0
+    if (((i2MV.r >> 1) & 1) == 1) // h half sub != 0
     {
       // shift ref block to TempShiftedBlockH, Y plane
       // hor shift
@@ -202,7 +202,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
     }
 
-    if (((i2MV.g >> 1) && 1) == 1) // v half sub != 0
+    if (((i2MV.g >> 1) & 1) == 1) // v half sub != 0
     {
       // V shift ref block from fTempShiftedBlockH to fTempShiftedBlockHV, Y plane
       for (int i = 0; i < g_BlockSizeX; i++)
@@ -257,7 +257,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
     {
 
       // check if half shifts required
-      if (((i2MV.r >> 1) && 1) == 1) // h half sub != 0
+      if (((i2MV.r >> 1) & 1) == 1) // h half sub != 0
       {
         // shift ref block to TempShiftedBlockH, UV plane
         // hor shift
@@ -303,7 +303,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
       }
 
-      if (((i2MV.g >> 1) && 1) == 1) // v half sub != 0
+      if (((i2MV.g >> 1) & 1) == 1) // v half sub != 0
       {
 
         // V shift ref block from TempShiftedBlockY to iTempShiftedBlockY2, Y plane
@@ -382,10 +382,10 @@ void main(uint3 DTid : SV_DispatchThreadID)
   case 4: // nPel = 4
 
     // check if sub shifts required
-    if ((i2MV.r && 3) != 0 ) // h sub != 0
+    if ((i2MV.r & 3) != 0 ) // h sub != 0
     {
       //load required shift kernel
-      switch ((i2MV.r && 3))
+      switch (i2MV.r & 3)
       {
       case 1:
         fKernelShift[0] = g_KernelShift_01_0.x;
@@ -455,9 +455,9 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
     }
 
-    if ((i2MV.g && 3) != 0) // v sub != 0
+    if ((i2MV.g & 3) != 0) // v sub != 0
     {
-      switch ((i2MV.g && 3))
+      switch (i2MV.g & 3)
       {
       case 1:
         fKernelShift[0] = g_KernelShift_01_0.x;
@@ -542,10 +542,10 @@ void main(uint3 DTid : SV_DispatchThreadID)
     if (g_UseChroma != 0) // chroma SAD
     {
       // check if half shifts required
-      if ((i2MV.r && 3) != 0) // h sub != 0
+      if ((i2MV.r & 3) != 0) // h sub != 0
       {
         //load required shift kernel
-        switch ((i2MV.r && 3))
+        switch (i2MV.r & 3)
         {
         case 1:
           fKernelShift[0] = g_KernelShift_01_0.x;
@@ -623,10 +623,10 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
       }
 
-      if ((i2MV.g && 3) != 0) // v sub != 0
+      if ((i2MV.g & 3) != 0) // v sub != 0
       {
         //load required shift kernel
-        switch ((i2MV.g && 3))
+        switch (i2MV.g & 3)
         {
         case 1:
           fKernelShift[0] = g_KernelShift_01_0.x;
