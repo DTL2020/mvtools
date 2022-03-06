@@ -68,10 +68,10 @@ void main(uint3 DTid : SV_DispatchThreadID)
   i2MV_fp.r = i2MV.r >> 2; 
   i2MV_fp.g = i2MV.g >> 2;
 
-	int iYsrc;
-	int iYref;
-	int2 iUVsrc;
-	int2 iUVref;
+	int iYsrc = 0;
+	int iYref = 0;
+  int2 iUVsrc = 0;
+	int2 iUVref = int2(0, 0);
 
   float fYref = 0.0f;
   float fSAD = 0.0f; // for pel > 1 sum
