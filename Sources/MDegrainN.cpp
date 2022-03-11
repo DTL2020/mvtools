@@ -626,7 +626,7 @@ MDegrainN::MDegrainN(
   sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
   sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
-  float MVLPFCutoff, float MVLPFSlope,
+  float MVLPFCutoff, float MVLPFSlope, int UseSubShift,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -676,6 +676,7 @@ MDegrainN::MDegrainN(
   , ithCohMV(thCohMV) // need to scale to pel value ?
   , fMVLPFCutoff(MVLPFCutoff)
   , fMVLPFSlope(MVLPFSlope)
+  , nUseSubShift(UseSubShift)
 {
   has_at_least_v8 = true;
   try { env_ptr->CheckVersion(8); }
@@ -2486,9 +2487,15 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
      if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
      if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;
     
-
-    p = plane_ptr->GetPointer(blx, bly);
-    np = plane_ptr->GetPitch();
+     if (nPel != 1 && nUseSubShift != 0)
+     {
+       p = plane_ptr->GetPointerSubShift(blx, bly, nBlkSizeX, nBlkSizeY, np);
+     }
+     else
+     {
+       p = plane_ptr->GetPointer(blx, bly);
+       np = plane_ptr->GetPitch();
+     }
     sad_t block_sad = pMVsArray[i].sad;
 
     wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
@@ -2518,9 +2525,19 @@ MV_FORCEINLINE void	MDegrainN::use_block_y_thSADzeromv_thSADcohmv(
     if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
     if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;
 
+//    p = plane_ptr->GetPointer(blx, bly);
+//    np = plane_ptr->GetPitch();
+    if (nPel != 1 && nUseSubShift != 0)
+    {
+      p = plane_ptr->GetPointerSubShift(blx, bly, nBlkSizeX, nBlkSizeY, np);
+    }
+    else
+    {
+      p = plane_ptr->GetPointer(blx, bly);
+      np = plane_ptr->GetPitch();
+    }
 
-    p = plane_ptr->GetPointer(blx, bly);
-    np = plane_ptr->GetPitch();
+
     sad_t block_sad = pMVsArray[i].sad;
 
     // pull SAD at static areas 
@@ -2588,8 +2605,18 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv(
      if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
      if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;
      
-    p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
-    np = plane_ptr->GetPitch();
+//    p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
+//    np = plane_ptr->GetPitch();
+     if (nPel != 1 && nUseSubShift != 0)
+     {
+       p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, nBlkSizeX, nBlkSizeY, np);
+     }
+     else
+     {
+       p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
+       np = plane_ptr->GetPitch();
+     }
+
     sad_t block_sad = pMVsArray[i].sad;
 
     wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
@@ -2619,8 +2646,18 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv_thSADzeromv_thSADcohmv(
     if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
     if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;
 
-    p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
-    np = plane_ptr->GetPitch();
+//    p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
+//    np = plane_ptr->GetPitch();
+    if (nPel != 1 && nUseSubShift != 0)
+    {
+      p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, nBlkSizeX, nBlkSizeY, np);
+    }
+    else
+    {
+      p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
+      np = plane_ptr->GetPitch();
+    }
+
     sad_t block_sad = pMVsArray[i].sad;
 
     // pull SAD at static areas 

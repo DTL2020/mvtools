@@ -72,7 +72,9 @@ public:
     return GetAbsolutePointerPel <NPELL2>(nX + nHPaddingPel, nY + nVPaddingPel);
   }
 
-
+  // 2.7.46
+  const uint8_t* GetPointerSubShift(int nX, int nY, int iBlockSizeX, int iBlockSizeY, int& nDstPitch)const;
+ 
   MV_FORCEINLINE int GetPitch() const { return nPitch; }
   MV_FORCEINLINE int GetWidth() const { return nWidth; }
   MV_FORCEINLINE int GetHeight() const { return nHeight; }
@@ -83,6 +85,10 @@ public:
   MV_FORCEINLINE void ResetState() { isRefined = isFilled = isPadded = false; }
 
 private:
+
+  bool _isse;
+  bool hasSSE41;
+  bool hasAVX2;
 
   typedef	MTFlowGraphSched <MVPlane, MTFlowGraphSimple <16>, MVPlane, 16>	SchedulerRefine;
   typedef	MTSlicer <MVPlane>	SlicerReduce;
@@ -128,7 +134,10 @@ private:
    bool isRefined;
    bool isFilled;
 
-  InterpFncPtr	_bilin_hor_ptr;
+   uint8_t* pShiftedBlockBuf;
+   uint8_t* pShiftedBlockBuf_a;
+
+   InterpFncPtr	_bilin_hor_ptr;
   InterpFncPtr	_bilin_ver_ptr;
   InterpFncPtr	_bilin_dia_ptr;
   InterpFncPtr	_bicubic_hor_ptr;
@@ -148,25 +157,26 @@ private:
   MVPlane *		_redp_ptr;			// The plane where the reduction is rendered.
 
   // 2.7.46
-  int iHShiftedStride;
-  int iHVShiftedStride;
 
-  float* pBlockShiftH;
-  uint8_t* puiBlockShiftHV; // 8bit samples
-  uint16_t* pusBlockShiftHV; // 16bit samples
-  float* pfBlockShiftHV; // float samples
+  MV_FORCEINLINE float fSinc(float x)
+  {
+    x = fabsf(x);
 
-  void CalcShiftKernel(float* fKernel, float fPelShift);
+    if (x > 0.000001f)
+    {
+      return sinf(x) / x;
+    }
+    else return 1.0f;
+  }
+
+  void CalcShiftKernel(float* fKernel, float fPelShift, int iKS);
 
   float fKernelSh_01[SHIFTKERNELSIZE];
   float fKernelSh_10[SHIFTKERNELSIZE];
   float fKernelSh_11[SHIFTKERNELSIZE];
-    
-  void SubShiftBlock_C(const unsigned char* pSrc, const unsigned char* pDst, float* fKernelH, float* fKernelV);
 
   typedef void (*SubShiftFncPtr) (
-    const unsigned char* pSrc, const unsigned char* pDst,
-    float* fKernelH, float* fKernelV
+    unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS
     );
 
   SubShiftFncPtr	_sub_shift_ptr;

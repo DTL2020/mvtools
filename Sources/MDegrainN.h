@@ -38,7 +38,7 @@ public:
     sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
     sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow,
     float adjSADzeromv, float adjSADcohmv, int thCohMV,
-    float fMVLPFCutoff, float fMVLPFSlope,
+    float fMVLPFCutoff, float fMVLPFSlope, int UseSubShift,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -229,6 +229,7 @@ private:
   float fMVLPFKernel[MVLPFKERNELSIZE];// 10+1 odd numbered
   VECTOR* pFilteredMVsPlanesArrays[MAX_TEMP_RAD * 2];
   const uint8_t* pFilteredMVsPlanesArrays_a[MAX_TEMP_RAD * 2]; // pointers to aligned memory pages to free
+  int nUseSubShift;
 
   float fSinc(float x);
 

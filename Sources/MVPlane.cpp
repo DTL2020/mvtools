@@ -36,6 +36,7 @@ boundaries.
 #include "Interpolation.h"
 #include "MVPlane.h"
 #include "Padding.h"
+#include "MVInterface.h"
 #include <stdint.h>
 #include <commonfunctions.h>
 
@@ -67,9 +68,9 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
   , _slicer_reduce(mt_flag)
   , _redp_ptr(0)
 {
-  bool _isse = !!(cpuFlags & CPUF_SSE2);
-  bool hasSSE41 = !!(cpuFlags & CPUF_SSE4_1);
-  bool hasAVX2 = !!(cpuFlags & CPUF_AVX2);
+  _isse = !!(cpuFlags & CPUF_SSE2);
+  hasSSE41 = !!(cpuFlags & CPUF_SSE4_1);
+  hasAVX2 = !!(cpuFlags & CPUF_AVX2);
 
   if (pixelsize == 1) {
     _bilin_hor_ptr = _isse ? HorizontalBilin_sse2<uint8_t> : HorizontalBilin<uint8_t>;
@@ -81,6 +82,9 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
     _wiener_ver_ptr = _isse ? VerticalWiener_sse2<uint8_t, false> : VerticalWiener<uint8_t>;
     _average_ptr = _isse ? Average2_sse2<uint8_t> : Average2<uint8_t>;
     _reduce_ptr = &RB2BilinearFiltered<uint8_t>;
+
+//    if (blocksizeH == 8 && blocksizeV == 8 ) ?? need to pass blksize H,V to constructor ?
+      _sub_shift_ptr = SubShiftBlock_C<uint8_t>;
   }
   else if (pixelsize == 2) {
     _bilin_hor_ptr = _isse ? HorizontalBilin_sse2<uint16_t> : HorizontalBilin<uint16_t>;
@@ -92,6 +96,8 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
     _wiener_ver_ptr = _isse ? (hasSSE41 ? VerticalWiener_sse2<uint16_t, 1> : VerticalWiener_sse2<uint16_t, false>) : VerticalWiener<uint16_t>;
     _average_ptr = _isse ? Average2_sse2<uint16_t> : Average2<uint16_t>;
     _reduce_ptr = &RB2BilinearFiltered<uint16_t>;
+
+    _sub_shift_ptr = SubShiftBlock_C<uint16_t>;
   }
   else {
     _bilin_hor_ptr = HorizontalBilin<float>;
@@ -103,8 +109,32 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
     _wiener_ver_ptr = VerticalWiener<float>;
     _average_ptr = Average2<float>;
     _reduce_ptr = &RB2BilinearFiltered<float>;
+
+    _sub_shift_ptr = SubShiftBlock_C<float>;
   }
   // Nothing
+
+  // 2.7.46
+  // prepare subshift kernels
+  CalcShiftKernel(fKernelSh_01, 0.25f, SHIFTKERNELSIZE);
+  CalcShiftKernel(fKernelSh_10, 0.5f, SHIFTKERNELSIZE);
+  CalcShiftKernel(fKernelSh_11, 0.75f, SHIFTKERNELSIZE);
+
+//  _sub_shift_ptr = SubShiftBlock_C<uint8_t>;
+#ifdef _WIN32
+ // to prevent cache set overloading when accessing fpob MVs arrays - add random L2L3_CACHE_LINE_SIZE-bytes sized offset to different allocations
+  size_t random = rand();
+  random *= RAND_OFFSET_MAX;
+  random /= RAND_MAX;
+  random *= L2L3_CACHE_LINE_SIZE;
+
+  SIZE_T stSizeToAlloc = (pixelsize * (64*64))+ RAND_OFFSET_MAX * L2L3_CACHE_LINE_SIZE; // 64x64 - max block size ??
+
+  pShiftedBlockBuf_a = (uint8_t*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+  pShiftedBlockBuf = (uint8_t*)(pShiftedBlockBuf_a + random);
+#else
+  pShiftedBlockBuf = new uint8_t[pixelsize * (64 * 64)]; // allocate in heap ?
+#endif
 }
 
 
@@ -113,6 +143,12 @@ MVPlane::~MVPlane()
 {
   delete[] pPlane;
   pPlane = 0;
+
+#ifdef _WIN32
+  VirtualFree(pShiftedBlockBuf_a, 0, MEM_RELEASE);
+#else
+  delete[] pShiftedBlockBuf;
+#endif
 }
 
 
@@ -534,4 +570,114 @@ void MVPlane::reduce_slice(SlicerReduce::TaskData &td)
     red.nWidth, red.nHeight, td._y_beg, td._y_end,
     cpuFlags
   );
+}
+
+void MVPlane::CalcShiftKernel(float* fKernel, float fPelShift, int iKS)
+{
+  float fPi = 3.14159265f;
+  int iKS_d2 = iKS / 2;
+
+  for (int i = 0; i < iKS; i++)
+  {
+    float fArg = (float)(i - iKS_d2) * fPi + fPelShift;
+    fKernel[i] = fSinc(fArg);
+
+    // Lanczos weighting
+    float fArgLz = (float)(i - iKS_d2) * fPi / (float)(iKS_d2);
+    fKernel[i] *= fSinc(fArgLz);;
+  }
+
+  float fSum = 0.0f;
+  for (int i = 0; i < iKS; i++)
+  {
+    fSum += fKernel[i];
+  }
+
+  for (int i = 0; i < iKS; i++)
+  {
+    fKernel[i] /= fSum;
+  }
+}
+
+const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int iBlockSizeY, int& pDstPitch) const
+{
+  int NPELL2 = nPel >> 1;
+
+  int nfullX = nX + nHPaddingPel;
+  int nfullY = nY + nVPaddingPel;
+
+  int iMASK = (1 << NPELL2) - 1;
+
+  int i_dx = (nfullX & iMASK);
+  int i_dy = (nfullY & iMASK);
+
+  float* pfKrnH = 0;
+  float* pfKrnV = 0;
+
+  switch (i_dx)
+  {
+  case 0:
+    pfKrnH = 0;
+    break;
+  case 1:
+    pfKrnH = (float*)fKernelSh_01;
+    break;
+  case 2:
+    pfKrnH = (float*)fKernelSh_10;
+    break;
+  case 3:
+    pfKrnH = (float*)fKernelSh_11;
+    break;
+  }
+
+  switch (i_dy)
+  {
+  case 0:
+    pfKrnV = 0;
+    break;
+  case 1:
+    pfKrnV = (float*)fKernelSh_01;
+    break;
+  case 2:
+    pfKrnV = (float*)fKernelSh_10;
+    break;
+  case 3:
+    pfKrnV = (float*)fKernelSh_11;
+    break;
+  }
+
+  nfullX >>= NPELL2;
+  nfullY >>= NPELL2;
+
+  uint8_t* pSrc =(uint8_t*)GetAbsolutePointerPel <0>(nfullX, nfullY);
+
+  if (i_dx == 0 && i_dy == 0) // no sub shift required
+  {
+    pDstPitch = nPitch;
+    return pSrc;
+  }
+
+  int nShiftedBufPitch = (iBlockSizeX << pixelsize_shift);
+
+  if (hasAVX2)
+  {
+    if (iBlockSizeX == 8 && iBlockSizeY == 8 && pixelsize == 1)
+    {
+      SubShiftBlock8x8_KS8_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, pfKrnH, pfKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+    }
+    else if (iBlockSizeX == 4 && iBlockSizeY == 4 && pixelsize == 1)
+    {
+      SubShiftBlock4x4_KS8_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, pfKrnH, pfKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+    }
+    else
+      _sub_shift_ptr(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, pfKrnH, pfKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+  }
+  else
+  {
+    _sub_shift_ptr(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, pfKrnH, pfKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+  }
+
+  pDstPitch = nShiftedBufPitch;
+  return pShiftedBlockBuf;
+
 }
