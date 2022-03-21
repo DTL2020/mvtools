@@ -29,6 +29,7 @@
 #include "def.h"
 
 #define SHIFTKERNELSIZE 8
+#define SHIFTKERNELSIZE_I16 4
 
 class MVPlane
 {
@@ -174,6 +175,12 @@ private:
   float fKernelSh_01[SHIFTKERNELSIZE];
   float fKernelSh_10[SHIFTKERNELSIZE];
   float fKernelSh_11[SHIFTKERNELSIZE];
+
+  void CalcShiftKernels(short* fKernel, float fPelShift, int iKS);
+
+  short sKernelSh_01[SHIFTKERNELSIZE];
+  short sKernelSh_10[SHIFTKERNELSIZE];
+  short sKernelSh_11[SHIFTKERNELSIZE];
 
   typedef void (*SubShiftFncPtr) (
     unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS

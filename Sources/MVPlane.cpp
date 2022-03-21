@@ -120,6 +120,12 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
   CalcShiftKernel(fKernelSh_10, 0.5f, SHIFTKERNELSIZE);
   CalcShiftKernel(fKernelSh_11, 0.75f, SHIFTKERNELSIZE);
 
+  // 2.7.46
+// prepare subshift kernels
+  CalcShiftKernels(sKernelSh_01, 0.25f, SHIFTKERNELSIZE_I16);
+  CalcShiftKernels(sKernelSh_10, 0.5f, SHIFTKERNELSIZE_I16);
+  CalcShiftKernels(sKernelSh_11, 0.75f, SHIFTKERNELSIZE_I16);
+
 //  _sub_shift_ptr = SubShiftBlock_C<uint8_t>;
 #ifdef _WIN32
  // to prevent cache set overloading when accessing fpob MVs arrays - add random L2L3_CACHE_LINE_SIZE-bytes sized offset to different allocations
@@ -599,6 +605,35 @@ void MVPlane::CalcShiftKernel(float* fKernel, float fPelShift, int iKS)
   }
 }
 
+void MVPlane::CalcShiftKernels(short* psKernel, float fPelShift, int iKS)
+{
+  float fPi = 3.14159265f;
+  int iKS_d2 = iKS / 2;
+  float fKernel[SHIFTKERNELSIZE];
+
+  for (int i = 0; i < iKS; i++)
+  {
+    float fArg = (float)(i - iKS_d2) * fPi + fPelShift;
+    fKernel[i] = fSinc(fArg);
+
+    // Lanczos weighting
+    float fArgLz = (float)(i - iKS_d2) * fPi / (float)(iKS_d2);
+    fKernel[i] *= fSinc(fArgLz);;
+  }
+
+  float fSum = 0.0f;
+  for (int i = 0; i < iKS; i++)
+  {
+    fSum += fKernel[i];
+  }
+
+  for (int i = 0; i < iKS; i++)
+  {
+    fKernel[i] /= fSum;
+    psKernel[i] = (short)(fKernel[i] * 255); // or 256 ??
+  }
+}
+
 const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int iBlockSizeY, int& pDstPitch) const
 {
   int NPELL2 = nPel >> 1;
@@ -614,19 +649,26 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int 
   float* pfKrnH = 0;
   float* pfKrnV = 0;
 
+  short* psKrnH = 0;
+  short* psKrnV = 0;
+
   switch (i_dx)
   {
   case 0:
     pfKrnH = 0;
+    psKrnH = 0;
     break;
   case 1:
     pfKrnH = (float*)fKernelSh_01;
+    psKrnH = (short*)sKernelSh_01;
     break;
   case 2:
     pfKrnH = (float*)fKernelSh_10;
+    psKrnH = (short*)sKernelSh_10;
     break;
   case 3:
     pfKrnH = (float*)fKernelSh_11;
+    psKrnH = (short*)sKernelSh_11;
     break;
   }
 
@@ -634,15 +676,19 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int 
   {
   case 0:
     pfKrnV = 0;
+    psKrnV = 0;
     break;
   case 1:
     pfKrnV = (float*)fKernelSh_01;
+    psKrnV = (short*)sKernelSh_01;
     break;
   case 2:
     pfKrnV = (float*)fKernelSh_10;
+    psKrnV = (short*)sKernelSh_10;
     break;
   case 3:
     pfKrnV = (float*)fKernelSh_11;
+    psKrnV = (short*)sKernelSh_11;
     break;
   }
 
@@ -663,7 +709,8 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int 
   {
     if (iBlockSizeX == 8 && iBlockSizeY == 8 && pixelsize == 1)
     {
-      SubShiftBlock8x8_KS8_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, pfKrnH, pfKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+//     SubShiftBlock8x8_KS8_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, pfKrnH, pfKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+      SubShiftBlock8x8_KS4_i16_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, (float*)psKrnH, (float*)psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE_I16);
     }
     else if (iBlockSizeX == 4 && iBlockSizeY == 4 && pixelsize == 1)
     {
