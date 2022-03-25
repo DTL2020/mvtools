@@ -43,7 +43,7 @@ int64_t ProfCumulatedResults[MOTION_PROFILE_COUNT * 2];
 MVSuper::MVSuper(
   PClip _child, int _hPad, int _vPad, int _pel, int _levels, bool _chroma,
   int _sharp, int _rfilter, PClip _pelclip, bool _isse, bool _planar,
-  bool mt_flag, IScriptEnvironment* env
+  bool mt_flag, bool _pel_refine, IScriptEnvironment* env
 )
   : GenericVideoFilter(_child)
   , pelclip(_pelclip)
@@ -70,6 +70,8 @@ MVSuper::MVSuper(
   {
     env->ThrowError("MSuper: pel has to be 1 or 2 or 4");
   }
+
+  pel_refine = _pel_refine;
 
   nHPad = _hPad;
   nVPad = _vPad;
@@ -321,7 +323,7 @@ PVideoFrame __stdcall MVSuper::GetFrame(int n, IScriptEnvironment* env)
   }
   else
   {
-    pSrcGOF->Refine(nModeYUV);
+    if (pel_refine) pSrcGOF->Refine(nModeYUV); // skip refined planes generation if using searching and degraining with internal runtime subsample shifting
   }
 
   PROFILE_STOP(MOTION_PROFILE_INTERPOLATION);

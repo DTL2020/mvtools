@@ -127,13 +127,14 @@ protected:
   bool           isPelClipPadded;
 
   bool           _mt_flag; // PF maybe 2.6.0.5
+  bool           pel_refine; // 2.7.46 - default true, generate subpel buffers for pel > 1 or not (not needed for DX12_ME and internal sub shifting in MDegrainN)
 
 public:
 
   MVSuper(
     PClip _child, int _hpad, int _vpad, int pel, int _levels, bool _chroma,
     int _sharp, int _rfilter, PClip _pelclip, bool _isse, bool _planar,
-    bool mt_flag, IScriptEnvironment* env
+    bool mt_flag, bool _pel_refine, IScriptEnvironment* env
   );
   ~MVSuper();
 
