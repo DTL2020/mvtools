@@ -182,7 +182,7 @@ private:
 
   void CreateFrameWeightsArr(void);
 
-  void FilterMVs(void);
+  void FilterMVs(const BYTE* pSrcCur);
 
   MvClipArray _mv_clip_arr;
 
@@ -230,6 +230,9 @@ private:
   float fMVLPFKernel[MVLPFKERNELSIZE];// 10+1 odd numbered
   VECTOR* pFilteredMVsPlanesArrays[MAX_TEMP_RAD * 2];
   const uint8_t* pFilteredMVsPlanesArrays_a[MAX_TEMP_RAD * 2]; // pointers to aligned memory pages to free
+  SADFunction* SAD;              /* function which computes the sad */
+  SADFunction* SADCHROMA;
+
   int nUseSubShift;
 
   float fSinc(float x);

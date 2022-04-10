@@ -10,6 +10,7 @@
 #include "MVFilter.h"
 #include "profile.h"
 #include "SuperParams64Bits.h"
+#include "SADFunctions.h"
 
 #include	<emmintrin.h>
 #include	<mmintrin.h>
@@ -881,6 +882,9 @@ MDegrainN::MDegrainN(
   else
     arch = NO_SIMD;
 
+  SAD = get_sad_function(nBlkSizeX, nBlkSizeY, bits_per_pixel, arch);
+  SADCHROMA = get_sad_function(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits_per_pixel, arch);
+
 // C only -> NO_SIMD
   _oversluma_lsb_ptr = get_overlaps_lsb_function(nBlkSizeX, nBlkSizeY, sizeof(uint8_t), NO_SIMD);
   _overschroma_lsb_ptr = get_overlaps_lsb_function(nBlkSizeX / xRatioUV_super, nBlkSizeY / yRatioUV_super, sizeof(uint8_t), NO_SIMD);
@@ -1634,7 +1638,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
   
   if (fMVLPFCutoff < 1.0f)
   {
-    FilterMVs();
+    FilterMVs(pSrcCur);
   }
 
   for (int by = td._y_beg; by < td._y_end; ++by)
@@ -2878,14 +2882,10 @@ float MDegrainN::fSinc(float x)
   else return 1.0f;
 }
 
-void MDegrainN::FilterMVs(void)
+void MDegrainN::FilterMVs(const BYTE* pSrcCur)
 {
   VECTOR currMV;
-//  float fZeroMV_th = 1 * nPel;
-//  int thLPFCorr = 1 * nPel; // user-set threshold in the future
-  
-  int badvectors_idx[MAX_TEMP_RAD * 2];
-  VECTOR badvectors[MAX_TEMP_RAD * 2]; // store
+  const int rowsize = nBlkSizeY;
 
   VECTOR filteredp2fvectors[(MAX_TEMP_RAD * 2) + 1];
 
@@ -2893,34 +2893,11 @@ void MDegrainN::FilterMVs(void)
 
   for (int by = 0; by < nBlkY; by++)
   {
+    int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
+
     for (int bx = 0; bx < nBlkX; bx++)
     {
       int i = by * nBlkX + bx;
-      int iBadvectors_num = 0;
-
-      for (int k = 0; k < _trad * 2; ++k)
-      {
-        currMV = pMVsPlanesArrays[k][i];
-        if (currMV.sad > _mv_clip_arr[k]._thsad) 
-        {
-          badvectors[k] = currMV;
-          badvectors_idx[k] = k;
-          iBadvectors_num++;
-        }
-      }
-
-      if (iBadvectors_num != 0) // to do: try interpolate bad vectors if there are many (>50% ?) good
-      {
-//        if (iBadvectors_num > _trad) // most vectors are not useful
-//        {
-          for (int k = 0; k < _trad * 2; ++k)
-          {
-            currMV = pMVsPlanesArrays[k][i];
-            pFilteredMVsPlanesArrays[k][i] = currMV;
-          }
-          continue; // next block
-//        }
-      }
 
       // convert +1, -1, +2, -2, +3, -3 ... to
       // -3, -2, -1, 0, +1, +2, +3 timed sequence
@@ -2933,9 +2910,9 @@ void MDegrainN::FilterMVs(void)
       p2fvectors[_trad].y = 0;
       p2fvectors[_trad].sad = 0;
 
-      for (int k = 1; k < _trad; ++k)
+      for (int k = 1; k < _trad + 1; ++k)
       {
-        p2fvectors[k + _trad] = pMVsPlanesArrays[(k-1) * 2][i];
+        p2fvectors[k + _trad] = pMVsPlanesArrays[(k - 1) * 2][i];
       }
 
       // perform lpf of all good vectors in tr-scope
@@ -2957,33 +2934,73 @@ void MDegrainN::FilterMVs(void)
         filteredp2fvectors[pos].sad = p2fvectors[pos].sad;
       }
 
-      // re-check sad ?
-
       // final copy output
       VECTOR vLPFed, vOrig;
 
       for (int k = 0; k < _trad; ++k)
       {
-        // if LPF correction exceeds threshold - skip it, replace with original vector
+        // recheck SAD:
         vLPFed = filteredp2fvectors[k];
+        int idx_mvto = (_trad - k - 1) * 2 + 1;
+
+        int blx = bx * (nBlkSizeX - nOverlapX) * nPel + vLPFed.x;
+        int bly = by * (nBlkSizeY - nOverlapY) * nPel + vLPFed.y;
+
+        // temp check - DX12_ME return invalid vectors sometime 
+        if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
+        if (bly < -nBlkSizeY * nPel) bly = -nBlkSizeY * nPel;
+        if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
+        if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;
+
+        if (_usable_flag_arr[idx_mvto])
+        {
+          const uint8_t* pRef = _planes_ptr[idx_mvto][0]->GetPointer(blx, bly);
+          int npitchRef = _planes_ptr[idx_mvto][0]->GetPitch();
+
+          vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
+        }
         vOrig = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
-        if (abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr && abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr)
+        if ( (abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
           pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vLPFed;
-        else
+        else // place original vector
           pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vOrig;
       }
 
-      for (int k = 1; k <= _trad; ++k)
+      for (int k = 1; k < _trad + 1; ++k)
       {
+        // recheck SAD
         vLPFed = filteredp2fvectors[k + _trad];
+        int idx_mvto = (k - 1) * 2;
+
+        int blx = bx * (nBlkSizeX - nOverlapX) * nPel + vLPFed.x;
+        int bly = by * (nBlkSizeY - nOverlapY) * nPel + vLPFed.y;
+
+        // temp check - DX12_ME return invalid vectors sometime 
+        if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
+        if (bly < -nBlkSizeY * nPel) bly = -nBlkSizeY * nPel;
+        if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
+        if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;
+
+        if (_usable_flag_arr[idx_mvto])
+        {
+          const uint8_t* pRef = _planes_ptr[idx_mvto][0]->GetPointer(blx, bly);
+          int npitchRef = _planes_ptr[idx_mvto][0]->GetPitch();
+
+          vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
+        }
         vOrig = pMVsPlanesArrays[(k - 1) * 2][i];
-        if (abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr && abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr)
+        if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
           pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vLPFed;
         else
           pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vOrig;
       }
 
+      xx += (nBlkSizeX); // xx: indexing offset
+
     } // bx
+
+    pSrcCur += rowsize * _src_pitch_arr[0];
+
   } // by
 
 }
