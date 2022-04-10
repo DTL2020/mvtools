@@ -709,8 +709,8 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int 
   {
     if (iBlockSizeX == 8 && iBlockSizeY == 8 && pixelsize == 1)
     {
-//     SubShiftBlock8x8_KS8_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, pfKrnH, pfKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
-      SubShiftBlock8x8_KS4_i16_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, (float*)psKrnH, (float*)psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE_I16);
+     SubShiftBlock8x8_KS8_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, pfKrnH, pfKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+//      SubShiftBlock8x8_KS4_i16_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, (float*)psKrnH, (float*)psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE_I16);
     }
     else if (iBlockSizeX == 4 && iBlockSizeY == 4 && pixelsize == 1)
     {

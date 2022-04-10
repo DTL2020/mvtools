@@ -626,7 +626,7 @@ MDegrainN::MDegrainN(
   sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
   sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
-  float MVLPFCutoff, float MVLPFSlope, int UseSubShift,
+  float MVLPFCutoff, float MVLPFSlope, int thMVLPFCorr, int UseSubShift,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -676,6 +676,7 @@ MDegrainN::MDegrainN(
   , ithCohMV(thCohMV) // need to scale to pel value ?
   , fMVLPFCutoff(MVLPFCutoff)
   , fMVLPFSlope(MVLPFSlope)
+  , ithMVLPFCorr(thMVLPFCorr)
   , nUseSubShift(UseSubShift)
 {
   has_at_least_v8 = true;
@@ -2880,7 +2881,8 @@ float MDegrainN::fSinc(float x)
 void MDegrainN::FilterMVs(void)
 {
   VECTOR currMV;
-  float fZeroMV_th = 1 * nPel;
+//  float fZeroMV_th = 1 * nPel;
+//  int thLPFCorr = 1 * nPel; // user-set threshold in the future
   
   int badvectors_idx[MAX_TEMP_RAD * 2];
   VECTOR badvectors[MAX_TEMP_RAD * 2]; // store
@@ -2927,7 +2929,7 @@ void MDegrainN::FilterMVs(void)
         p2fvectors[k] = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
       }
 
-      p2fvectors[_trad].x = 0;
+      p2fvectors[_trad].x = 0; // zero trad - source block itself
       p2fvectors[_trad].y = 0;
       p2fvectors[_trad].sad = 0;
 
@@ -2958,14 +2960,27 @@ void MDegrainN::FilterMVs(void)
       // re-check sad ?
 
       // final copy output
+      VECTOR vLPFed, vOrig;
+
       for (int k = 0; k < _trad; ++k)
       {
-        pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = filteredp2fvectors[k];
+        // if LPF correction exceeds threshold - skip it, replace with original vector
+        vLPFed = filteredp2fvectors[k];
+        vOrig = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
+        if (abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr && abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr)
+          pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vLPFed;
+        else
+          pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vOrig;
       }
 
       for (int k = 1; k <= _trad; ++k)
       {
-        pFilteredMVsPlanesArrays[(k-1) * 2][i] = p2fvectors[k + _trad];
+        vLPFed = filteredp2fvectors[k + _trad];
+        vOrig = pMVsPlanesArrays[(k - 1) * 2][i];
+        if (abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr && abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr)
+          pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vLPFed;
+        else
+          pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vOrig;
       }
 
     } // bx
