@@ -182,7 +182,7 @@ private:
 
   void CreateFrameWeightsArr(void);
 
-  void FilterMVs(const BYTE* pSrcCur);
+  void FilterMVs(void);
 
   MvClipArray _mv_clip_arr;
 
