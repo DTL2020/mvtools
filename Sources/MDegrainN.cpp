@@ -1001,6 +1001,32 @@ MDegrainN::MDegrainN(
     fMVLPFKernel[i] /= fSum;
   }
 
+  // allocate filtered MVs arrays
+  for (int k = 0; k < _trad * 2; ++k)
+  {
+    uint8_t* pTmp_a;
+    VECTOR* pTmp;
+#ifdef _WIN32
+    // to prevent cache set overloading when accessing fpob MVs arrays - add random L2L3_CACHE_LINE_SIZE-bytes sized offset to different allocations
+    size_t random = rand();
+    random *= RAND_OFFSET_MAX;
+    random /= RAND_MAX;
+    random *= L2L3_CACHE_LINE_SIZE;
+
+    SIZE_T stSizeToAlloc = nBlkCount * sizeof(VECTOR) + RAND_OFFSET_MAX * L2L3_CACHE_LINE_SIZE;
+
+    pTmp_a = (BYTE*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+    pFilteredMVsPlanesArrays_a[k] = pTmp_a;
+    pTmp = (VECTOR*)(pTmp_a + random);
+#else
+    pTmp = new VECTOR[nBlkCount]; // allocate in heap ?
+    pFilteredMVsPlanesArrays_a[k] = pTmp;
+#endif
+    pFilteredMVsPlanesArrays[k] = pTmp;
+
+  }
+
+
 }
 
 
@@ -1213,32 +1239,6 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
   {
     pMVsPlanesArrays[k] = _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0);
   }
-
-  // allocate filtered MVs arrays
-  for (int k = 0; k < _trad * 2; ++k)
-  {
-    uint8_t* pTmp_a;
-    VECTOR* pTmp;
-#ifdef _WIN32
-    // to prevent cache set overloading when accessing fpob MVs arrays - add random L2L3_CACHE_LINE_SIZE-bytes sized offset to different allocations
-    size_t random = rand();
-    random *= RAND_OFFSET_MAX;
-    random /= RAND_MAX;
-    random *= L2L3_CACHE_LINE_SIZE;
-
-    SIZE_T stSizeToAlloc = nBlkCount * sizeof(VECTOR) + RAND_OFFSET_MAX * L2L3_CACHE_LINE_SIZE;
-
-    pTmp_a = (BYTE*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
-    pFilteredMVsPlanesArrays_a[k] = pTmp_a;
-    pTmp = (VECTOR*)(pTmp_a + random);
-#else
-    pTmp = new VECTOR[nBlkCount]; // allocate in heap ?
-    pFilteredMVsPlanesArrays_a[k] = pTmp;
-#endif
-    pFilteredMVsPlanesArrays[k] = pTmp;
-
-  }
-
 
   //call Filter MVs here because it equal for luma and all chroma planes
 //  const BYTE* pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
@@ -2909,9 +2909,6 @@ float MDegrainN::fSinc(float x)
 
 void MDegrainN::FilterMVs(void)
 {
-  VECTOR currMV;
-  const int rowsize = nBlkSizeY;
-
   const BYTE* pSrcCur = _src_ptr_arr[0];
   const BYTE* pSrcCurU = _src_ptr_arr[1];
   const BYTE* pSrcCurV = _src_ptr_arr[2];
@@ -2994,7 +2991,7 @@ void MDegrainN::FilterMVs(void)
 
           sad_t sad_chroma = 0;
 
-          if (bChroma)
+/*          if (bChroma)
           {
             // we do not know chroma SAD scale here - assume medium of YV12 value ? better use chroma anyway to decrease same luma different colour tone bugs
             //pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
@@ -3006,10 +3003,10 @@ void MDegrainN::FilterMVs(void)
             sad_chroma = ScaleSadChroma(SADCHROMA(pSrcCurU + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1], pRefU, npitchRefU)
               + SADCHROMA(pSrcCurV + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2], pRefV, npitchRefV), 0); // 0 for YV12 ?
 
-            vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);// +sad_chroma; - looks still somwhere bug with chroma sad
+            vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef) + sad_chroma;
 
           }
-          else
+          else*/
           {
             vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
           }
@@ -3043,7 +3040,8 @@ void MDegrainN::FilterMVs(void)
 
           sad_t sad_chroma = 0;
 
-          if (bChroma)
+          //  looks still somwhere bug with chroma sad
+/*          if (bChroma)
           {
             // we do not know chroma SAD scale here - assume medium of YV12 value ? better use chroma anyway to decrease same luma different colour tone bugs
             //pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
@@ -3055,9 +3053,9 @@ void MDegrainN::FilterMVs(void)
             sad_chroma = ScaleSadChroma(SADCHROMA(pSrcCurU + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1], pRefU, npitchRefU)
               + SADCHROMA(pSrcCurV + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2], pRefV, npitchRefV), -2); // -2 for YV12 ?
 
-            vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);// +sad_chroma;  - looks still somwhere bug with chroma sad
+            vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef) +sad_chroma;
           }
-          else
+          else */
           {
             vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
           }
@@ -3074,7 +3072,7 @@ void MDegrainN::FilterMVs(void)
 
     } // bx
 
-    pSrcCur += rowsize * _src_pitch_arr[0];
+    pSrcCur += nBlkSizeX * _src_pitch_arr[0];
 
     pSrcCurU += effective_nSrcPitch;
     pSrcCurV += effective_nSrcPitch;
