@@ -627,7 +627,7 @@ MDegrainN::MDegrainN(
   sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
   sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
-  float MVLPFCutoff, float MVLPFSlope, int thMVLPFCorr, int UseSubShift,
+  float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, int UseSubShift,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -677,6 +677,7 @@ MDegrainN::MDegrainN(
   , ithCohMV(thCohMV) // need to scale to pel value ?
   , fMVLPFCutoff(MVLPFCutoff)
   , fMVLPFSlope(MVLPFSlope)
+  , fMVLPFGauss(MVLPFGauss)
   , ithMVLPFCorr(thMVLPFCorr)
   , nUseSubShift(UseSubShift)
 {
@@ -977,17 +978,33 @@ MDegrainN::MDegrainN(
 
   // calculate MV LPF filter kernel (from fMVLPFCutoff and (in future) fMVLPFSlope params)
   // for interlaced field-based content the +-0.5 V shift should be added after filtering ?
+  if (fMVLPFCutoff < 1.0f || fMVLPFGauss > 0.0f)
+    bMVsAddProc = true;
+  else
+    bMVsAddProc = false;
+
   float fPi = 3.14159265f;
   int iKS_d2 = MVLPFKERNELSIZE / 2;
 
-  for (int i = 0; i < MVLPFKERNELSIZE; i++)
+  if (fMVLPFGauss == 0.0f)
   {
-    float fArg = (float)(i - iKS_d2) * fPi * fMVLPFCutoff;
-    fMVLPFKernel[i] = fSinc(fArg);
+    for (int i = 0; i < MVLPFKERNELSIZE; i++)
+    {
+      float fArg = (float)(i - iKS_d2) * fPi * fMVLPFCutoff;
+      fMVLPFKernel[i] = fSinc(fArg);
 
-    // Lanczos weighting
-    float fArgLz = (float)(i - iKS_d2) * fPi / (float)(iKS_d2);
-    fMVLPFKernel[i] *= fSinc(fArgLz);
+      // Lanczos weighting
+      float fArgLz = (float)(i - iKS_d2) * fPi / (float)(iKS_d2);
+      fMVLPFKernel[i] *= fSinc(fArgLz);
+    }
+  }
+  else // gaussian impulse kernel
+  {
+    for (int i = 0; i < MVLPFKERNELSIZE; i++)
+    {
+      float fArg = (float)(i - iKS_d2) * fMVLPFGauss;
+      fMVLPFKernel[i] = pow(2.0, -fArg * fArg);
+    }
   }
 
   float fSum = 0.0f;
@@ -1243,7 +1260,7 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
   //call Filter MVs here because it equal for luma and all chroma planes
 //  const BYTE* pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
 
-  if (fMVLPFCutoff < 1.0f)
+  if (bMVsAddProc)
   {
     FilterMVs();
   }
@@ -1682,7 +1699,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
 
       if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
       {
-        if (fMVLPFCutoff == 1.0f)
+        if (bMVsAddProc)
         {
           for (int k = 0; k < _trad * 2; ++k)
           {
@@ -1723,7 +1740,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
         */
       for (int k = 0; k < _trad * 2; ++k)
       {
-        if (fMVLPFCutoff == 1.0f)
+        if (!bMVsAddProc)
         {
           (this->*use_block_y_func)(
             ref_data_ptr_arr[k],
@@ -2208,7 +2225,7 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
 
       for (int k = 0; k < _trad * 2; ++k)
       {
-        if (fMVLPFCutoff == 1.0f)
+        if (!bMVsAddProc)
         {
           (this->*use_block_uv_func)(
             ref_data_ptr_arr[k],
