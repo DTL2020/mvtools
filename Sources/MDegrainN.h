@@ -19,7 +19,7 @@
 #include	<vector>
 
 #define CACHE_LINE_SIZE 64
-#define MVLPFKERNELSIZE 21 // 20+1 odd number, 10 - just some medium number relative to typical tr and allow to have some variance in slope
+#define MVLPFKERNELSIZE 11 // 10+1 odd number, 10 - just some medium number relative to typical tr and allow to have some variance in slope
 
 class MVPlane;
 
