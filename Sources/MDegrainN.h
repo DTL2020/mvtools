@@ -39,6 +39,7 @@ public:
     sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow,
     float adjSADzeromv, float adjSADcohmv, int thCohMV,
     float fMVLPFCutoff, float fMVLPFSlope, float fMVLPFGauss, int thMVLPFCorr, int UseSubShift,
+    int SEBWidth,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -178,7 +179,7 @@ private:
     norm_weights(int wref_arr[], int trad);
 
   template <int blockWidth, int blockHeight>
-  void CreateSoftWeightsArr(int wref_arr[], int bx, int by, int trad);
+  void CreateBlocks2DWeightsArr(int wref_arr[], int bx, int by, int trad);
 
   void CreateFrameWeightsArr(void);
 
@@ -216,8 +217,9 @@ private:
 
   // 2.7.46
   int _wpow;
-  uint16_t* pui16SoftWeightsArr;
+  uint16_t* pui16Blocks2DWeightsArr;
   uint16_t* pui16WeightsFrameArr;
+  int iSEBWidth;
   const VECTOR* pMVsPlanesArrays[MAX_TEMP_RAD * 2];
 
   float fadjSADzeromv;

@@ -249,8 +249,9 @@ void DegrainN_sse2(
   }
 }
 
+// soft edges blending function
 template <int blockWidth, int blockHeight, int out16_type>
-void DegrainN_sse2_softweight(
+void DegrainN_sse2_SEB(
   BYTE* pDst, BYTE* pDstLsb, int nDstPitch,
   const BYTE* pSrc, int nSrcPitch,
   const BYTE* pRef[], int Pitch[],
@@ -627,7 +628,7 @@ MDegrainN::MDegrainN(
   sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
   sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
-  float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, int UseSubShift,
+  float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, int UseSubShift, int SEBWidth,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -680,6 +681,7 @@ MDegrainN::MDegrainN(
   , fMVLPFGauss(MVLPFGauss)
   , ithMVLPFCorr(thMVLPFCorr)
   , nUseSubShift(UseSubShift)
+  , iSEBWidth (SEBWidth)
 {
   has_at_least_v8 = true;
   try { env_ptr->CheckVersion(8); }
@@ -962,7 +964,7 @@ MDegrainN::MDegrainN(
       vi.pixel_type = VideoInfo::CS_YUV444P16;
   }
 
-  pui16SoftWeightsArr = new uint16_t[(_trad + 1) * 2 * (nBlkSizeX*nBlkSizeY) * pixelsize_super * sizeof(uint16_t)]; // pixelsize already set ?
+  pui16Blocks2DWeightsArr = new uint16_t[(_trad + 1) * 2 * (nBlkSizeX*nBlkSizeY) * pixelsize_super * sizeof(uint16_t)]; // pixelsize already set ?
   pui16WeightsFrameArr = new uint16_t[(_trad + 1) * 2 * nBlkX *nBlkY * sizeof(uint16_t)];
 
   if ((fadjSADzeromv != 1.0f) || (fadjSADcohmv != 1.0f))
@@ -1051,7 +1053,7 @@ MDegrainN::MDegrainN(
 MDegrainN::~MDegrainN()
 {
   // Nothing
-  delete pui16SoftWeightsArr;
+  delete pui16Blocks2DWeightsArr;
   delete pui16WeightsFrameArr;
   for (int k = 0; k < _trad * 2; ++k)
   {
@@ -1928,8 +1930,7 @@ void	MDegrainN::process_luma_normal_slice_softweight(Slicer::TaskData& td)
 
 //      norm_weights(weight_arr, _trad);
 
-      CreateSoftWeightsArr<8, 8>(weight_arr, bx, by, _trad);
-//      CreateSoftWeightsArr<8, 8>(weight_arr, _trad);
+      CreateBlocks2DWeightsArr<8, 8>(weight_arr, bx, by, _trad);
 
       // luma
 /*      _degrainluma_ptr(
@@ -1937,10 +1938,10 @@ void	MDegrainN::process_luma_normal_slice_softweight(Slicer::TaskData& td)
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
       );*/
-      DegrainN_sse2_softweight<8,8,1>(
+      DegrainN_sse2_SEB<8,8,1>(
         pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-        ref_data_ptr_arr, pitch_arr, pui16SoftWeightsArr, _trad
+        ref_data_ptr_arr, pitch_arr, pui16Blocks2DWeightsArr, _trad
       );
 
       xx += (nBlkSizeX); // xx: indexing offset
@@ -2880,7 +2881,7 @@ MV_FORCEINLINE int DegrainWeightN(int thSAD, double thSAD_pow, int blockSAD, int
 }
 
 template <int blockWidth, int blockHeight>
-void MDegrainN::CreateSoftWeightsArr(int wref_arr[], int bx, int by, int trad) // still no internal MT supported - global class pSoftWeightsArr array
+void MDegrainN::CreateBlocks2DWeightsArr(int wref_arr[], int bx, int by, int trad) // still no internal MT supported - global class pBlocks2DWeightsArr array
 {
   uint16_t* pDstWeights = pui16WeightsFrameArr + (bx + by * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
   // square hard weights at start
@@ -2889,27 +2890,12 @@ void MDegrainN::CreateSoftWeightsArr(int wref_arr[], int bx, int by, int trad) /
     {
       for (int x = 0; x < blockWidth; x++)
       {
-        *(&pui16SoftWeightsArr[0] + (uint64_t)h * (uint64_t)blockWidth + x) = pDstWeights[0];//(uint16_t)wref_arr[0];
+        *(&pui16Blocks2DWeightsArr[0] + (uint64_t)h * (uint64_t)blockWidth + x) = pDstWeights[0];//(uint16_t)wref_arr[0];
         // debug
 //        *(&pSoftWeightsArr[0] + h * blockWidth + x) = 125;
       }
     }
 
-    int iBlkSize = blockWidth * blockHeight;
-
-    uint16_t* pDst = pui16SoftWeightsArr + (uint64_t)iBlkSize * 2; // shift by 2*W0
-  for (int h = 0; h < blockHeight; ++h)
-  {
-    for (int k = 0; k < trad; ++k)
-    {
-      for (int x = 0; x < blockWidth; ++x)
-      {
-        pDst[k * 2 * blockWidth + x] = pDstWeights[k * 2 + 1];// (uint16_t)wref_arr[k * 2 + 1];
-        pDst[(k * 2 + 1) * blockWidth + x] = pDstWeights[k * 2 + 2];// (uint16_t)wref_arr[k * 2 + 2];
-      }
-    }
-    pDst += blockWidth * (uint64_t)trad * 2;
-  }
 }
 
 void MDegrainN::CreateFrameWeightsArr(void)
