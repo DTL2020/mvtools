@@ -628,7 +628,7 @@ MDegrainN::MDegrainN(
   sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
   sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
-  float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, int UseSubShift, int SEBWidth,
+  float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, int UseSubShift, int SEWBWidth,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -681,7 +681,7 @@ MDegrainN::MDegrainN(
   , fMVLPFGauss(MVLPFGauss)
   , ithMVLPFCorr(thMVLPFCorr)
   , nUseSubShift(UseSubShift)
-  , iSEBWidth (SEBWidth)
+  , iSEWBWidth (SEWBWidth)
 {
   has_at_least_v8 = true;
   try { env_ptr->CheckVersion(8); }
@@ -1295,13 +1295,23 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
     if (nOverlapX == 0 && nOverlapY == 0)
     {
       {
-//        CreateFrameWeightsArr();
-        slicer.start(
-          nBlkY,
-          *this,
-//          &MDegrainN::process_luma_normal_slice_softweight
+        if (iSEWBWidth != 0)
+        {
+          CreateFrameWeightsArr_C();
+          slicer.start(
+            nBlkY,
+            *this,
+            &MDegrainN::process_luma_normal_slice_SEWB
+          );
+        }
+        else
+        {
+          slicer.start(
+            nBlkY,
+            *this,
             &MDegrainN::process_luma_normal_slice
-        );
+          );
+        }
       }
       slicer.wait();
     }
@@ -1699,6 +1709,8 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       int pitch_arr[MAX_TEMP_RAD * 2];
       int weight_arr[1 + MAX_TEMP_RAD * 2];
 
+      PrefetchMVs(i);
+      /*
       if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
       {
         if (bMVsAddProc)
@@ -1717,7 +1729,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
             _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
           }
         }
-      }
+      }*/
 /*
       int iCacheLine = CACHE_LINE_SIZE / nBlkSizeX;
 
@@ -1838,7 +1850,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
 }
 
 
-void	MDegrainN::process_luma_normal_slice_softweight(Slicer::TaskData& td)
+void	MDegrainN::process_luma_normal_slice_SEWB(Slicer::TaskData& td)
 {
   assert(&td != 0);
 
@@ -1862,60 +1874,19 @@ void	MDegrainN::process_luma_normal_slice_softweight(Slicer::TaskData& td)
       const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
       int pitch_arr[MAX_TEMP_RAD * 2];
       int weight_arr[1 + MAX_TEMP_RAD * 2];
-//      uint16_t* pDstWeights = pui16WeightsFrameArr + (bx + by * nBlkX) * (2 * _trad + 1); // norm directly to global array
 
-      if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
-      {
-        for (int k = 0; k < _trad * 2; ++k)
-        {
-          const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
-          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
-        }
-      }
-      /*
-            int iCacheLine = CACHE_LINE_SIZE / nBlkSizeX;
+      PrefetchMVs(i);
 
-            if ((bx % iCacheLine) == 0) // try to prefetch each next cacheline ??
-            // try to prefetch set of next ref blocks
-              if (bx < nBlkX - iCacheLine)
-              {
-                for (int k = 0; k < _trad * 2; ++k)
-                {
-                  const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
-                  const int blx = (bx + iCacheLine) * (nBlkSizeX - nOverlapX) * nPel + pMVsArrayPref[i + iCacheLine].x;
-                  const int bly = by * (nBlkSizeY - nOverlapY) * nPel + pMVsArrayPref[i + iCacheLine].y;
-                  const BYTE* p = _planes_ptr[k][0]->GetPointer(blx, bly);
-                  int np = _planes_ptr[k][0]->GetPitch();
-
-                  for (int iH = 0; iH < nBlkSizeY; ++iH)
-                  {
-                    _mm_prefetch(const_cast<const CHAR*>((const char*)p + np * iH), _MM_HINT_T1);
-                  }
-                }
-              }
-              */
       for (int k = 0; k < _trad * 2; ++k)
       {
-/*        use_block_y(
-          ref_data_ptr_arr[k],
-          pitch_arr[k],
-          weight_arr[k + 1],
-          _usable_flag_arr[k],
-          _mv_clip_arr[k],
-          i,
-          _planes_ptr[k][0],
-          pSrcCur,
-          xx << pixelsize_super_shift,
-          _src_pitch_arr[0],
-          bx,
-          by,
-          pMVsPlanesArrays[k]
-        );
-    );
-        */
+        VECTOR* pMVsArray;
+        
         if (_usable_flag_arr[k])
         {
-          const VECTOR* pMVsArray = pMVsPlanesArrays[k];
+          if (!bMVsAddProc)
+            pMVsArray = (VECTOR*)pMVsPlanesArrays[k];
+          else
+            pMVsArray = pFilteredMVsPlanesArrays[k];
           const int blx = bx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
           const int bly = by * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
           ref_data_ptr_arr[k] = _planes_ptr[k][0]->GetPointer(blx, bly);
@@ -1923,26 +1894,34 @@ void	MDegrainN::process_luma_normal_slice_softweight(Slicer::TaskData& td)
         }
         else
         {
-          ref_data_ptr_arr[k] = pSrcCur + xx;
+          ref_data_ptr_arr[k] = pSrcCur + (xx << pixelsize_super_shift); 
           pitch_arr[k] = _src_pitch_arr[0];
-        }
+        } 
+      }
+     
+      // temp copy weights from global weights arr to test
+      const int nbr_frames = _trad * 2 + 1;
+      uint16_t* pDst = pui16WeightsFrameArr + (bx + by * nBlkX) * nbr_frames; // norm directly to global array
+
+      for (int k = 0; k < nbr_frames; ++k)
+      {
+
+        weight_arr[k] = pDst[k];
       }
 
-//      norm_weights(weight_arr, _trad);
-
-      CreateBlocks2DWeightsArr<8, 8>(weight_arr, bx, by, _trad);
+//      CreateBlocks2DWeightsArr<8, 8>(weight_arr, bx, by, _trad);
 
       // luma
-/*      _degrainluma_ptr(
+      _degrainluma_ptr(
         pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-      );*/
-      DegrainN_sse2_SEB<8,8,1>(
+      );
+/*      DegrainN_sse2_SEB<8,8,1>(
         pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
         ref_data_ptr_arr, pitch_arr, pui16Blocks2DWeightsArr, _trad
-      );
+      ); */
 
       xx += (nBlkSizeX); // xx: indexing offset
 
@@ -2081,6 +2060,8 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
       int pitch_arr[MAX_TEMP_RAD * 2];
       int weight_arr[1 + MAX_TEMP_RAD * 2];
 
+      PrefetchMVs(i);
+      /*
       if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
       {
         for (int k = 0; k < _trad * 2; ++k)
@@ -2089,7 +2070,7 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
           _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
         } 
       }
-
+      */
 /*      // pref next ref blocks (try each 64byte cacheline)
       if ((i % iDivCL) == 0)
       {
@@ -2898,7 +2879,7 @@ void MDegrainN::CreateBlocks2DWeightsArr(int wref_arr[], int bx, int by, int tra
 
 }
 
-void MDegrainN::CreateFrameWeightsArr(void)
+void MDegrainN::CreateFrameWeightsArr_C(void)
 {
   const int one = 1 << DEGRAIN_WEIGHT_BITS; // 8 bit, 256
   //  for (int by = td._y_beg; by < td._y_end; ++by)
@@ -2906,27 +2887,29 @@ void MDegrainN::CreateFrameWeightsArr(void)
   {
     int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
 
-    for (int bx = 0; bx < nBlkX; ++bx)
+    for (int bx = 0; bx < nBlkX; ++bx) // todo: make this SIMD
     {
       int i = by * nBlkX + bx;
 
       const int nbr_frames = _trad * 2 + 1;
       uint16_t* pDst = pui16WeightsFrameArr + (bx + by * nBlkX) * nbr_frames; // norm directly to global array
 
-      if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
-      {
-        for (int k = 0; k < _trad * 2; ++k)
-        {
-          const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
-          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
-        }
-      }
+      PrefetchMVs(i);
+
       for (int k = 0; k < _trad * 2; ++k)
       {
 
         if (_usable_flag_arr[k])
         {
-          const VECTOR* pMVsArray = pMVsPlanesArrays[k];
+          VECTOR* pMVsArray;
+          if (!bMVsAddProc)
+          {
+            pMVsArray = (VECTOR*)pMVsPlanesArrays[k];
+          }
+          else
+          {
+            pMVsArray = pFilteredMVsPlanesArrays[k];
+          }
           const sad_t block_sad = pMVsArray[i].sad;
 
           pDst[k + 1] = (uint16_t)DegrainWeightN(_mv_clip_arr[k]._thsad, _mv_clip_arr[k]._thsad_sq, block_sad, _wpow);
@@ -2936,7 +2919,7 @@ void MDegrainN::CreateFrameWeightsArr(void)
           pDst[k + 1] = 0;
         }
       }
-
+      
       pDst[0] = one;
       int wsum = 1;
       for (int k = 0; k < nbr_frames; ++k)
@@ -3146,5 +3129,28 @@ void MDegrainN::FilterMVs(void)
 
   } // by
 
+}
+
+MV_FORCEINLINE void MDegrainN::PrefetchMVs(int i)
+{
+  if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
+  {
+    if (!bMVsAddProc)
+    {
+      for (int k = 0; k < _trad * 2; ++k)
+      {
+        const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+        _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
+      }
+    }
+    else
+    {
+      for (int k = 0; k < _trad * 2; ++k)
+      {
+        const VECTOR* pMVsArrayPref = pFilteredMVsPlanesArrays[k];
+        _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
+      }
+    }
+  }
 }
 

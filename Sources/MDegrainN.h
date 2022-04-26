@@ -39,7 +39,7 @@ public:
     sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow,
     float adjSADzeromv, float adjSADcohmv, int thCohMV,
     float fMVLPFCutoff, float fMVLPFSlope, float fMVLPFGauss, int thMVLPFCorr, int UseSubShift,
-    int SEBWidth,
+    int SEWBWidth,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -129,7 +129,7 @@ private:
 
 
   void process_luma_normal_slice(Slicer::TaskData &td);
-  void process_luma_normal_slice_softweight(Slicer::TaskData& td);
+  void process_luma_normal_slice_SEWB(Slicer::TaskData& td);
   void process_luma_overlap_slice(Slicer::TaskData &td);
   void process_luma_overlap_slice(int y_beg, int y_end);
 
@@ -181,9 +181,13 @@ private:
   template <int blockWidth, int blockHeight>
   void CreateBlocks2DWeightsArr(int wref_arr[], int bx, int by, int trad);
 
-  void CreateFrameWeightsArr(void);
+  void CreateFrameWeightsArr_C(void);
+  void CreateFrameWeightsArr_SSE(void);
+  void CreateFrameWeightsArr_AVX2(void);
+  void CreateFrameWeightsArr_AVX512(void);
 
   void FilterMVs(void);
+  MV_FORCEINLINE void PrefetchMVs(int i);
 
   MvClipArray _mv_clip_arr;
 
@@ -219,7 +223,7 @@ private:
   int _wpow;
   uint16_t* pui16Blocks2DWeightsArr;
   uint16_t* pui16WeightsFrameArr;
-  int iSEBWidth;
+  int iSEWBWidth;
   const VECTOR* pMVsPlanesArrays[MAX_TEMP_RAD * 2];
 
   float fadjSADzeromv;
