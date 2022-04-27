@@ -249,9 +249,9 @@ void DegrainN_sse2(
   }
 }
 
-// soft edges blending function
+// soft edges weighting blending function
 template <int blockWidth, int blockHeight, int out16_type>
-void DegrainN_sse2_SEB(
+void DegrainN_sse2_SEWB(
   BYTE* pDst, BYTE* pDstLsb, int nDstPitch,
   const BYTE* pSrc, int nSrcPitch,
   const BYTE* pRef[], int Pitch[],
@@ -274,7 +274,7 @@ void DegrainN_sse2_SEB(
   // base 8 bit -> 8 bit
   const __m128i o = _mm_set1_epi16(128); // rounding
   
-  uint16_t* pW = pWall + (uint64_t)iBlkSize * 2; // shift by 2*W0
+  uint16_t* pW = pWall + (uint64_t)iBlkSize; // shift by size of W0 weight buff
 
   for (int h = 0; h < blockHeight; ++h)
   {
@@ -300,8 +300,8 @@ void DegrainN_sse2_SEB(
           src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2] + x));
           src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1] + x));
 
-          weight1 = _mm_loadu_si128((__m128i*)(pW + ((uint64_t)k * 2 * (uint64_t)blockWidth + x)));
-          weight2 = _mm_loadu_si128((__m128i*)(pW + (((uint64_t)k * 2 + 1) * (uint64_t)blockWidth + x))); // +x - not tested for > 8x8 blocks
+          weight1 = _mm_loadu_si128((__m128i*)(pW + ((uint64_t)k * 2 * (uint64_t)iBlkSize + x)));
+          weight2 = _mm_loadu_si128((__m128i*)(pW + (((uint64_t)k * 2 + 1) * (uint64_t)iBlkSize + x))); // +x - not tested for > 8x8 blocks
 
         }
         else { // 4-4 pixels
@@ -327,7 +327,7 @@ void DegrainN_sse2_SEB(
       }
     }
 
-    pW += blockWidth * (uint64_t)trad * 2;
+    pW += blockWidth;
 
     pDst += nDstPitch;
     pSrc += nSrcPitch;
@@ -1898,7 +1898,8 @@ void	MDegrainN::process_luma_normal_slice_SEWB(Slicer::TaskData& td)
           pitch_arr[k] = _src_pitch_arr[0];
         } 
       }
-     
+
+      /*
       // temp copy weights from global weights arr to test
       const int nbr_frames = _trad * 2 + 1;
       uint16_t* pDst = pui16WeightsFrameArr + (bx + by * nBlkX) * nbr_frames; // norm directly to global array
@@ -1908,20 +1909,22 @@ void	MDegrainN::process_luma_normal_slice_SEWB(Slicer::TaskData& td)
 
         weight_arr[k] = pDst[k];
       }
+      */
+      CreateBlocks2DWeightsArr(bx, by);
 
-//      CreateBlocks2DWeightsArr<8, 8>(weight_arr, bx, by, _trad);
-
+      /*
       // luma
       _degrainluma_ptr(
         pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
       );
-/*      DegrainN_sse2_SEB<8,8,1>(
+      */
+      DegrainN_sse2_SEWB<8,8,0>(
         pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
         ref_data_ptr_arr, pitch_arr, pui16Blocks2DWeightsArr, _trad
-      ); */
+      );
 
       xx += (nBlkSizeX); // xx: indexing offset
 
@@ -2861,21 +2864,23 @@ MV_FORCEINLINE int DegrainWeightN(int thSAD, double thSAD_pow, int blockSAD, int
 
 }
 
-template <int blockWidth, int blockHeight>
-void MDegrainN::CreateBlocks2DWeightsArr(int wref_arr[], int bx, int by, int trad) // still no internal MT supported - global class pBlocks2DWeightsArr array
+void MDegrainN::CreateBlocks2DWeightsArr(int bx, int by) // still no internal MT supported - global class pBlocks2DWeightsArr array
 {
-  uint16_t* pDstWeights = pui16WeightsFrameArr + (bx + by * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
+  uint16_t* pScalarWeights = pui16WeightsFrameArr + (bx + by * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
   // square hard weights at start
   // src zero
-    for (int h = 0; h < blockHeight; h++)
+  for (int k = 0; k < 2 * _trad + 1; ++k) // weight block counter, zero is weight of current frame' block 
+  {
+    uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k;
+    for (int h = 0; h < nBlkSizeY; h++)
     {
-      for (int x = 0; x < blockWidth; x++)
+      for (int x = 0; x < nBlkSizeX; x++)
       {
-        *(&pui16Blocks2DWeightsArr[0] + (uint64_t)h * (uint64_t)blockWidth + x) = pDstWeights[0];//(uint16_t)wref_arr[0];
-        // debug
-//        *(&pSoftWeightsArr[0] + h * blockWidth + x) = 125;
+        pDst2DWeights[x] = pScalarWeights[k];
       }
+      pDst2DWeights+=nBlkSizeX;
     }
+  }
 
 }
 

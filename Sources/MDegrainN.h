@@ -178,8 +178,7 @@ private:
   static MV_FORCEINLINE void
     norm_weights(int wref_arr[], int trad);
 
-  template <int blockWidth, int blockHeight>
-  void CreateBlocks2DWeightsArr(int wref_arr[], int bx, int by, int trad);
+  void CreateBlocks2DWeightsArr(int bx, int by);
 
   void CreateFrameWeightsArr_C(void);
   void CreateFrameWeightsArr_SSE(void);
