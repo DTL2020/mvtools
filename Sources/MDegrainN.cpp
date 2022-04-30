@@ -2882,6 +2882,94 @@ void MDegrainN::CreateBlocks2DWeightsArr(int bx, int by) // still no internal MT
     }
   }
 
+  // linear 2-weight interpolation as first approach
+  for (int k = 0; k < 2 * _trad + 1; ++k) // weight block counter, zero is weight of current frame' block 
+  {
+    int iCenterWeight = pScalarWeights[k];
+    // upper block' weight border
+    if (by != 0)
+    {
+      uint16_t* pScalarWeightsUp = pui16WeightsFrameArr + (bx + (by - 1) * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
+      int WeightUp = pScalarWeightsUp[k];
+
+      uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k;
+      for (int h = 0; h < iSEWBWidth; h++)
+      {
+        for (int x = 0; x < nBlkSizeX; x++)
+        {
+          // make proc here
+  //        pDst2DWeights[x] = pScalarWeights[k];
+        }
+        pDst2DWeights += nBlkSizeX;
+      }
+
+    }
+    // else - skip proc
+
+    // lower block' weight border
+    if (by != nBlkY)
+    {
+      uint16_t* pScalarWeightsLow = pui16WeightsFrameArr + (bx + (by + 1) * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
+      int iWeightLow = pScalarWeightsLow[k];
+
+      uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k;
+      for (int h = (nBlkSizeY - iSEWBWidth); h < nBlkSizeY; h++)
+      {
+        for (int x = 0; x < nBlkSizeX; x++)
+        {
+          // make proc here
+  //        pDst2DWeights[x] = pScalarWeights[k];
+        }
+        pDst2DWeights += nBlkSizeX;
+      }
+
+    }
+    // skip proc
+
+    // left block' weight border
+    if (bx != 0)
+    {
+      uint16_t* pScalarWeightsLeft = pui16WeightsFrameArr + ((bx - 1) + by * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
+      int iWeightLeft = pScalarWeightsLeft[k];
+        
+      uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k;
+      for (int h = 0; h < nBlkSizeY; h++) // top left and lower left corners overlap proc ?
+      {
+        for (int x = 0; x < iSEWBWidth; x++)
+        {
+          // make proc here
+  //        pDst2DWeights[x] = pScalarWeights[k];
+        }
+        pDst2DWeights += nBlkSizeX;
+      }
+
+    }
+    // skip proc
+
+    // right block' weight border
+    if (bx != nBlkX)
+    {
+      uint16_t*  pScalarWeightsRight = pui16WeightsFrameArr + ((bx + 1) + by * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
+      int iWeightRight = pScalarWeightsRight[k];
+
+      uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k;
+      for (int h = 0; h < nBlkSizeY; h++) // top left and lower left corners overlap proc ?
+      {
+        for (int x = (nBlkSizeX - iSEWBWidth); x < nBlkSizeX; x++)
+        {
+          // make proc here
+  //        pDst2DWeights[x] = pScalarWeights[k];
+        }
+        pDst2DWeights += nBlkSizeX;
+      }
+    }
+    // skip proc
+
+    // perform new re-weighting of processed borders of the width=iSEWBWidth
+
+  }
+
+
 }
 
 void MDegrainN::CreateFrameWeightsArr_C(void)
