@@ -2866,9 +2866,12 @@ MV_FORCEINLINE int DegrainWeightN(int thSAD, double thSAD_pow, int blockSAD, int
 
 void MDegrainN::CreateBlocks2DWeightsArr(int bx, int by) // still no internal MT supported - global class pBlocks2DWeightsArr array
 {
+  int iX0 = (iSEWBWidth / 2) + 1;
+  int iHalfSEWBWidth = iSEWBWidth / 2;
+
   uint16_t* pScalarWeights = pui16WeightsFrameArr + (bx + by * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
   // square hard weights at start
-  // src zero
+  // todo: make fill with inner weight only inner part of weight area of size (nBlkSizeX-2*iSEWBWidth)x(nBlkSizeY-2*2*iSEWBWidth)
   for (int k = 0; k < 2 * _trad + 1; ++k) // weight block counter, zero is weight of current frame' block 
   {
     uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k;
@@ -2881,30 +2884,36 @@ void MDegrainN::CreateBlocks2DWeightsArr(int bx, int by) // still no internal MT
       pDst2DWeights+=nBlkSizeX;
     }
   }
-
+  
   // linear 2-weight interpolation as first approach
   for (int k = 0; k < 2 * _trad + 1; ++k) // weight block counter, zero is weight of current frame' block 
   {
-    int iCenterWeight = pScalarWeights[k];
+    int iCurrBlockCenterWeight = pScalarWeights[k];
+
     // upper block' weight border
     if (by != 0)
     {
       uint16_t* pScalarWeightsUp = pui16WeightsFrameArr + (bx + (by - 1) * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
-      int WeightUp = pScalarWeightsUp[k];
+      int iWeightUp = pScalarWeightsUp[k];
+
+      // temp float arg
+      float fMulCoeff = (float)(iCurrBlockCenterWeight - iWeightUp) / (float)(iSEWBWidth + 1);
 
       uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k;
-      for (int h = 0; h < iSEWBWidth; h++)
+      for (int h = 0; h < iHalfSEWBWidth; h++)
       {
+        // here we have equal soft-weight per all samples of row, so calculate only single value per row and broadcast-save
+        // first float linear interpolation to test
+        float fRowSW = iWeightUp + fMulCoeff * (h + iX0);
+
         for (int x = 0; x < nBlkSizeX; x++)
         {
-          // make proc here
-  //        pDst2DWeights[x] = pScalarWeights[k];
+          // place broadcast here
+          pDst2DWeights[x] = (uint16_t)(fRowSW + 0.5f);
         }
         pDst2DWeights += nBlkSizeX;
       }
-
     }
-    // else - skip proc
 
     // lower block' weight border
     if (by != nBlkY)
@@ -2912,37 +2921,44 @@ void MDegrainN::CreateBlocks2DWeightsArr(int bx, int by) // still no internal MT
       uint16_t* pScalarWeightsLow = pui16WeightsFrameArr + (bx + (by + 1) * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
       int iWeightLow = pScalarWeightsLow[k];
 
-      uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k;
-      for (int h = (nBlkSizeY - iSEWBWidth); h < nBlkSizeY; h++)
+      // temp float arg
+      float fMulCoeff = (float)(iCurrBlockCenterWeight - iWeightLow) / (float)(iSEWBWidth + 1);
+
+      uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k + nBlkSizeX * (nBlkSizeY - 1); // point to start of last line
+      for (int h = 0; h < iHalfSEWBWidth; h++) // reverse step from block's bottom
       {
+        float fRowSW = iWeightLow + fMulCoeff * (h + iX0);
+
         for (int x = 0; x < nBlkSizeX; x++)
         {
-          // make proc here
-  //        pDst2DWeights[x] = pScalarWeights[k];
+          // place broadcast here
+          pDst2DWeights[x] = (uint16_t)(fRowSW + 0.5f);
         }
-        pDst2DWeights += nBlkSizeX;
+        pDst2DWeights -= nBlkSizeX; // reverse step from block's bottom
       }
-
     }
-    // skip proc
 
     // left block' weight border
     if (bx != 0)
     {
       uint16_t* pScalarWeightsLeft = pui16WeightsFrameArr + ((bx - 1) + by * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
       int iWeightLeft = pScalarWeightsLeft[k];
-        
-      uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k;
-      for (int h = 0; h < nBlkSizeY; h++) // top left and lower left corners overlap proc ?
-      {
-        for (int x = 0; x < iSEWBWidth; x++)
-        {
-          // make proc here
-  //        pDst2DWeights[x] = pScalarWeights[k];
-        }
-        pDst2DWeights += nBlkSizeX;
-      }
 
+      // temp float arg
+      float fMulCoeff = (float)(iCurrBlockCenterWeight - iWeightLeft) / (float)(iSEWBWidth + 1);
+
+      for (int x = 0; x < iHalfSEWBWidth; x++) // top left and lower left corners overlap proc in next version
+      {
+        float fColumnSW = iWeightLeft + fMulCoeff * (x + iX0);
+        uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k + x;
+
+        for (int h = 0; h < nBlkSizeY; h++)
+        {
+          // put vertical broadcast
+          *pDst2DWeights = (uint16_t)(fColumnSW + 0.5f);
+          pDst2DWeights += nBlkSizeX;
+        }
+      }
     }
     // skip proc
 
@@ -2952,23 +2968,85 @@ void MDegrainN::CreateBlocks2DWeightsArr(int bx, int by) // still no internal MT
       uint16_t*  pScalarWeightsRight = pui16WeightsFrameArr + ((bx + 1) + by * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
       int iWeightRight = pScalarWeightsRight[k];
 
-      uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k;
-      for (int h = 0; h < nBlkSizeY; h++) // top left and lower left corners overlap proc ?
+      // temp float arg
+      float fMulCoeff = (float)(iCurrBlockCenterWeight - iWeightRight) / (float)(iSEWBWidth + 1);
+
+      for (int x = 0; x < iHalfSEWBWidth; x++) // top left and lower left corners overlap proc in next version
       {
-        for (int x = (nBlkSizeX - iSEWBWidth); x < nBlkSizeX; x++)
+        float fColumnSW = iWeightRight + fMulCoeff * (x + iX0);
+        uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k + (nBlkSizeX - 1 - x); // reverse columns scan
+
+        for (int h = 0; h < nBlkSizeY; h++)
         {
-          // make proc here
-  //        pDst2DWeights[x] = pScalarWeights[k];
+          // put vertical broadcast
+          *pDst2DWeights = (uint16_t)(fColumnSW + 0.5f);
+          pDst2DWeights += nBlkSizeX;
         }
-        pDst2DWeights += nBlkSizeX;
       }
     }
-    // skip proc
-
-    // perform new re-weighting of processed borders of the width=iSEWBWidth
 
   }
 
+  // perform new re-weighting of processed borders of the width=iSEWBWidth/2
+  /*
+
+        pDst[0] = one;
+      int wsum = 1;
+      for (int k = 0; k < nbr_frames; ++k)
+      {
+        wsum += pDst[k];
+      }
+
+      // normalize weights to 256
+      int wsrc = one;
+      for (int k = 1; k < nbr_frames; ++k)
+      {
+        const int norm = pDst[k] * one / wsum;
+        pDst[k] = norm;
+        wsrc -= norm;
+      }
+      pDst[0] = wsrc;
+  */
+
+  const int one = 1 << DEGRAIN_WEIGHT_BITS; // 8 bit, 256
+  const int nbr_frames = _trad * 2 + 1;
+  const int iSizeOfWeightMask = nBlkSizeX * nBlkSizeY;
+
+  const int iLowNonProc = nBlkSizeY - iSEWBWidth / 2;
+  const int iRightNonProc = nBlkSizeX - iSEWBWidth / 2;
+  
+  // todo: make re-weight only outer part of block
+  for (int h = 0; h < nBlkSizeY; h++)
+  {
+    for (int x = 0; x < nBlkSizeX; x++)
+    {
+      // simple attempt of skip inner part of block
+//      if ((h > iHalfSEWBWidth) && (h < (iLowNonProc))) continue; //- some bug here ??
+//      if ((x > iHalfSEWBWidth) && (x < (iRightNonProc))) continue;
+
+      uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + (nBlkSizeX * h) + x;
+      uint16_t* pDst2DWeights_start = pDst2DWeights;
+      int wsum = 1;
+      for (int k = 0; k < nbr_frames; ++k) // weight block counter, zero is weight of current frame' block 
+      {
+        wsum += *pDst2DWeights;
+        pDst2DWeights += iSizeOfWeightMask;
+      }
+
+      // normalize weights to 256
+      int wsrc = one;
+      pDst2DWeights = pDst2DWeights_start + iSizeOfWeightMask;// first ref block
+      for (int k = 1; k < nbr_frames; ++k)
+      {
+        const int norm = (*pDst2DWeights) * one / wsum;
+        *pDst2DWeights = norm;
+        wsrc -= norm;
+        pDst2DWeights += iSizeOfWeightMask;
+      }
+      *pDst2DWeights_start = wsrc;
+    }
+  }
+  
 
 }
 
