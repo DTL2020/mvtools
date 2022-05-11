@@ -1029,6 +1029,9 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       // validity : 1 in that case
       piDstMVs[1] = 1;
 
+      //WriteHeaderToArray(reinterpret_cast <int*> (piDstMVs+2));
+      piDstMVs[2] = (srd._analysis_data.nBlkX * srd._analysis_data.nBlkY) * N_PER_BLOCK + 1; // nBlkCount * N_PER_BLOCK + 1 
+
       piDstMVs+=3; // +1 in search_mv_slice - size of ??
 
       if (optSearchOption == 5)
