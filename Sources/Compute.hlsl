@@ -149,19 +149,15 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
   case 2:
 
-    // if any half shift required - fill kernel
-    if ((((i2MV.r >> 1) & 1) == 1) || (((i2MV.g >> 1) & 1) == 1))
-    {
-      // fill kernel vector with half pel shift kernel
-      fKernelShift[0] = g_KernelShift_10_0.x;
-      fKernelShift[1] = g_KernelShift_10_0.y;
-      fKernelShift[2] = g_KernelShift_10_0.z;
-      fKernelShift[3] = g_KernelShift_10_0.w;
-      fKernelShift[4] = g_KernelShift_10_1.x;
-      fKernelShift[5] = g_KernelShift_10_1.y;
-      fKernelShift[6] = g_KernelShift_10_1.z;
-      fKernelShift[7] = g_KernelShift_10_1.w;
-    }
+    // fill kernel vector with half pel shift kernel
+    fKernelShift[0] = g_KernelShift_10_0.x;
+    fKernelShift[1] = g_KernelShift_10_0.y;
+    fKernelShift[2] = g_KernelShift_10_0.z;
+    fKernelShift[3] = g_KernelShift_10_0.w;
+    fKernelShift[4] = g_KernelShift_10_1.x;
+    fKernelShift[5] = g_KernelShift_10_1.y;
+    fKernelShift[6] = g_KernelShift_10_1.z;
+    fKernelShift[7] = g_KernelShift_10_1.w;
 
     // check if half shifts required
     if (((i2MV.r >> 1) & 1) == 1) // h half sub != 0
@@ -187,7 +183,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
       }
 
     }
-    else
+    else 
     {
       // copy ref to temp buf
       for (int y_sh = 0; y_sh < (g_BlockSizeY + g_KernelSize); y_sh++)
@@ -247,11 +243,11 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
         fYref = fTempShiftedBlockHV[y * g_BlockSizeX + x].r;
 
-        fSAD += abs((float)iYsrc - iYref);
+        fSAD += abs((float)iYsrc - fYref);
       }
     }
-
-    iSAD = (int)fSAD;
+    
+    iSAD = fSAD;
     
     if (g_UseChroma != 0) // chroma SAD
     {
@@ -354,7 +350,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
           fUVref = fTempShiftedBlockHV[y * iBS_X_d2 + x]; 
 
-          fChromaSAD += (abs((float)iUVsrc.r - iUVref.r) + abs((float)iUVsrc.g - iUVref.g));
+          fChromaSAD += (abs((float)iUVsrc.r - fUVref.r) + abs((float)iUVsrc.g - fUVref.g));
         }
       }
 
@@ -708,7 +704,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
           fUVref =fTempShiftedBlockHV[y * iBS_X_d2 + x];
 
-          fChromaSAD += (abs((float)iUVsrc.r - iUVref.r) + abs((float)iUVsrc.g - iUVref.g));
+          fChromaSAD += (abs((float)iUVsrc.r - fUVref.r) + abs((float)iUVsrc.g - fUVref.g));
         }
       }
 
