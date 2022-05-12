@@ -53,7 +53,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
   // temp buf in registers, numshader threads are reduced to keep temp buf of threads group (4x4) in 16384 size (recommended) ?
 	float2 fTempShiftedBlockH[(16) * (16 + 8)];// + iKS, use 16x16 max blocks ?  H shifted
   float2 fTempShiftedBlockHV[(16) * (16)];// use 16x16 max blocks ?  HV shifted
-
+   
   float fKernelShift[8];
 
 	int3 i3Coord;

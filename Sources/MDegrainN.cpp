@@ -3132,6 +3132,8 @@ void MDegrainN::FilterMVs(void)
   int effective_nSrcPitch = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _src_pitch_arr[1]; // pitch is byte granularity, from 1st chroma plane
 
   bool bChroma = (_nsupermodeyuv & UPLANE) && (_nsupermodeyuv & VPLANE); // chroma present in super clip ?
+  // scaleCSAD in the MVclip props
+  int chromaSADscale = _mv_clip_arr[0]._clip_sptr->chromaSADScale; // from 1st ?
 
   // todo: add chroma check in SAD if it present in super clip
 
@@ -3210,15 +3212,13 @@ void MDegrainN::FilterMVs(void)
 
           if (bChroma)
           {
-            // we do not know chroma SAD scale here - assume medium of YV12 value ? better use chroma anyway to decrease same luma different colour tone bugs
-            //pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
             const uint8_t* pRefU = _planes_ptr[idx_mvto][1]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
             int npitchRefU = _planes_ptr[idx_mvto][1]->GetPitch();
             const uint8_t* pRefV = _planes_ptr[idx_mvto][2]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
             int npitchRefV = _planes_ptr[idx_mvto][2]->GetPitch();
 
             sad_chroma = ScaleSadChroma(SADCHROMA(pSrcCurU + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1], pRefU, npitchRefU)
-              + SADCHROMA(pSrcCurV + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2], pRefV, npitchRefV), 0); // 0 for YV12 ?
+              + SADCHROMA(pSrcCurV + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2], pRefV, npitchRefV), chromaSADscale);
 
             sad_t luma_sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
 
@@ -3262,15 +3262,13 @@ void MDegrainN::FilterMVs(void)
           //  looks still somwhere bug with chroma sad
           if (bChroma)
           {
-            // we do not know chroma SAD scale here - assume medium of YV12 value ? better use chroma anyway to decrease same luma different colour tone bugs
-            //pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
             const uint8_t* pRefU = _planes_ptr[idx_mvto][1]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
             int npitchRefU = _planes_ptr[idx_mvto][1]->GetPitch();
             const uint8_t* pRefV = _planes_ptr[idx_mvto][2]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
             int npitchRefV = _planes_ptr[idx_mvto][2]->GetPitch();
 
             sad_chroma = ScaleSadChroma(SADCHROMA(pSrcCurU + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1], pRefU, npitchRefU)
-              + SADCHROMA(pSrcCurV + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2], pRefV, npitchRefV), 0); // 0 for YV12 ?
+              + SADCHROMA(pSrcCurV + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2], pRefV, npitchRefV), chromaSADscale);
 
             sad_t luma_sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
 
