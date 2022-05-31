@@ -33,7 +33,7 @@
 #include <stdint.h>
 #include "include/avs/config.h"
 
-#pragma optimize( "", off ) // Temporal to save from crash in max speed optimizations enabled and 16bit input
+//#pragma optimize( "", off ) // Temporal to save from crash in max speed optimizations enabled and 16bit input (only for SSE2-optimized build, AVX2-optimized do not need it ?)
 
 template<int nBlkHeight>
 #if defined(GCC) || defined(CLANG)
@@ -288,6 +288,7 @@ unsigned int Sad16_sse2_8xN(const uint8_t *pSrc, int nSrcPitch, const uint8_t *p
     // 1st row 8 pixels 16 bytes
     auto src1 = _mm_load_si128((__m128i *) (pSrc));
     auto src2 = _mm_loadu_si128((__m128i *) (pRef));
+
     __m128i greater_t = _mm_subs_epu16(src1, src2); // unsigned sub with saturation
     __m128i smaller_t = _mm_subs_epu16(src2, src1);
     __m128i absdiff = _mm_or_si128(greater_t, smaller_t); //abs(s1-s2)  == (satsub(s1,s2) | satsub(s2,s1))
