@@ -33,6 +33,7 @@
 #include <stdint.h>
 #include "include/avs/config.h"
 
+#pragma optimize( "", off ) // Temporal to save from crash in max speed optimizations enabled and 16bit input
 
 template<int nBlkHeight>
 #if defined(GCC) || defined(CLANG)
