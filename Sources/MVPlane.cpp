@@ -618,7 +618,7 @@ void MVPlane::CalcShiftKernels(short* psKernel, float fPelShift, int iKS)
 
     // Lanczos weighting
     float fArgLz = (float)(i - iKS_d2) * fPi / (float)(iKS_d2);
-    fKernel[i] *= fSinc(fArgLz);;
+    fKernel[i] *= fSinc(fArgLz);
   }
 
   float fSum = 0.0f;

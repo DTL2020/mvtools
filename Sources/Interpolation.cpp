@@ -3388,23 +3388,12 @@ void SubShiftBlock8x8_KS4_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* _p
       for (int x = 1; x < iKS; x++)
       {
         // shift 1 unsigned short sample
-        __m256i imm0 = _mm256_alignr_epi8(ymm0_row0, ymm0_row0, 2);
-        ymm0_row0 = _mm256_blend_epi16(imm0, _mm256_permute2x128_si256(imm0, imm0, 1), 128);
-
-        __m256i imm1 = _mm256_alignr_epi8(ymm1_row1, ymm1_row1, 2);
-        ymm1_row1 = _mm256_blend_epi16(imm1, _mm256_permute2x128_si256(imm1, imm1, 1), 128);
-
-        __m256i imm2 = _mm256_alignr_epi8(ymm2_row2, ymm2_row2, 2);
-        ymm2_row2 = _mm256_blend_epi16(imm2, _mm256_permute2x128_si256(imm2, imm2, 1), 128);
-
-        __m256i imm3 = _mm256_alignr_epi8(ymm3_row3, ymm3_row3, 2);
-        ymm3_row3 = _mm256_blend_epi16(imm3, _mm256_permute2x128_si256(imm3, imm3, 1), 128);
-
-        __m256i imm4 = _mm256_alignr_epi8(ymm4_row4, ymm4_row4, 2);
-        ymm4_row4 = _mm256_blend_epi16(imm4, _mm256_permute2x128_si256(imm4, imm4, 1), 128);
-
-        __m256i imm5 = _mm256_alignr_epi8(ymm5_row5, ymm5_row5, 2);
-        ymm5_row5 = _mm256_blend_epi16(imm5, _mm256_permute2x128_si256(imm5, imm5, 1), 128);
+        ymm0_row0 = _mm256_alignr_epi8(_mm256_permute2x128_si256(ymm0_row0, ymm0_row0, 1), ymm0_row0, 2);
+        ymm1_row1 = _mm256_alignr_epi8(_mm256_permute2x128_si256(ymm1_row1, ymm1_row1, 1), ymm1_row1, 2);
+        ymm2_row2 = _mm256_alignr_epi8(_mm256_permute2x128_si256(ymm2_row2, ymm2_row2, 1), ymm2_row2, 2);
+        ymm3_row3 = _mm256_alignr_epi8(_mm256_permute2x128_si256(ymm3_row3, ymm3_row3, 1), ymm3_row3, 2);
+        ymm4_row4 = _mm256_alignr_epi8(_mm256_permute2x128_si256(ymm4_row4, ymm4_row4, 1), ymm4_row4, 2);
+        ymm5_row5 = _mm256_alignr_epi8(_mm256_permute2x128_si256(ymm5_row5, ymm5_row5, 1), ymm5_row5, 2);;
 
         ymm_Krn = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelH + x)));
 
@@ -3447,23 +3436,12 @@ void SubShiftBlock8x8_KS4_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* _p
       for (int x = 1; x < iKS; x++)
       {
         // shift 1 unsigned short sample
-        __m256i imm0 = _mm256_alignr_epi8(ymm0_row0, ymm0_row0, 2);
-        ymm0_row0 = _mm256_blend_epi16(imm0, _mm256_permute2x128_si256(imm0, imm0, 1), 128);
-
-        __m256i imm1 = _mm256_alignr_epi8(ymm1_row1, ymm1_row1, 2);
-        ymm1_row1 = _mm256_blend_epi16(imm1, _mm256_permute2x128_si256(imm1, imm1, 1), 128);
-
-        __m256i imm2 = _mm256_alignr_epi8(ymm2_row2, ymm2_row2, 2);
-        ymm2_row2 = _mm256_blend_epi16(imm2, _mm256_permute2x128_si256(imm2, imm2, 1), 128);
-
-        __m256i imm3 = _mm256_alignr_epi8(ymm3_row3, ymm3_row3, 2);
-        ymm3_row3 = _mm256_blend_epi16(imm3, _mm256_permute2x128_si256(imm3, imm3, 1), 128);
-
-        __m256i imm4 = _mm256_alignr_epi8(ymm4_row4, ymm4_row4, 2);
-        ymm4_row4 = _mm256_blend_epi16(imm4, _mm256_permute2x128_si256(imm4, imm4, 1), 128);
-
-        __m256i imm5 = _mm256_alignr_epi8(ymm5_row5, ymm5_row5, 2);
-        ymm5_row5 = _mm256_blend_epi16(imm5, _mm256_permute2x128_si256(imm5, imm5, 1), 128);
+        ymm0_row0 = _mm256_alignr_epi8(_mm256_permute2x128_si256(ymm0_row0, ymm0_row0, 1), ymm0_row0, 2);
+        ymm1_row1 = _mm256_alignr_epi8(_mm256_permute2x128_si256(ymm1_row1, ymm1_row1, 1), ymm1_row1, 2);
+        ymm2_row2 = _mm256_alignr_epi8(_mm256_permute2x128_si256(ymm2_row2, ymm2_row2, 1), ymm2_row2, 2);
+        ymm3_row3 = _mm256_alignr_epi8(_mm256_permute2x128_si256(ymm3_row3, ymm3_row3, 1), ymm3_row3, 2);
+        ymm4_row4 = _mm256_alignr_epi8(_mm256_permute2x128_si256(ymm4_row4, ymm4_row4, 1), ymm4_row4, 2);
+        ymm5_row5 = _mm256_alignr_epi8(_mm256_permute2x128_si256(ymm5_row5, ymm5_row5, 1), ymm5_row5, 2);
 
         ymm_Krn = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelH + x)));
 
