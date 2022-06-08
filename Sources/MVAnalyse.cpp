@@ -1032,7 +1032,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       //WriteHeaderToArray(reinterpret_cast <int*> (piDstMVs+2));
       piDstMVs[2] = (srd._analysis_data.nBlkX * srd._analysis_data.nBlkY) * N_PER_BLOCK + 1; // nBlkCount * N_PER_BLOCK + 1 
 
-      piDstMVs+=3; // +1 in search_mv_slice - size of ??
+      piDstMVs+=3; // skip all header of MVs block: group size + validity + MVs data block size (?)
 
       if (optSearchOption == 5)
       {
@@ -2359,12 +2359,12 @@ void MVAnalyse::CalcShiftKernel(float* fKernel, float fPelShift, int iKS)
 
   for (int i = 0; i < iKS; i++)
   {
-    float fArg = (float)(i - iKS_d2) * fPi + fPelShift;
+    float fArg = (float)((i - iKS_d2) + fPelShift) * fPi;
     fKernel[i] = fSinc(fArg);
 
     // Lanczos weighting
     float fArgLz = (float)(i - iKS_d2) * fPi / (float)(iKS_d2);
-    fKernel[i] *= fSinc(fArgLz);;
+    fKernel[i] *= fSinc(fArgLz);
   }
 
   float fSum = 0.0f;
