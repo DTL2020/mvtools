@@ -3360,7 +3360,7 @@ void SubShiftBlock8x8_KS4_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* _p
 
   if (sKernelH != 0)
   {
-    unsigned char* pSrc = _pSrc;
+    unsigned char* pSrc = _pSrc - iKS_d2 - (iKS_d2 * nSrcPitch);
     __m256i ymm_Krn;
 
     // 2 groups of 6 rows
@@ -3489,8 +3489,7 @@ void SubShiftBlock8x8_KS4_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* _p
   }
   else // load 6 ymms for V shift only
   {
-
-    unsigned char* pSrc = _pSrc + iKS_d2;
+    unsigned char* pSrc = _pSrc - (iKS_d2 * nSrcPitch);
 
     ymm_outH_row01 = _mm256_permute2x128_si256(_mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)pSrc)), _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)(pSrc + nSrcPitch * 1))), 32);
     ymm_outH_row23 = _mm256_permute2x128_si256(_mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)(pSrc + nSrcPitch * 2))), _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)(pSrc + nSrcPitch * 3))), 32);
@@ -3585,6 +3584,7 @@ void SubShiftBlock4x4_KS4_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* _p
 
   int iKS_d2 = iKS / 2;
 
+  
   // 4x4 block with KS4 is (4+4)x(4+4) load for H-sub shift
 
   // first with each row in separate ymm, TO DO: place 2 rows of 8 input samples into single 256bit reg
@@ -3601,7 +3601,8 @@ void SubShiftBlock4x4_KS4_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* _p
 
   if (sKernelH != 0)
   {
-    unsigned char* pSrc = _pSrc;
+    // take upper left iKS_d2 padded corner
+    unsigned char* pSrc = _pSrc - iKS_d2 - (iKS_d2 * nSrcPitch);
     __m256i ymm_Krn;
 
     ymmIn_row0 = _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)pSrc));
@@ -3685,7 +3686,7 @@ void SubShiftBlock4x4_KS4_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* _p
   else // load 6 ymms for V shift only
   {
 
-    unsigned char* pSrc = _pSrc + iKS_d2;
+    unsigned char* pSrc = _pSrc - (iKS_d2 * nSrcPitch);
 
     ymm_outH_row01 = _mm256_permute2x128_si256(_mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)pSrc)), _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)(pSrc + nSrcPitch * 1))), 32);
     ymm_outH_row23 = _mm256_permute2x128_si256(_mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)(pSrc + nSrcPitch * 2))), _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)(pSrc + nSrcPitch * 3))), 32);
@@ -3704,7 +3705,6 @@ void SubShiftBlock4x4_KS4_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* _p
 
     outHV_row0 = _mm256_adds_epi16(_mm256_mullo_epi16(ymm_outH_row01, ymm_Krn01), _mm256_mullo_epi16(ymm_outH_row23, ymm_Krn23));
     outHV_row2 = _mm256_adds_epi16(_mm256_mullo_epi16(ymm_outH_row23, ymm_Krn01), _mm256_mullo_epi16(ymm_outH_row45, ymm_Krn23));
-//    outHV_row4 = _mm256_adds_epi16(_mm256_mullo_epi16(ymm_outH_row45, ymm_Krn01), _mm256_mullo_epi16(ymm_outH_row67, ymm_Krn23));
 
     __m256i ymm_outH_row12 = _mm256_permute2x128_si256(ymm_outH_row01, ymm_outH_row23, 33);
     __m256i ymm_outH_row34 = _mm256_permute2x128_si256(ymm_outH_row23, ymm_outH_row45, 33);
@@ -3712,8 +3712,6 @@ void SubShiftBlock4x4_KS4_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* _p
 
     outHV_row1 = _mm256_adds_epi16(_mm256_mullo_epi16(ymm_outH_row12, ymm_Krn01), _mm256_mullo_epi16(ymm_outH_row34, ymm_Krn23));
     outHV_row3 = _mm256_adds_epi16(_mm256_mullo_epi16(ymm_outH_row34, ymm_Krn01), _mm256_mullo_epi16(ymm_outH_row56, ymm_Krn23));
-//    outHV_row5 = _mm256_adds_epi16(_mm256_mullo_epi16(ymm_outH_row56, ymm_Krn01), _mm256_mullo_epi16(ymm_outH_row78, ymm_Krn23));
-//    outHV_row7 = _mm256_adds_epi16(_mm256_mullo_epi16(ymm_outH_row78, ymm_Krn01), _mm256_mullo_epi16(ymm_outH_row910, ymm_Krn23));
 
     outHV_row0 = _mm256_adds_epi16(outHV_row0, _mm256_permute2x128_si256(outHV_row0, outHV_row0, 33));
     outHV_row1 = _mm256_adds_epi16(outHV_row1, _mm256_permute2x128_si256(outHV_row1, outHV_row1, 33));

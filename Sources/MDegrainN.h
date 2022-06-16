@@ -241,6 +241,10 @@ private:
   SADFunction* SADCHROMA;
 
   int nUseSubShift;
+  int iMaxBlx; // max blx for GetPointer*()
+  int iMinBlx; // min blx for GetPointer*()
+  int iMaxBly; // max bly for GetPointer*()
+  int iMinBly; // min bly for GetPointer*()
 
   float fSinc(float x);
 

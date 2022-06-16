@@ -1045,6 +1045,22 @@ MDegrainN::MDegrainN(
 
   }
 
+  // calculate limits of blx/bly once in constructor
+  if (nUseSubShift == 0)
+  {
+    iMinBlx = -nBlkSizeX * nPel;
+    iMaxBlx = nBlkSizeX * nBlkX * nPel;
+    iMinBly = -nBlkSizeY * nPel;
+    iMaxBly = nBlkSizeY * nBlkY * nPel;
+  }
+  else
+  {
+    int iKS_d2 = SHIFTKERNELSIZE_I16 / 2; // need to define current used kernel size for subshift - may be nUseSubShift value ?
+    iMinBlx = (-nBlkSizeX + iKS_d2) * nPel;
+    iMaxBlx = (nBlkSizeX * nBlkX - iKS_d2) * nPel;
+    iMinBly = (-nBlkSizeY + iKS_d2) * nPel;
+    iMaxBly = (nBlkSizeY * nBlkY - iKS_d2) * nPel;
+  }
 
 }
 
@@ -2561,6 +2577,12 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
 
 }
 
+#define ClipBlxBly \
+if (blx < iMinBlx) blx = iMinBlx; \
+if (bly < iMinBly) bly = iMinBly; \
+if (blx > iMaxBlx) blx = iMaxBlx; \
+if (bly > iMaxBly) bly = iMaxBly; 
+
 
 MV_FORCEINLINE void	MDegrainN::use_block_y(
   const BYTE * &p, int &np, int &wref, bool usable_flag, const MvClipInfo &c_info,
@@ -2573,10 +2595,11 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
      int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
 
   // temp check - DX12_ME return invalid vectors sometime
-     if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
+     ClipBlxBly
+/*     if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
      if (bly < -nBlkSizeY * nPel) bly = -nBlkSizeY * nPel;
      if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
-     if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;
+     if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;*/
     
      if (nPel != 1 && nUseSubShift != 0)
      {
@@ -2611,10 +2634,11 @@ MV_FORCEINLINE void	MDegrainN::use_block_y_thSADzeromv_thSADcohmv(
     int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
 
     // temp check - DX12_ME return invalid vectors sometime
-    if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
+    ClipBlxBly
+/*    if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
     if (bly < -nBlkSizeY * nPel) bly = -nBlkSizeY * nPel;
     if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
-    if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;
+    if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;*/
 
 //    p = plane_ptr->GetPointer(blx, bly);
 //    np = plane_ptr->GetPitch();
@@ -2690,11 +2714,12 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv(
      int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
      int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
 
-     // temp check - DX12_ME return invalid vectors sometime 
-     if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
+     // temp check - DX12_ME return invalid vectors sometime
+     ClipBlxBly
+/*     if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
      if (bly < -nBlkSizeY * nPel) bly = -nBlkSizeY * nPel;
      if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
-     if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;
+     if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;*/
      
 //    p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
 //    np = plane_ptr->GetPitch();
@@ -2731,11 +2756,13 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv_thSADzeromv_thSADcohmv(
     int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
     int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
 
-    // temp check - DX12_ME return invalid vectors sometime 
-    if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
+    // temp check - DX12_ME return invalid vectors sometime
+    ClipBlxBly
+/*    if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
     if (bly < -nBlkSizeY * nPel) bly = -nBlkSizeY * nPel;
     if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
-    if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;
+    if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;*/
+
 
 //    p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
 //    np = plane_ptr->GetPitch();
