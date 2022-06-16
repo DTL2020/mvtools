@@ -2741,7 +2741,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv_thSADzeromv_thSADcohmv(
 //    np = plane_ptr->GetPitch();
     if (nPel != 1 && nUseSubShift != 0)
     {
-      p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, nBlkSizeX, nBlkSizeY, np);
+      p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super, np);
     }
     else
     {
