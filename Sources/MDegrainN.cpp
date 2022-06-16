@@ -1005,7 +1005,7 @@ MDegrainN::MDegrainN(
     for (int i = 0; i < MVLPFKERNELSIZE; i++)
     {
       float fArg = (float)(i - iKS_d2) * fMVLPFGauss;
-      fMVLPFKernel[i] = pow(2.0, -fArg * fArg);
+      fMVLPFKernel[i] = powf(2.0, -fArg * fArg);
     }
   }
 
@@ -1873,7 +1873,7 @@ void	MDegrainN::process_luma_normal_slice_SEWB(Slicer::TaskData& td)
       int i = by * nBlkX + bx;
       const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
       int pitch_arr[MAX_TEMP_RAD * 2];
-      int weight_arr[1 + MAX_TEMP_RAD * 2];
+//      int weight_arr[1 + MAX_TEMP_RAD * 2];
 
       PrefetchMVs(i);
 
@@ -2700,7 +2700,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv(
 //    np = plane_ptr->GetPitch();
      if (nPel != 1 && nUseSubShift != 0)
      {
-       p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, nBlkSizeX, nBlkSizeY, np);
+       p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super, np);
      }
      else
      {

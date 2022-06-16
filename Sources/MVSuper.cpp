@@ -130,7 +130,15 @@ MVSuper::MVSuper(
   }
 
   nSuperWidth = nWidth + 2 * nHPad;
-  nSuperHeight = PlaneSuperOffset(false, nHeight, nLevels, nPel, nVPad, nSuperWidth*pixelsize, yRatioUV) / (nSuperWidth*pixelsize);
+
+  if (pel_refine)
+  {
+    nSuperHeight = PlaneSuperOffset(false, nHeight, nLevels, nPel, nVPad, nSuperWidth * pixelsize, yRatioUV) / (nSuperWidth * pixelsize);
+  }
+  else // do not allocate memory for refined subplanes, used in DX12_ME and UseSubShift > 0 for MDegrainN
+  {
+    nSuperHeight = PlaneSuperOffset(false, nHeight, nLevels, 1, nVPad, nSuperWidth * pixelsize, yRatioUV) / (nSuperWidth * pixelsize);
+  }
   if (yRatioUV == 2 && nSuperHeight & 1) nSuperHeight++; // even
   vi.width = nSuperWidth;
   vi.height = nSuperHeight;
