@@ -589,8 +589,8 @@ void MVPlane::CalcShiftKernel(float* fKernel, float fPelShift, int iKS)
     fKernel[i] = fSinc(fArg);
 
     // Lanczos weighting
-    float fArgLz = (float)(i - iKS_d2) * fPi / (float)(iKS_d2);
-    fKernel[i] *= fSinc(fArgLz);;
+    float fArgLz = ((float)(i - iKS_d2) + fPelShift) * fPi / (float)(iKS_d2);
+    fKernel[i] *= fSinc(fArgLz);
   }
 
   float fSum = 0.0f;
@@ -613,11 +613,11 @@ void MVPlane::CalcShiftKernels(short* psKernel, float fPelShift, int iKS)
 
   for (int i = 0; i < iKS; i++)
   {
-    float fArg = ((float)(i - iKS_d2) + fPelShift) * fPi;
+    float fArg = ((float)(i - iKS_d2 + 1) - fPelShift) * fPi;
     fKernel[i] = fSinc(fArg);
 
     // Lanczos weighting
-    float fArgLz = (float)(i - iKS_d2) * fPi / (float)(iKS_d2);
+    float fArgLz = ((float)(i - iKS_d2 + 1) - fPelShift) * fPi / (float)(iKS_d2);
     fKernel[i] *= fSinc(fArgLz);
   }
 
@@ -630,12 +630,13 @@ void MVPlane::CalcShiftKernels(short* psKernel, float fPelShift, int iKS)
   for (int i = 0; i < iKS; i++)
   {
     fKernel[i] /= fSum;
-    psKernel[i] = (short)(fKernel[i] * 255); // or 256 ??
+    psKernel[i] = (short)((fKernel[i] * 63.0f)); 
   }
 }
 
 const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int iBlockSizeY, int& pDstPitch) const
 {
+  uint8_t* pSrc;
   int NPELL2 = nPel >> 1;
 
   int nfullX = nX + nHPaddingPel;
@@ -657,6 +658,9 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int 
   case 0:
     pfKrnH = 0;
     psKrnH = 0;
+//    pfKrnH = (float*)fKernelSh_01;
+//    psKrnH = (short*)sKernelSh_01;
+
     break;
   case 1:
     pfKrnH = (float*)fKernelSh_01;
@@ -675,8 +679,11 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int 
   switch (i_dy)
   {
   case 0:
-    pfKrnV = 0;
+    pfKrnV = 0; 
     psKrnV = 0;
+//    pfKrnV = (float*)fKernelSh_01;
+//    psKrnV = (short*)sKernelSh_01;
+
     break;
   case 1:
     pfKrnV = (float*)fKernelSh_01;
@@ -695,13 +702,18 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int 
   nfullX >>= NPELL2;
   nfullY >>= NPELL2;
 
-  uint8_t* pSrc =(uint8_t*)GetAbsolutePointerPel <0>(nfullX, nfullY);
-
-  if (i_dx == 0 && i_dy == 0) // no sub shift required
+ 
+  if (i_dx == 0 && i_dy == 0)
   {
+    pSrc = (uint8_t*)GetAbsolutePointerPel <0>(nfullX, nfullY);
     pDstPitch = nPitch;
     return pSrc;
   }
+
+  nfullX++;
+  nfullY++;
+
+  pSrc = (uint8_t*)GetAbsolutePointerPel <0>(nfullX, nfullY);
 
   int nShiftedBufPitch = (iBlockSizeX << pixelsize_shift);
 

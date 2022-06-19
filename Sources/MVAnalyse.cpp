@@ -2361,9 +2361,9 @@ void MVAnalyse::CalcShiftKernel(float* fKernel, float fPelShift, int iKS)
   {
     float fArg = ((float)(i - iKS_d2) + fPelShift) * fPi;
     fKernel[i] = fSinc(fArg);
-
+        
     // Lanczos weighting
-    float fArgLz = (float)(i - iKS_d2) * fPi / (float)(iKS_d2);
+    float fArgLz = ((float)(i - iKS_d2) + fPelShift) * fPi / (float)(iKS_d2);
     fKernel[i] *= fSinc(fArgLz);
   }
 

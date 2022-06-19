@@ -1720,6 +1720,12 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
 
     for (int bx = 0; bx < nBlkX; ++bx)
     {
+
+/*      if (by == 10)
+      {
+        int idbr = 0;
+      }
+      */
       int i = by * nBlkX + bx;
       const BYTE *ref_data_ptr_arr[MAX_TEMP_RAD * 2];
       int pitch_arr[MAX_TEMP_RAD * 2];
@@ -2604,6 +2610,8 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
      if (nPel != 1 && nUseSubShift != 0)
      {
        p = plane_ptr->GetPointerSubShift(blx, bly, nBlkSizeX, nBlkSizeY, np);
+//       const BYTE* pold = plane_ptr->GetPointer(blx, bly);
+//       int idbr = 0;
      }
      else
      {
