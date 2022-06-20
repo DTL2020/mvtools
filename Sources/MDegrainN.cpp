@@ -2602,38 +2602,11 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
 
   // temp check - DX12_ME return invalid vectors sometime
      ClipBlxBly
-/*     if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
-     if (bly < -nBlkSizeY * nPel) bly = -nBlkSizeY * nPel;
-     if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
-     if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;*/
     
      if (nPel != 1 && nUseSubShift != 0)
      {
-/*       if (i == 37)
-       {
-         int idbr1 = 0;
-       }
-       */
        p = plane_ptr->GetPointerSubShift(blx, bly, nBlkSizeX, nBlkSizeY, np);
        const BYTE* pold = plane_ptr->GetPointer(blx, bly);
-       /*
-       int npold = plane_ptr->GetPitch();
-
-       // debug compare
-       for (int x = 0; x < nBlkSizeX; x++)
-       {
-         for (int j = 0; j < nBlkSizeX; j++)
-         {
-           unsigned char ucSS = p[(j) * np + x];
-           unsigned char ucOld = pold[(j)*npold + x];
-           int iDiff = abs(ucSS - ucOld);
-           if (iDiff > 3)
-           {
-             int idbr = 0;
-           }
-         }
-       }
-       */
      }
      else
      {
@@ -2665,13 +2638,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_y_thSADzeromv_thSADcohmv(
 
     // temp check - DX12_ME return invalid vectors sometime
     ClipBlxBly
-/*    if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
-    if (bly < -nBlkSizeY * nPel) bly = -nBlkSizeY * nPel;
-    if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
-    if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;*/
 
-//    p = plane_ptr->GetPointer(blx, bly);
-//    np = plane_ptr->GetPitch();
     if (nPel != 1 && nUseSubShift != 0)
     {
       p = plane_ptr->GetPointerSubShift(blx, bly, nBlkSizeX, nBlkSizeY, np);
@@ -2681,7 +2648,6 @@ MV_FORCEINLINE void	MDegrainN::use_block_y_thSADzeromv_thSADcohmv(
       p = plane_ptr->GetPointer(blx, bly);
       np = plane_ptr->GetPitch();
     }
-
 
     sad_t block_sad = pMVsArray[i].sad;
 
@@ -2746,13 +2712,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv(
 
      // temp check - DX12_ME return invalid vectors sometime
      ClipBlxBly
-/*     if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
-     if (bly < -nBlkSizeY * nPel) bly = -nBlkSizeY * nPel;
-     if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
-     if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;*/
-     
-//    p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
-//    np = plane_ptr->GetPitch();
+
      if (nPel != 1 && nUseSubShift != 0)
      {
        p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super, np);
@@ -2788,14 +2748,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv_thSADzeromv_thSADcohmv(
 
     // temp check - DX12_ME return invalid vectors sometime
     ClipBlxBly
-/*    if (blx < -nBlkSizeX * nPel) blx = -nBlkSizeX * nPel;
-    if (bly < -nBlkSizeY * nPel) bly = -nBlkSizeY * nPel;
-    if (blx > nBlkSizeX* nBlkX* nPel) blx = nBlkSizeX * nBlkX * nPel;
-    if (bly > nBlkSizeY* nBlkY* nPel) bly = nBlkSizeY * nBlkY * nPel;*/
 
-
-//    p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
-//    np = plane_ptr->GetPitch();
     if (nPel != 1 && nUseSubShift != 0)
     {
       p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super, np);
