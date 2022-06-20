@@ -28,8 +28,8 @@
 #include <stdint.h>
 #include "def.h"
 
-#define SHIFTKERNELSIZE 8
-#define SHIFTKERNELSIZE_I16 6
+#define SHIFTKERNELSIZE 6
+//#define SHIFTKERNELSIZE_I16 6
 
 class MVPlane
 {
@@ -158,38 +158,12 @@ private:
   MVPlane *		_redp_ptr;			// The plane where the reduction is rendered.
 
   // 2.7.46
-
-  MV_FORCEINLINE float fSinc(float x)
-  {
-    x = fabsf(x);
-
-    if (x > 0.000001f)
-    {
-      return sinf(x) / x;
-    }
-    else return 1.0f;
-  }
-
-
-
-  void CalcShiftKernel(float* fKernel, float fPelShift, int iKS);
-
-  float fKernelSh_01[SHIFTKERNELSIZE];
-  float fKernelSh_10[SHIFTKERNELSIZE];
-  float fKernelSh_11[SHIFTKERNELSIZE];
-
-  void CalcShiftKernels(short* fKernel, float fPelShift, int iKS);
-
-  short sKernelSh_01[SHIFTKERNELSIZE];
-  short sKernelSh_10[SHIFTKERNELSIZE];
-  short sKernelSh_11[SHIFTKERNELSIZE];
-
   short* sKernelShWI6_01;
   short* sKernelShWI6_10;
   short* sKernelShWI6_11;
 
   typedef void (*SubShiftFncPtr) (
-    unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS
+    unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, short* sKernelH, short* sKernelV, int nSrcPitch, int nDstPitch, int iKS
     );
 
   SubShiftFncPtr	_sub_shift_ptr;

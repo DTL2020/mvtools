@@ -1055,7 +1055,7 @@ MDegrainN::MDegrainN(
   }
   else
   {
-    int iKS_d2 = SHIFTKERNELSIZE_I16 / 2; // need to define current used kernel size for subshift - may be nUseSubShift value ?
+    int iKS_d2 = SHIFTKERNELSIZE / 2; // need to define current used kernel size for subshift - may be nUseSubShift value ?
     iMinBlx = (-nBlkSizeX + iKS_d2) * nPel;
     iMaxBlx = (nBlkSizeX * nBlkX - iKS_d2) * nPel;
     iMinBly = (-nBlkSizeY + iKS_d2) * nPel;
@@ -2609,9 +2609,31 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
     
      if (nPel != 1 && nUseSubShift != 0)
      {
+/*       if (i == 37)
+       {
+         int idbr1 = 0;
+       }
+       */
        p = plane_ptr->GetPointerSubShift(blx, bly, nBlkSizeX, nBlkSizeY, np);
-//       const BYTE* pold = plane_ptr->GetPointer(blx, bly);
-//       int idbr = 0;
+       const BYTE* pold = plane_ptr->GetPointer(blx, bly);
+       /*
+       int npold = plane_ptr->GetPitch();
+
+       // debug compare
+       for (int x = 0; x < nBlkSizeX; x++)
+       {
+         for (int j = 0; j < nBlkSizeX; j++)
+         {
+           unsigned char ucSS = p[(j) * np + x];
+           unsigned char ucOld = pold[(j)*npold + x];
+           int iDiff = abs(ucSS - ucOld);
+           if (iDiff > 3)
+           {
+             int idbr = 0;
+           }
+         }
+       }
+       */
      }
      else
      {

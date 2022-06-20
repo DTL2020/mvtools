@@ -84,7 +84,7 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
     _reduce_ptr = &RB2BilinearFiltered<uint8_t>;
 
 //    if (blocksizeH == 8 && blocksizeV == 8 ) ?? need to pass blksize H,V to constructor ?
-      _sub_shift_ptr = SubShiftBlock_C<uint8_t>;
+    _sub_shift_ptr = SubShiftBlock_Cs;// <uint8_t>;
   }
   else if (pixelsize == 2) {
     _bilin_hor_ptr = _isse ? HorizontalBilin_sse2<uint16_t> : HorizontalBilin<uint16_t>;
@@ -97,7 +97,7 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
     _average_ptr = _isse ? Average2_sse2<uint16_t> : Average2<uint16_t>;
     _reduce_ptr = &RB2BilinearFiltered<uint16_t>;
 
-    _sub_shift_ptr = SubShiftBlock_C<uint16_t>;
+    _sub_shift_ptr = SubShiftBlock_Cs;// <uint16_t>;
   }
   else {
     _bilin_hor_ptr = HorizontalBilin<float>;
@@ -110,25 +110,21 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
     _average_ptr = Average2<float>;
     _reduce_ptr = &RB2BilinearFiltered<float>;
 
-    _sub_shift_ptr = SubShiftBlock_C<float>;
+    _sub_shift_ptr = SubShiftBlock_Cs;// <float>;
   }
   // Nothing
 
   // 2.7.46
   // prepare subshift kernels
-  CalcShiftKernel(fKernelSh_01, 0.25f, SHIFTKERNELSIZE);
+/*  CalcShiftKernel(fKernelSh_01, 0.25f, SHIFTKERNELSIZE);
   CalcShiftKernel(fKernelSh_10, 0.5f, SHIFTKERNELSIZE);
   CalcShiftKernel(fKernelSh_11, 0.75f, SHIFTKERNELSIZE);
-
-  // 2.7.46
-/*/ prepare subshift kernels
-  CalcShiftKernels(sKernelSh_01, 0.25f, SHIFTKERNELSIZE_I16);
-  CalcShiftKernels(sKernelSh_10, 0.5f, SHIFTKERNELSIZE_I16);
-  CalcShiftKernels(sKernelSh_11, 0.75f, SHIFTKERNELSIZE_I16);
   */
-  sKernelShWI6_01 = new short[SHIFTKERNELSIZE_I16 + 1] {1, -5, 52, 20, -5, 1, 16};
-  sKernelShWI6_10 = new short[SHIFTKERNELSIZE_I16 + 1] {2, -10, 40, 40, -10, 2, 32};
-  sKernelShWI6_11 = new short[SHIFTKERNELSIZE_I16 + 1] {1, -5, 20, 52, -5, 1, 16};
+  // 2.7.46
+
+  sKernelShWI6_01 = new short[SHIFTKERNELSIZE + 1] {1, -5, 52, 20, -5, 1, 16};
+  sKernelShWI6_10 = new short[SHIFTKERNELSIZE + 1] {2, -10, 40, 40, -10, 2, 32};
+  sKernelShWI6_11 = new short[SHIFTKERNELSIZE + 1] {1, -5, 20, 52, -5, 1, 16};
 
 
 //  _sub_shift_ptr = SubShiftBlock_C<uint8_t>;
@@ -586,75 +582,12 @@ void MVPlane::reduce_slice(SlicerReduce::TaskData &td)
   );
 }
 
-void MVPlane::CalcShiftKernel(float* fKernel, float fPelShift, int iKS)
-{
-  float fPi = 3.14159265f;
-  int iKS_d2 = iKS / 2;
-
-  for (int i = 0; i < iKS; i++)
-  {
-    float fArg = (float)(i - iKS_d2) * fPi + fPelShift;
-    fKernel[i] = fSinc(fArg);
-
-    // Lanczos weighting
-    float fArgLz = ((float)(i - iKS_d2) + fPelShift) * fPi / (float)(iKS_d2);
-    fKernel[i] *= fSinc(fArgLz);
-  }
-
-  float fSum = 0.0f;
-  for (int i = 0; i < iKS; i++)
-  {
-    fSum += fKernel[i];
-  }
-
-  for (int i = 0; i < iKS; i++)
-  {
-    fKernel[i] /= fSum;
-  }
-}
-/*
-void MVPlane::CalcShiftKernels(short* psKernel, float fPelShift, int iKS)
-{
-  float fPi = 3.14159265f;
-  int iKS_d2 = iKS / 2;
-  float fKernel[SHIFTKERNELSIZE];
-  float b = 10;
-  float c = -12;
-
-  b = (b - 16.0) / 219.0;
-  c = (c - 16.0) / 219.0;
-
-  for (int i = 0; i < iKS; i++)
-  {
-//    float fArg = ((float)(i - iKS_d2 + 1) - fPelShift) * fPi;
-    float fArg = ((float)(i - iKS_d2 + 1) - fPelShift);
-//    fKernel[i] = fSinc(fArg);
-//    fKernel[i] =  c* fSincPi(fArg + 2) + b * fSincPi(fArg + 1) + fSincPi(fArg) + b * fSincPi(fArg - 1) + c * fSincPi(fArg - 2);
-    fKernel[i] = b * fSincPi(fArg + 1) + fSincPi(fArg) + b * fSincPi(fArg - 1);
-
-    // Lanczos weighting
-    float fArgLz = ((float)(i - iKS_d2 + 1) - fPelShift) * fPi / ((float)(iKS_d2) * 0.75f);
-    float fArgLz = ((float)(i - iKS_d2)) * fPi / ((float)(iKS_d2) * 1.0f);
-    float fW = fSinc(fArgLz);
-    fKernel[i] *= fW;// fSinc(fArgLz);
-  }
-
-  float fSum = 0.0f;
-  for (int i = 0; i < iKS; i++)
-  {
-    fSum += fKernel[i];
-  }
-
-  for (int i = 0; i < iKS; i++)
-  {
-    fKernel[i] /= fSum;
-    psKernel[i] = (short)((fKernel[i] * 63.0f)); 
-  }
-}
-*/
 const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int iBlockSizeY, int& pDstPitch) const
 {
   uint8_t* pSrc;
+  short* psKrnH = 0;
+  short* psKrnV = 0;
+
   int NPELL2 = nPel >> 1;
 
   int nfullX = nX + nHPaddingPel;
@@ -665,31 +598,29 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int 
   int i_dx = (nfullX & iMASK);
   int i_dy = (nfullY & iMASK);
 
-  float* pfKrnH = 0;
-  float* pfKrnV = 0;
+  nfullX >>= NPELL2;
+  nfullY >>= NPELL2;
 
-  short* psKrnH = 0;
-  short* psKrnV = 0;
+  pSrc = (uint8_t*)GetAbsolutePointerPel <0>(nfullX, nfullY);
+
+  if (i_dx == 0 && i_dy == 0)
+  {
+    pDstPitch = nPitch;
+    return pSrc;
+  }
 
   switch (i_dx)
   {
   case 0:
-    pfKrnH = 0;
     psKrnH = 0;
-//    pfKrnH = (float*)fKernelSh_01;
-//    psKrnH = (short*)sKernelShWI6_10;
-
     break;
   case 1:
-    pfKrnH = (float*)fKernelSh_01;
     psKrnH = (short*)sKernelShWI6_01;
     break;
   case 2:
-    pfKrnH = (float*)fKernelSh_10;
     psKrnH = (short*)sKernelShWI6_10;
     break;
   case 3:
-    pfKrnH = (float*)fKernelSh_11;
     psKrnH = (short*)sKernelShWI6_11;
     break;
   }
@@ -697,41 +628,18 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int 
   switch (i_dy)
   {
   case 0:
-    pfKrnV = 0; 
     psKrnV = 0;
-//    pfKrnV = (float*)fKernelSh_01;
-//    psKrnV = (short*)sKernelSh_01;
-
     break;
   case 1:
-    pfKrnV = (float*)fKernelSh_01;
     psKrnV = (short*)sKernelShWI6_01;
     break;
   case 2:
-    pfKrnV = (float*)fKernelSh_10;
     psKrnV = (short*)sKernelShWI6_10;
     break;
   case 3:
-    pfKrnV = (float*)fKernelSh_11;
     psKrnV = (short*)sKernelShWI6_11;
     break;
   }
-
-  nfullX >>= NPELL2;
-  nfullY >>= NPELL2;
-
- 
-  if (i_dx == 0 && i_dy == 0)
-  {
-    pSrc = (uint8_t*)GetAbsolutePointerPel <0>(nfullX, nfullY);
-    pDstPitch = nPitch;
-    return pSrc;
-  }
-
-  nfullX++;
-  nfullY++;
-
-  pSrc = (uint8_t*)GetAbsolutePointerPel <0>(nfullX, nfullY);
 
   int nShiftedBufPitch = (iBlockSizeX << pixelsize_shift);
 
@@ -741,19 +649,20 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int 
     {
     // SubShiftBlock8x8_KS8_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, pfKrnH, pfKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
       //SubShiftBlock8x8_KS4_i16_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, (float*)psKrnH, (float*)psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE_I16);
-      SubShiftBlock_Cs(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, (float*)psKrnH, (float*)psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE_I16);
+      SubShiftBlock_Cs(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
     }
     else if (iBlockSizeX == 4 && iBlockSizeY == 4 && pixelsize == 1)
     {
       //SubShiftBlock4x4_KS8_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, pfKrnH, pfKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
-      SubShiftBlock4x4_KS4_i16_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, (float*)psKrnH, (float*)psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE_I16);
+      //SubShiftBlock4x4_KS4_i16_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, (float*)psKrnH, (float*)psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE_I16);
+      SubShiftBlock_Cs(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
     }
     else
-      _sub_shift_ptr(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, pfKrnH, pfKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+      _sub_shift_ptr(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
   }
   else
   {
-    _sub_shift_ptr(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, pfKrnH, pfKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+    _sub_shift_ptr(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
   }
 
   pDstPitch = nShiftedBufPitch;

@@ -131,14 +131,16 @@ void Average2_sse2(unsigned char *pDst, const unsigned char *pSrc1, const unsign
 //commented out: sse2 8 bit conversion backported from mvtools-vs
 //extern "C" void Average2_iSSE(unsigned char *pDst, const unsigned char *pSrc1, const unsigned char *pSrc2, int nPitch, int nWidth, int nHeight);
 
-template<typename pixel_t>
-void SubShiftBlock_C(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
-void SubShiftBlock_Cs(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
+//template<typename pixel_t>
+//void SubShiftBlock_C(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
+void SubShiftBlock_Cs(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, short* sKernelH, short* sKernelV, int nSrcPitch, int nDstPitch, int iKS);
 
+/*
 void SubShiftBlock8x8_KS8_uint8_avx2(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
 void SubShiftBlock4x4_KS8_uint8_avx2(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
 
 void SubShiftBlock8x8_KS4_i16_uint8_avx2(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
 void SubShiftBlock4x4_KS4_i16_uint8_avx2(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
+*/
 
 #endif

@@ -2788,18 +2788,17 @@ void SubShiftBlock_C(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, 
   }
 }
 
-// temp test for signed short proc kernel size adjustment
-void SubShiftBlock_Cs(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS)
+
+void SubShiftBlock_Cs(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, short* sKernelH, short* sKernelV, int nSrcPitch, int nDstPitch, int iKS)
 {
   unsigned char CurrBlockShiftH[64 * (64 + 20)];// temp buf for H-shifted block, size of max block size + vertical margins about 10 ?
+  unsigned char* pSrc; // _pSrc - points to top left sample of block, need to add KS/2 borders
   const int iKS_d2 = iKS / 2;
-  short* sKernelH = (short*)fKernelH;
-  short* sKernelV = (short*)fKernelV;
-
-  unsigned char* pSrc = _pSrc - iKS_d2 - (iKS_d2 * nSrcPitch);
 
   if (sKernelH != 0)
   {
+    pSrc = _pSrc - (iKS_d2 - 1) - ((iKS_d2 - 1) * nSrcPitch);
+
     for (int j = 0; j < (iBlockSizeY + iKS); j++)
     {
       for (int i = 0; i < iBlockSizeX; i++)
@@ -2814,17 +2813,23 @@ void SubShiftBlock_Cs(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX
 
         sOut += sKernelH[iKS]; // 16 for 0.25 and 0.75 and 32 for 0.5
         sOut = sOut >> 6;
+
+        if (sOut < 0) sOut = 0;
+        if (sOut > 255) sOut = 255;
+
         CurrBlockShiftH[j * iBlockSizeX + i] = (unsigned char)sOut;
       }
     }
   }
   else // copy to CurrBlockShiftH temp buf
   {
+    pSrc = _pSrc - ((iKS_d2 - 1) * nSrcPitch);
+
     for (int j = 0; j < (iBlockSizeY + iKS); j++)
     {
       for (int i = 0; i < iBlockSizeX; i++)
       {
-        CurrBlockShiftH[j * iBlockSizeX + i] = (unsigned char)pSrc[j * nSrcPitch + i + iKS_d2];
+        CurrBlockShiftH[j * iBlockSizeX + i] = (unsigned char)pSrc[j * nSrcPitch + i];
       }
     }
   }
@@ -2847,6 +2852,9 @@ void SubShiftBlock_Cs(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX
         sOut += sKernelV[iKS];
         sOut = sOut >> 6;
 
+        if (sOut < 0) sOut = 0;
+        if (sOut > 255) sOut = 255;
+
         pDst[j * iBlockSizeX + i] = (unsigned char)(sOut);
       }
     }
@@ -2857,7 +2865,7 @@ void SubShiftBlock_Cs(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX
     {
       for (int j = 0; j < iBlockSizeY; j++)
       {
-        unsigned char ucOut = CurrBlockShiftH[(j + iKS_d2) * iBlockSizeX + i];
+        unsigned char ucOut = CurrBlockShiftH[(j + (iKS_d2 - 1)) * iBlockSizeX + i];
         pDst[j * iBlockSizeX + i] = ucOut;
       }
     }
