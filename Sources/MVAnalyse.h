@@ -115,6 +115,8 @@ protected:
   int optSearchOption; // DTL test
   int optPredictorType; // DTL test
   float scaleCSADfine;// DTL test
+  int iUseSubShift; // DTL test
+  int _cpuFlags; // DTL test
 
   int pixelsize; // PF
   int bits_per_pixel;
@@ -148,7 +150,7 @@ public:
     int _divide, int _sadx264, sad_t _badSAD, int _badrange, bool _isse,
     bool _meander, bool temporal_flag, bool _tryMany, bool multi_flag,
     bool mt_flag, int _chromaSADScale, int _optSearchOption, int _predictorType,
-    float _scaleCSADfine, int _accnum, IScriptEnvironment* env);
+    float _scaleCSADfine, int _accnum, int _iUseSubShift, IScriptEnvironment* env);
   ~MVAnalyse();
 
   ::PVideoFrame __stdcall	GetFrame(int n, ::IScriptEnvironment* env) override;

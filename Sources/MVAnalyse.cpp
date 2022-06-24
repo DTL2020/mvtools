@@ -49,7 +49,7 @@ MVAnalyse::MVAnalyse(
   int _divide, int _sadx264, sad_t _badSAD, int _badrange, bool _isse,
   bool _meander, bool temporal_flag, bool _tryMany, bool multi_flag,
   bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType,
-  float _scaleCSADfine, int _accnum, IScriptEnvironment* env
+  float _scaleCSADfine, int _accnum, int _iUseSubShift, IScriptEnvironment* env
 )
   : ::GenericVideoFilter(_child)
   , _srd_arr(1)
@@ -63,7 +63,7 @@ MVAnalyse::MVAnalyse(
   , optSearchOption(_optSearchOption)
   , optPredictorType(_optPredictorType)
   , scaleCSADfine(_scaleCSADfine)
-
+  , iUseSubShift(_iUseSubShift)
 {
   has_at_least_v8 = true;
   try { env->CheckVersion(8); }
@@ -229,15 +229,17 @@ MVAnalyse::MVAnalyse(
 
 #endif
 
+  _cpuFlags = _isse ? env->GetCPUFlags() : 0;
+
   pSrcGOF = new MVGroupOfFrames(
     nSuperLevels, analysisData.nWidth, analysisData.nHeight,
     nSuperPel, nSuperHPad, nSuperVPad, nSuperModeYUV,
-    _isse, analysisData.xRatioUV, analysisData.yRatioUV, pixelsize, bits_per_pixel, mt_flag
+    _cpuFlags, analysisData.xRatioUV, analysisData.yRatioUV, pixelsize, bits_per_pixel, mt_flag
   );
   pRefGOF = new MVGroupOfFrames(
     nSuperLevels, analysisData.nWidth, analysisData.nHeight,
     nSuperPel, nSuperHPad, nSuperVPad, nSuperModeYUV,
-    _isse, analysisData.xRatioUV, analysisData.yRatioUV, pixelsize, bits_per_pixel, mt_flag
+    _cpuFlags, analysisData.xRatioUV, analysisData.yRatioUV, pixelsize, bits_per_pixel, mt_flag
   );
 
   analysisData.nBlkSizeX = _blksizex;
@@ -476,6 +478,7 @@ MVAnalyse::MVAnalyse(
     analysisData.chromaSADScale,
     optSearchOption,
     scaleCSADfine,
+    iUseSubShift,
     env
   ));
 

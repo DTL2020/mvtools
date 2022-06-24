@@ -335,6 +335,7 @@ MVRecalculate::MVRecalculate(
     analysisData.chromaSADScale,
     _optSearchOption,
     1.0f, // scaleCSADfine default (no op)
+    0, // UseSubShift - currently not controlled
     env
   ));
 

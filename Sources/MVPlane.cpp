@@ -71,7 +71,7 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
   _isse = !!(cpuFlags & CPUF_SSE2);
   hasSSE41 = !!(cpuFlags & CPUF_SSE4_1);
   hasAVX2 = !!(cpuFlags & CPUF_AVX2);
-
+   
   if (pixelsize == 1) {
     _bilin_hor_ptr = _isse ? HorizontalBilin_sse2<uint8_t> : HorizontalBilin<uint8_t>;
     _bilin_ver_ptr = _isse ? VerticalBilin_sse2<uint8_t> : VerticalBilin<uint8_t>;
@@ -83,7 +83,6 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
     _average_ptr = _isse ? Average2_sse2<uint8_t> : Average2<uint8_t>;
     _reduce_ptr = &RB2BilinearFiltered<uint8_t>;
 
-//    if (blocksizeH == 8 && blocksizeV == 8 ) ?? need to pass blksize H,V to constructor ?
     _sub_shift_ptr = SubShiftBlock_Cs;// <uint8_t>;
   }
   else if (pixelsize == 2) {

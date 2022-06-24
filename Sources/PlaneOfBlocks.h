@@ -103,7 +103,7 @@ public:
   PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int _nFlags, int _nOverlapX, int _nOverlapY,
     int _xRatioUV, int _yRatioUV, int _pixelsize, int _bits_per_pixel,
     conc::ObjPool <DCTClass> *dct_pool_ptr,
-    bool mt_flag, int _chromaSADscale, int _optSearchOption, float _scaleCSADfine,
+    bool mt_flag, int _chromaSADscale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift,
   IScriptEnvironment* env);
 
   ~PlaneOfBlocks();
@@ -175,6 +175,7 @@ private:
   int            effective_chromaSADscale;   // PF experimental 2.7.18.22 allow e.g. YV24 chroma to have the same magnitude as for YV12
   const int      optSearchOption; // DTL test != 0: allow
   const float    scaleCSADfine; // DTL test - float finetune of luma/chroma SADs ratio in total SAD
+  const int      iUseSubShift; // DTL test - use or not subshifted call to MVPlane for sub sample shifted block's view
 
   SADFunction *  SAD;              /* function which computes the sad */
   LUMAFunction * LUMA;             /* function which computes the mean luma */
@@ -533,12 +534,28 @@ private:
       pRefFrame->GetPlane(YPLANE)->GetAbsolutePointerPel <2>((workarea.x[0] << 2) + nVx, (workarea.y[0] << 2) + nVy);
   }
 
+  MV_FORCEINLINE const uint8_t* GetRefBlockSubShifted(WorkingArea& workarea, int nVx, int nVy, int& iPitch) {
+
+   return
+      (nPel == 2) ? pRefFrame->GetPlane(YPLANE)->GetPointerSubShift((workarea.x[0] << 1) + nVx, (workarea.y[0] << 1) + nVy, iPitch) :
+      (nPel == 1) ? pRefFrame->GetPlane(YPLANE)->GetPointerSubShift((workarea.x[0]) + nVx, (workarea.y[0]) + nVy, iPitch) :
+      pRefFrame->GetPlane(YPLANE)->GetPointerSubShift((workarea.x[0] << 2) + nVx, (workarea.y[0] << 2) + nVy, iPitch);
+  }
+
   MV_FORCEINLINE const uint8_t* GetRefBlockU(WorkingArea& workarea, int nVx, int nVy)
   {
     return
       (nPel == 2) ? pRefFrame->GetPlane(UPLANE)->GetAbsolutePointerPel <1>((workarea.x[1] << 1) + (nVx >> nLogxRatioUV), (workarea.y[1] << 1) + (nVy >> nLogyRatioUV)) :
       (nPel == 1) ? pRefFrame->GetPlane(UPLANE)->GetAbsolutePointerPel <0>((workarea.x[1]) + (nVx >> nLogxRatioUV), (workarea.y[1]) + (nVy >> nLogyRatioUV)) :
       pRefFrame->GetPlane(UPLANE)->GetAbsolutePointerPel <2>((workarea.x[1] << 2) + (nVx >> nLogxRatioUV), (workarea.y[1] << 2) + (nVy >> nLogyRatioUV));
+  }
+
+  MV_FORCEINLINE const uint8_t* GetRefBlockUSubShifted(WorkingArea& workarea, int nVx, int nVy, int& iPitch)
+  {
+    return
+      (nPel == 2) ? pRefFrame->GetPlane(UPLANE)->GetPointerSubShift((workarea.x[1] << 1) + (nVx >> nLogxRatioUV), (workarea.y[1] << 1) + (nVy >> nLogyRatioUV), iPitch) :
+      (nPel == 1) ? pRefFrame->GetPlane(UPLANE)->GetPointerSubShift((workarea.x[1]) + (nVx >> nLogxRatioUV), (workarea.y[1]) + (nVy >> nLogyRatioUV), iPitch) :
+      pRefFrame->GetPlane(UPLANE)->GetPointerSubShift((workarea.x[1] << 2) + (nVx >> nLogxRatioUV), (workarea.y[1] << 2) + (nVy >> nLogyRatioUV), iPitch);
   }
 
   MV_FORCEINLINE const uint8_t* GetRefBlockV(WorkingArea& workarea, int nVx, int nVy)
@@ -548,6 +565,15 @@ private:
       (nPel == 1) ? pRefFrame->GetPlane(VPLANE)->GetAbsolutePointerPel <0>((workarea.x[2]) + (nVx >> nLogxRatioUV), (workarea.y[2]) + (nVy >> nLogyRatioUV)) :
       pRefFrame->GetPlane(VPLANE)->GetAbsolutePointerPel <2>((workarea.x[2] << 2) + (nVx >> nLogxRatioUV), (workarea.y[2] << 2) + (nVy >> nLogyRatioUV));
   }
+
+  MV_FORCEINLINE const uint8_t* GetRefBlockVSubShifted(WorkingArea& workarea, int nVx, int nVy, int& iPitch)
+  {
+    return
+      (nPel == 2) ? pRefFrame->GetPlane(VPLANE)->GetPointerSubShift((workarea.x[1] << 1) + (nVx >> nLogxRatioUV), (workarea.y[1] << 1) + (nVy >> nLogyRatioUV), iPitch) :
+      (nPel == 1) ? pRefFrame->GetPlane(VPLANE)->GetPointerSubShift((workarea.x[1]) + (nVx >> nLogxRatioUV), (workarea.y[1]) + (nVy >> nLogyRatioUV), iPitch) :
+      pRefFrame->GetPlane(VPLANE)->GetPointerSubShift((workarea.x[1] << 2) + (nVx >> nLogxRatioUV), (workarea.y[1] << 2) + (nVy >> nLogyRatioUV), iPitch);
+  }
+
 
   MV_FORCEINLINE const uint8_t* GetSrcBlock(int nX, int nY)
   {
