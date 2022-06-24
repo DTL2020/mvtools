@@ -29,7 +29,6 @@
 #include "def.h"
 
 #define SHIFTKERNELSIZE 6
-//#define SHIFTKERNELSIZE_I16 6
 
 class MVPlane
 {
@@ -74,8 +73,10 @@ public:
   }
 
   // 2.7.46
-  const uint8_t* GetPointerSubShift(int nX, int nY, int iBlockSizeX, int iBlockSizeY, int& nDstPitch)const;
- 
+//  const uint8_t* GetPointerSubShift(int nX, int nY, int iBlockSizeX, int iBlockSizeY, int& nDstPitch)const;
+  const uint8_t* GetPointerSubShift(int nX, int nY, int& nDstPitch)const;
+  void SetBlockSize(int iBlockSizeX, int iBlockSizeY);
+
   MV_FORCEINLINE int GetPitch() const { return nPitch; }
   MV_FORCEINLINE int GetWidth() const { return nWidth; }
   MV_FORCEINLINE int GetHeight() const { return nHeight; }
@@ -161,6 +162,9 @@ private:
   short* sKernelShWI6_01;
   short* sKernelShWI6_10;
   short* sKernelShWI6_11;
+
+  int nBlkSizeX;
+  int nBlkSizeY;
 
   typedef void (*SubShiftFncPtr) (
     unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, short* sKernelH, short* sKernelV, int nSrcPitch, int nDstPitch, int iKS

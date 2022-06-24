@@ -138,9 +138,9 @@ void SubShiftBlock_Cs(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX
 /*
 void SubShiftBlock8x8_KS8_uint8_avx2(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
 void SubShiftBlock4x4_KS8_uint8_avx2(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
-
-void SubShiftBlock8x8_KS4_i16_uint8_avx2(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
-void SubShiftBlock4x4_KS4_i16_uint8_avx2(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
 */
+void SubShiftBlock8x8_KS6_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* pDst, const int iBlockSizeX, const int iBlockSizeY, short* sKernelH, short* sKernelV, const int nSrcPitch, const int nDstPitch, const int iKS);
+void SubShiftBlock4x4_KS6_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, short* sKernelH, short* sKernelV, int nSrcPitch, int nDstPitch, int iKS);
+
 
 #endif

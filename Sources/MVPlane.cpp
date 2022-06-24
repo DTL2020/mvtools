@@ -582,7 +582,8 @@ void MVPlane::reduce_slice(SlicerReduce::TaskData &td)
   );
 }
 
-const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int iBlockSizeY, int& pDstPitch) const
+//const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int iBlockSizeY, int& pDstPitch) const
+const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch) const
 {
   uint8_t* pSrc;
   short* psKrnH = 0;
@@ -641,31 +642,36 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int 
     break;
   }
 
-  int nShiftedBufPitch = (iBlockSizeX << pixelsize_shift);
+  int nShiftedBufPitch = (nBlkSizeX << pixelsize_shift);
 
   if (hasAVX2)
   {
-    if (iBlockSizeX == 8 && iBlockSizeY == 8 && pixelsize == 1)
+    if (nBlkSizeX == 8 && nBlkSizeY == 8 && pixelsize == 1)
     {
-    // SubShiftBlock8x8_KS8_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, pfKrnH, pfKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
-      //SubShiftBlock8x8_KS4_i16_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, (float*)psKrnH, (float*)psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE_I16);
-      SubShiftBlock_Cs(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+      SubShiftBlock8x8_KS6_i16_uint8_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+//      SubShiftBlock_Cs(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
     }
-    else if (iBlockSizeX == 4 && iBlockSizeY == 4 && pixelsize == 1)
+    else if (nBlkSizeX == 4 && nBlkSizeY == 4 && pixelsize == 1)
     {
       //SubShiftBlock4x4_KS8_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, pfKrnH, pfKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
       //SubShiftBlock4x4_KS4_i16_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, (float*)psKrnH, (float*)psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE_I16);
-      SubShiftBlock_Cs(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+      SubShiftBlock_Cs(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
     }
     else
-      _sub_shift_ptr(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+      _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
   }
   else
   {
-    _sub_shift_ptr(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+    _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
   }
 
   pDstPitch = nShiftedBufPitch;
   return pShiftedBlockBuf;
 
+}
+
+void MVPlane::SetBlockSize(int iBlockSizeX, int iBlockSizeY)
+{
+  nBlkSizeX = iBlockSizeX;
+  nBlkSizeY = iBlockSizeY;
 }

@@ -1258,14 +1258,22 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
     if (_yuvplanes & YPLANE)
     {
       _planes_ptr[k][0] = gof.GetFrame(0)->GetPlane(YPLANE);
+      // set block size for MVplane
+      _planes_ptr[k][0]->SetBlockSize(nBlkSizeX, nBlkSizeY); // hope it is never zero ptr ?
     }
     if (_yuvplanes & UPLANE)
     {
       _planes_ptr[k][1] = gof.GetFrame(0)->GetPlane(UPLANE);
+      // set block size for MVplane
+      if (_planes_ptr[k][1] != 0)
+        _planes_ptr[k][1]->SetBlockSize(nBlkSizeX >> nLogyRatioUV_super, nBlkSizeY >> nLogyRatioUV_super); // is it OK for 4:2:2 if supported ?
     }
     if (_yuvplanes & VPLANE)
     {
       _planes_ptr[k][2] = gof.GetFrame(0)->GetPlane(VPLANE);
+      // set block size for MVplane
+      if (_planes_ptr[k][2] != 0)
+        _planes_ptr[k][2]->SetBlockSize(nBlkSizeX >> nLogyRatioUV_super, nBlkSizeY >> nLogyRatioUV_super); // is it OK for 4:2:2 if supported ?
     }
   }
 
@@ -2605,8 +2613,36 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
     
      if (nPel != 1 && nUseSubShift != 0)
      {
-       p = plane_ptr->GetPointerSubShift(blx, bly, nBlkSizeX, nBlkSizeY, np);
+//       p = plane_ptr->GetPointerSubShift(blx, bly, nBlkSizeX, nBlkSizeY, np);
+       p = plane_ptr->GetPointerSubShift(blx, bly, np);
+
        const BYTE* pold = plane_ptr->GetPointer(blx, bly);
+/*       int np_old = plane_ptr->GetPitch();
+
+       int or0 = pold[0];
+       int or1 = pold[1 * np_old];
+       int or2 = pold[2 * np_old];
+       int or3 = pold[3 * np_old];
+       int or4 = pold[4 * np_old];
+       int or5 = pold[5 * np_old];
+       int or6 = pold[6 * np_old];
+       int or7 = pold[7 * np_old];
+
+
+       for (int x = 0; x < nBlkSizeX; x++)
+       {
+         for (int y = 0; y < nBlkSizeY; y++)
+         {
+           int isample = p[y * np + x];
+           int isample_old = pold[y * np_old + x];
+
+           if (abs (isample - isample_old) > 3)
+           {
+             int idbr = 0;
+           }
+         }
+       }
+       */
      }
      else
      {
@@ -2641,7 +2677,8 @@ MV_FORCEINLINE void	MDegrainN::use_block_y_thSADzeromv_thSADcohmv(
 
     if (nPel != 1 && nUseSubShift != 0)
     {
-      p = plane_ptr->GetPointerSubShift(blx, bly, nBlkSizeX, nBlkSizeY, np);
+//      p = plane_ptr->GetPointerSubShift(blx, bly, nBlkSizeX, nBlkSizeY, np);
+      p = plane_ptr->GetPointerSubShift(blx, bly, np);
     }
     else
     {
@@ -2715,7 +2752,8 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv(
 
      if (nPel != 1 && nUseSubShift != 0)
      {
-       p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super, np);
+//       p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super, np);
+       p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, np);
      }
      else
      {
@@ -2751,7 +2789,8 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv_thSADzeromv_thSADcohmv(
 
     if (nPel != 1 && nUseSubShift != 0)
     {
-      p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super, np);
+//      p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super, np);
+      p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, np);
     }
     else
     {
