@@ -73,7 +73,6 @@ public:
   }
 
   // 2.7.46
-//  const uint8_t* GetPointerSubShift(int nX, int nY, int iBlockSizeX, int iBlockSizeY, int& nDstPitch)const;
   const uint8_t* GetPointerSubShift(int nX, int nY, int& nDstPitch)const;
   void SetBlockSize(int iBlockSizeX, int iBlockSizeY);
 

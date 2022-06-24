@@ -582,7 +582,6 @@ void MVPlane::reduce_slice(SlicerReduce::TaskData &td)
   );
 }
 
-//const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int iBlockSizeX, int iBlockSizeY, int& pDstPitch) const
 const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch) const
 {
   uint8_t* pSrc;
@@ -653,9 +652,8 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch) const
     }
     else if (nBlkSizeX == 4 && nBlkSizeY == 4 && pixelsize == 1)
     {
-      //SubShiftBlock4x4_KS8_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, pfKrnH, pfKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
-      //SubShiftBlock4x4_KS4_i16_uint8_avx2(pSrc, pShiftedBlockBuf, iBlockSizeX, iBlockSizeY, (float*)psKrnH, (float*)psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE_I16);
-      SubShiftBlock_Cs(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+      SubShiftBlock4x4_KS6_i16_uint8_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+//      SubShiftBlock_Cs(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
     }
     else
       _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
