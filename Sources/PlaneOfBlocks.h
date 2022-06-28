@@ -537,9 +537,9 @@ private:
   MV_FORCEINLINE const uint8_t* GetRefBlockSubShifted(WorkingArea& workarea, int nVx, int nVy, int& iPitch) {
 
    return
-      (nPel == 2) ? pRefFrame->GetPlane(YPLANE)->GetPointerSubShift((workarea.x[0] << 1) + nVx, (workarea.y[0] << 1) + nVy, iPitch) :
-      (nPel == 1) ? pRefFrame->GetPlane(YPLANE)->GetPointerSubShift((workarea.x[0]) + nVx, (workarea.y[0]) + nVy, iPitch) :
-      pRefFrame->GetPlane(YPLANE)->GetPointerSubShift((workarea.x[0] << 2) + nVx, (workarea.y[0] << 2) + nVy, iPitch);
+      (nPel == 2) ? pRefFrame->GetPlane(YPLANE)->GetPointerSubShift((workarea.x[0] << 1) + nVx, (workarea.y[0] << 1) + nVy, iPitch, false) :
+      (nPel == 1) ? pRefFrame->GetPlane(YPLANE)->GetPointerSubShift((workarea.x[0]) + nVx, (workarea.y[0]) + nVy, iPitch, false) :
+      pRefFrame->GetPlane(YPLANE)->GetPointerSubShift((workarea.x[0] << 2) + nVx, (workarea.y[0] << 2) + nVy, iPitch, false);
   }
 
   MV_FORCEINLINE const uint8_t* GetRefBlockU(WorkingArea& workarea, int nVx, int nVy)
@@ -553,9 +553,9 @@ private:
   MV_FORCEINLINE const uint8_t* GetRefBlockUSubShifted(WorkingArea& workarea, int nVx, int nVy, int& iPitch)
   {
     return
-      (nPel == 2) ? pRefFrame->GetPlane(UPLANE)->GetPointerSubShift((workarea.x[1] << 1) + (nVx >> nLogxRatioUV), (workarea.y[1] << 1) + (nVy >> nLogyRatioUV), iPitch) :
-      (nPel == 1) ? pRefFrame->GetPlane(UPLANE)->GetPointerSubShift((workarea.x[1]) + (nVx >> nLogxRatioUV), (workarea.y[1]) + (nVy >> nLogyRatioUV), iPitch) :
-      pRefFrame->GetPlane(UPLANE)->GetPointerSubShift((workarea.x[1] << 2) + (nVx >> nLogxRatioUV), (workarea.y[1] << 2) + (nVy >> nLogyRatioUV), iPitch);
+      (nPel == 2) ? pRefFrame->GetPlane(UPLANE)->GetPointerSubShift((workarea.x[1] << 1) + (nVx >> nLogxRatioUV), (workarea.y[1] << 1) + (nVy >> nLogyRatioUV), iPitch, false) :
+      (nPel == 1) ? pRefFrame->GetPlane(UPLANE)->GetPointerSubShift((workarea.x[1]) + (nVx >> nLogxRatioUV), (workarea.y[1]) + (nVy >> nLogyRatioUV), iPitch, false) :
+      pRefFrame->GetPlane(UPLANE)->GetPointerSubShift((workarea.x[1] << 2) + (nVx >> nLogxRatioUV), (workarea.y[1] << 2) + (nVy >> nLogyRatioUV), iPitch, false);
   }
 
   MV_FORCEINLINE const uint8_t* GetRefBlockV(WorkingArea& workarea, int nVx, int nVy)
@@ -569,9 +569,9 @@ private:
   MV_FORCEINLINE const uint8_t* GetRefBlockVSubShifted(WorkingArea& workarea, int nVx, int nVy, int& iPitch)
   {
     return
-      (nPel == 2) ? pRefFrame->GetPlane(VPLANE)->GetPointerSubShift((workarea.x[1] << 1) + (nVx >> nLogxRatioUV), (workarea.y[1] << 1) + (nVy >> nLogyRatioUV), iPitch) :
-      (nPel == 1) ? pRefFrame->GetPlane(VPLANE)->GetPointerSubShift((workarea.x[1]) + (nVx >> nLogxRatioUV), (workarea.y[1]) + (nVy >> nLogyRatioUV), iPitch) :
-      pRefFrame->GetPlane(VPLANE)->GetPointerSubShift((workarea.x[1] << 2) + (nVx >> nLogxRatioUV), (workarea.y[1] << 2) + (nVy >> nLogyRatioUV), iPitch);
+      (nPel == 2) ? pRefFrame->GetPlane(VPLANE)->GetPointerSubShift((workarea.x[1] << 1) + (nVx >> nLogxRatioUV), (workarea.y[1] << 1) + (nVy >> nLogyRatioUV), iPitch, false) :
+      (nPel == 1) ? pRefFrame->GetPlane(VPLANE)->GetPointerSubShift((workarea.x[1]) + (nVx >> nLogxRatioUV), (workarea.y[1]) + (nVy >> nLogyRatioUV), iPitch, false) :
+      pRefFrame->GetPlane(VPLANE)->GetPointerSubShift((workarea.x[1] << 2) + (nVx >> nLogxRatioUV), (workarea.y[1] << 2) + (nVy >> nLogyRatioUV), iPitch, false);
   }
 
 

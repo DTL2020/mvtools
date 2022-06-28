@@ -73,7 +73,7 @@ public:
   }
 
   // 2.7.46
-  const uint8_t* GetPointerSubShift(int nX, int nY, int& nDstPitch)const;
+  const uint8_t* GetPointerSubShift(int nX, int nY, int& nDstPitch, bool bPadded = true);
   void SetBlockSize(int iBlockSizeX, int iBlockSizeY);
 
   MV_FORCEINLINE int GetPitch() const { return nPitch; }
@@ -164,6 +164,12 @@ private:
 
   int nBlkSizeX;
   int nBlkSizeY;
+
+  int iPrcdBlockX;
+  int iPrcdBlockY;
+  uint8_t* puiPrcdBlkPtr;
+  int iPrcdBlkPitch;
+  bool bPrcdBlkValid;
 
   typedef void (*SubShiftFncPtr) (
     unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, short* sKernelH, short* sKernelV, int nSrcPitch, int nDstPitch, int iKS

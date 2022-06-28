@@ -186,6 +186,7 @@ private:
   void CreateFrameWeightsArr_AVX512(void);
 
   void FilterMVs(void);
+  MV_FORCEINLINE void FilterBlkMVs(int i, int bx, int by);
   MV_FORCEINLINE void PrefetchMVs(int i);
 
   MvClipArray _mv_clip_arr;

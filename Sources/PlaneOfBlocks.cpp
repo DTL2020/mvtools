@@ -2023,10 +2023,19 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
     }
     else
     {
-      saduv = (chroma) ?
-        ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockUSubShifted(workarea, 0, 0, iRefPitchU), iRefPitchU)
-          + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockVSubShifted(workarea, 0, 0, iRefPitchV), iRefPitchV), effective_chromaSADscale, scaleCSADfine) : 0;
-      sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlockSubShifted(workarea, 0, zeroMVfieldShifted.y, iRefPitchY), iRefPitchY);
+      if (chroma)
+      {
+        const unsigned char* ptrRefU = GetRefBlockUSubShifted(workarea, 0, 0, iRefPitchU);
+        const unsigned char* ptrRefV = GetRefBlockVSubShifted(workarea, 0, 0, iRefPitchV);
+        saduv = ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], ptrRefU, iRefPitchU)
+          + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], ptrRefV, iRefPitchV), effective_chromaSADscale, scaleCSADfine);
+      }
+      else
+        saduv = 0;
+    
+      const unsigned char* ptrRef = GetRefBlockSubShifted(workarea, 0, zeroMVfieldShifted.y, iRefPitchY);
+      sad = SAD(workarea.pSrc[0], nSrcPitch[0], ptrRef, iRefPitchY);
+//      sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlockSubShifted(workarea, 0, zeroMVfieldShifted.y, iRefPitchY), iRefPitchY);
     }
 
     sad += saduv;
@@ -2050,10 +2059,18 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
       }
       else
       {
-        saduv = (chroma) ?
-          ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockUSubShifted(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y, iRefPitchU), iRefPitchU)
-            + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockVSubShifted(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y, iRefPitchV), iRefPitchV), effective_chromaSADscale, scaleCSADfine) : 0;
-        sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlockSubShifted(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y, iRefPitchY), iRefPitchY);
+        if (chroma)
+        {
+          const unsigned char* ptrRefU = GetRefBlockUSubShifted(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y, iRefPitchU);
+          const unsigned char* ptrRefV = GetRefBlockVSubShifted(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y, iRefPitchV);
+          saduv = ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], ptrRefU, iRefPitchU)
+            + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], ptrRefV, iRefPitchV), effective_chromaSADscale, scaleCSADfine);
+        }
+        else
+          saduv = 0;
+
+        const unsigned char* ptrRef = GetRefBlockSubShifted(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y, iRefPitchY);
+        sad = SAD(workarea.pSrc[0], nSrcPitch[0], ptrRef, iRefPitchY);
       }
         sad += saduv;
         sad_t cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
@@ -2082,10 +2099,19 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
       }
       else
       {
-        saduv = (chroma) ? ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockUSubShifted(workarea, workarea.predictor.x, workarea.predictor.y, iRefPitchU), iRefPitchU)
-          + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockVSubShifted(workarea, workarea.predictor.x, workarea.predictor.y, iRefPitchV), iRefPitchV), effective_chromaSADscale, scaleCSADfine) : 0;
-//        sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
-        sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlockSubShifted(workarea, workarea.predictor.x, workarea.predictor.y, iRefPitchY), iRefPitchY);
+        if (chroma)
+        {
+          const unsigned char* ptrRefU = GetRefBlockUSubShifted(workarea, workarea.predictor.x, workarea.predictor.y, iRefPitchU);
+          const unsigned char* ptrRefV = GetRefBlockVSubShifted(workarea, workarea.predictor.x, workarea.predictor.y, iRefPitchV);
+          saduv = ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], ptrRefU, iRefPitchU)
+            + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], ptrRefV, iRefPitchV), effective_chromaSADscale, scaleCSADfine);
+        }
+        else
+          saduv = 0;
+
+        const unsigned char* ptrRef = GetRefBlockSubShifted(workarea, workarea.predictor.x, workarea.predictor.y, iRefPitchY);
+        sad = SAD(workarea.pSrc[0], nSrcPitch[0], ptrRef, iRefPitchY);
+
       }
         sad += saduv;
 
@@ -4155,12 +4181,42 @@ MV_FORCEINLINE void	PlaneOfBlocks::CheckMV(WorkingArea &workarea, int vx, int vy
 
     typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
 
-    sad_t sad=LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, vx, vy));
+    sad_t sad; //=LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, vx, vy));
+    if (iUseSubShift == 0)
+    {
+      sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, vx, vy));
+    }
+    else
+    {
+      int iRefPitchY = 0;
+      const unsigned char* ptrRef = GetRefBlockSubShifted(workarea, vx, vy, iRefPitchY);
+      sad = SAD(workarea.pSrc[0], nSrcPitch[0], ptrRef, iRefPitchY);
+    }
+
     cost += sad + ((penaltyNew*(safe_sad_t)sad) >> 8);
     if(cost>=workarea.nMinCost) return;
 
-    sad_t saduv = (chroma) ? ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, vx, vy), nRefPitch[1])
-      + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, vx, vy), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0;
+    sad_t saduv; /* = (chroma) ? ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, vx, vy), nRefPitch[1])
+      + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, vx, vy), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0; */
+    if (iUseSubShift == 0)
+    {
+      saduv = (chroma) ? ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, vx, vy), nRefPitch[1])
+        + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, vx, vy), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0;
+    }
+    else
+    {
+      if (chroma)
+      {
+        int iRefPitchU = 0;
+        int iRefPitchV = 0;
+        const unsigned char* ptrRefU = GetRefBlockUSubShifted(workarea, vx, vy, iRefPitchU);
+        const unsigned char* ptrRefV = GetRefBlockVSubShifted(workarea, vx, vy, iRefPitchV);
+        saduv = ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], ptrRefU, iRefPitchU)
+          + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], ptrRefV, iRefPitchV), effective_chromaSADscale, scaleCSADfine);
+      }
+      else
+        saduv = 0;
+    }
     cost += saduv + ((penaltyNew*(safe_sad_t)saduv) >> 8);
     if(cost>=workarea.nMinCost) return;
 
@@ -4217,9 +4273,11 @@ MV_FORCEINLINE void	PlaneOfBlocks::CheckMV2(WorkingArea &workarea, int vx, int v
     }
     else
     {
-      int iRefPitch = 0;
-      sad = SAD(workarea.pSrc[0], nSrcPitch[0], GetRefBlockSubShifted(workarea, vx, vy, iRefPitch), iRefPitch);
+      int iRefPitchY = 0;
+      const unsigned char* ptrRef = GetRefBlockSubShifted(workarea, vx, vy, iRefPitchY);
+      sad = SAD(workarea.pSrc[0], nSrcPitch[0], ptrRef, iRefPitchY);
     }
+
     cost += sad + ((penaltyNew*(safe_sad_t)sad) >> 8);
     if(cost>=workarea.nMinCost) return;
 
@@ -4232,11 +4290,19 @@ MV_FORCEINLINE void	PlaneOfBlocks::CheckMV2(WorkingArea &workarea, int vx, int v
     }
     else
     {
-      int iRefPitch1 = 0;
-      int iRefPitch2 = 0;
-      saduv = (chroma) ? ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockUSubShifted(workarea, vx, vy, iRefPitch1), iRefPitch1)
-        + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockVSubShifted(workarea, vx, vy, iRefPitch2), iRefPitch2), effective_chromaSADscale, scaleCSADfine) : 0;
+      if (chroma)
+      {
+        int iRefPitchU = 0;
+        int iRefPitchV = 0;
+        const unsigned char* ptrRefU = GetRefBlockUSubShifted(workarea, vx, vy, iRefPitchU);
+        const unsigned char* ptrRefV = GetRefBlockVSubShifted(workarea, vx, vy, iRefPitchV);
+        saduv = ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], ptrRefU, iRefPitchU)
+          + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], ptrRefV, iRefPitchV), effective_chromaSADscale, scaleCSADfine);
+      }
+      else
+        saduv = 0;
     }
+
     cost += saduv+((penaltyNew*(safe_sad_t)saduv) >> 8);
     if(cost>=workarea.nMinCost) return;
 

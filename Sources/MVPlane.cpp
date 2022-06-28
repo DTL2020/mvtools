@@ -114,13 +114,15 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
   // Nothing
 
   // 2.7.46
-  // prepare subshift kernels
-/*  CalcShiftKernel(fKernelSh_01, 0.25f, SHIFTKERNELSIZE);
-  CalcShiftKernel(fKernelSh_10, 0.5f, SHIFTKERNELSIZE);
-  CalcShiftKernel(fKernelSh_11, 0.75f, SHIFTKERNELSIZE);
-  */
-  // 2.7.46
+  // memory of processed block to return without double processing
+  iPrcdBlockX = 0;
+  iPrcdBlockY = 0;
+  iPrcdBlkPitch = 0;
+  puiPrcdBlkPtr = 0;
+  bPrcdBlkValid = false;
 
+  // 2.7.46
+  // sub shift kernels init
   sKernelShWI6_01 = new short[SHIFTKERNELSIZE + 1] {1, -5, 52, 20, -5, 1, 16};
   sKernelShWI6_10 = new short[SHIFTKERNELSIZE + 1] {2, -10, 40, 40, -10, 2, 32};
   sKernelShWI6_11 = new short[SHIFTKERNELSIZE + 1] {1, -5, 20, 52, -5, 1, 16};
@@ -581,16 +583,32 @@ void MVPlane::reduce_slice(SlicerReduce::TaskData &td)
   );
 }
 
-const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch) const
+const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch, bool bPadded)
 {
   uint8_t* pSrc;
   short* psKrnH = 0;
   short* psKrnV = 0;
 
+  int nfullX = nX;
+  int nfullY = nY;
+
+  int nShiftedBufPitch = (nBlkSizeX << pixelsize_shift);
+
+  // check if block already processed
+/*  if ((iPrcdBlockX == nX) && (iPrcdBlockY == nY) && bPrcdBlkValid)
+  {
+    pDstPitch = iPrcdBlkPitch;
+    return puiPrcdBlkPtr;
+  }
+  */ // same speed without better per block MVLPF design ?
+
   int NPELL2 = nPel >> 1;
 
-  int nfullX = nX + nHPaddingPel;
-  int nfullY = nY + nVPaddingPel;
+  if (bPadded)
+  {
+    nfullX += nHPaddingPel;
+    nfullY += nVPaddingPel;
+  }
 
   int iMASK = (1 << NPELL2) - 1;
 
@@ -604,6 +622,13 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch) const
 
   if (i_dx == 0 && i_dy == 0)
   {
+/*    // remember last processed block params
+    iPrcdBlockX = nX;
+    iPrcdBlockY = nY;
+    puiPrcdBlkPtr = pSrc;
+    iPrcdBlkPitch = nPitch;
+    bPrcdBlkValid = true;
+    */
     pDstPitch = nPitch;
     return pSrc;
   }
@@ -640,19 +665,15 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch) const
     break;
   }
 
-  int nShiftedBufPitch = (nBlkSizeX << pixelsize_shift);
-
   if (hasAVX2)
   {
     if (nBlkSizeX == 8 && nBlkSizeY == 8 && pixelsize == 1)
     {
       SubShiftBlock8x8_KS6_i16_uint8_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
-//      SubShiftBlock_Cs(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
     }
     else if (nBlkSizeX == 4 && nBlkSizeY == 4 && pixelsize == 1)
     {
       SubShiftBlock4x4_KS6_i16_uint8_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
-//      SubShiftBlock_Cs(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
     }
     else
       _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
@@ -663,6 +684,14 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch) const
   }
 
   pDstPitch = nShiftedBufPitch;
+
+  // remember last processed block params
+/*  iPrcdBlockX = nX;
+  iPrcdBlockY = nY;
+  puiPrcdBlkPtr = pShiftedBlockBuf;
+  iPrcdBlkPitch = nShiftedBufPitch;
+  bPrcdBlkValid = true;
+  */
   return pShiftedBlockBuf;
 
 }
