@@ -231,16 +231,32 @@ MVAnalyse::MVAnalyse(
 
   _cpuFlags = _isse ? env->GetCPUFlags() : 0;
 
-  pSrcGOF = new MVGroupOfFrames(
-    nSuperLevels, analysisData.nWidth, analysisData.nHeight,
-    nSuperPel, nSuperHPad, nSuperVPad, nSuperModeYUV,
-    _cpuFlags, analysisData.xRatioUV, analysisData.yRatioUV, pixelsize, bits_per_pixel, mt_flag
-  );
-  pRefGOF = new MVGroupOfFrames(
-    nSuperLevels, analysisData.nWidth, analysisData.nHeight,
-    nSuperPel, nSuperHPad, nSuperVPad, nSuperModeYUV,
-    _cpuFlags, analysisData.xRatioUV, analysisData.yRatioUV, pixelsize, bits_per_pixel, mt_flag
-  );
+  if (iUseSubShift == 0)
+  {
+    pSrcGOF = new MVGroupOfFrames(
+      nSuperLevels, analysisData.nWidth, analysisData.nHeight,
+      nSuperPel, nSuperHPad, nSuperVPad, nSuperModeYUV,
+      _cpuFlags, analysisData.xRatioUV, analysisData.yRatioUV, pixelsize, bits_per_pixel, mt_flag
+    );
+    pRefGOF = new MVGroupOfFrames(
+      nSuperLevels, analysisData.nWidth, analysisData.nHeight,
+      nSuperPel, nSuperHPad, nSuperVPad, nSuperModeYUV,
+      _cpuFlags, analysisData.xRatioUV, analysisData.yRatioUV, pixelsize, bits_per_pixel, mt_flag
+    );
+  }
+  else
+  {
+    pSrcGOF = new MVGroupOfFrames(
+      nSuperLevels, analysisData.nWidth, analysisData.nHeight,
+      1, nSuperHPad, nSuperVPad, nSuperModeYUV,
+      _cpuFlags, analysisData.xRatioUV, analysisData.yRatioUV, pixelsize, bits_per_pixel, mt_flag
+    );
+    pRefGOF = new MVGroupOfFrames(
+      nSuperLevels, analysisData.nWidth, analysisData.nHeight,
+      1, nSuperHPad, nSuperVPad, nSuperModeYUV,
+      _cpuFlags, analysisData.xRatioUV, analysisData.yRatioUV, pixelsize, bits_per_pixel, mt_flag
+    );
+  }
 
   analysisData.nBlkSizeX = _blksizex;
   analysisData.nBlkSizeY = _blksizey;

@@ -139,6 +139,7 @@ MVSuper::MVSuper(
   {
     nSuperHeight = PlaneSuperOffset(false, nHeight, nLevels, 1, nVPad, nSuperWidth * pixelsize, yRatioUV) / (nSuperWidth * pixelsize);
   }
+
   if (yRatioUV == 2 && nSuperHeight & 1) nSuperHeight++; // even
   vi.width = nSuperWidth;
   vi.height = nSuperHeight;
@@ -169,7 +170,15 @@ MVSuper::MVSuper(
 
   // LDS: why not nModeYUV?
 //	pSrcGOF = new MVGroupOfFrames(nLevels, nWidth, nHeight, nPel, nHPad, nVPad, nModeYUV, isse, yRatioUV, mt_flag);
-  pSrcGOF = new MVGroupOfFrames(nLevels, nWidth, nHeight, nPel, nHPad, nVPad, YUVPLANES, cpuFlags, xRatioUV, yRatioUV, pixelsize, bits_per_pixel, mt_flag);
+
+  if (pel_refine)
+  {
+    pSrcGOF = new MVGroupOfFrames(nLevels, nWidth, nHeight, nPel, nHPad, nVPad, YUVPLANES, cpuFlags, xRatioUV, yRatioUV, pixelsize, bits_per_pixel, mt_flag);
+  }
+  else
+  {
+    pSrcGOF = new MVGroupOfFrames(nLevels, nWidth, nHeight, 1, nHPad, nVPad, YUVPLANES, cpuFlags, xRatioUV, yRatioUV, pixelsize, bits_per_pixel, mt_flag);
+  }
 
   pSrcGOF->set_interp(nModeYUV, rfilter, sharp);
 
