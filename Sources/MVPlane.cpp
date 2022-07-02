@@ -595,12 +595,11 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch, bool 
   int nShiftedBufPitch = (nBlkSizeX << pixelsize_shift);
 
   // check if block already processed
-/*  if ((iPrcdBlockX == nX) && (iPrcdBlockY == nY) && bPrcdBlkValid)
+  if ((iPrcdBlockX == nX) && (iPrcdBlockY == nY) && bPrcdBlkValid)
   {
     pDstPitch = iPrcdBlkPitch;
     return puiPrcdBlkPtr;
   }
-  */ // same speed without better per block MVLPF design ?
 
   int NPELL2 = nPel >> 1;
 
@@ -622,13 +621,13 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch, bool 
 
   if (i_dx == 0 && i_dy == 0)
   {
-/*    // remember last processed block params
+    // remember last processed block params
     iPrcdBlockX = nX;
     iPrcdBlockY = nY;
     puiPrcdBlkPtr = pSrc;
     iPrcdBlkPitch = nPitch;
     bPrcdBlkValid = true;
-    */
+
     pDstPitch = nPitch;
     return pSrc;
   }
@@ -686,12 +685,12 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch, bool 
   pDstPitch = nShiftedBufPitch;
 
   // remember last processed block params
-/*  iPrcdBlockX = nX;
+  iPrcdBlockX = nX;
   iPrcdBlockY = nY;
   puiPrcdBlkPtr = pShiftedBlockBuf;
   iPrcdBlkPitch = nShiftedBufPitch;
   bPrcdBlkValid = true;
-  */
+
   return pShiftedBlockBuf;
 
 }

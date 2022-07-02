@@ -249,99 +249,6 @@ void DegrainN_sse2(
   }
 }
 
-// soft edges weighting blending function
-template <int blockWidth, int blockHeight, int out16_type>
-void DegrainN_sse2_SEWB(
-  BYTE* pDst, BYTE* pDstLsb, int nDstPitch,
-  const BYTE* pSrc, int nSrcPitch,
-  const BYTE* pRef[], int Pitch[],
-  uint16_t* pWall, int trad
-)
-{
-  assert(blockWidth % 4 == 0);
-  // only mod4 supported
-
-  int iBlkSize = blockWidth * blockHeight; // for 8bit
-
-  constexpr bool lsb_flag = (out16_type == 1);
-  constexpr bool out16 = (out16_type == 2);
-
-  const __m128i z = _mm_setzero_si128();
-
-  constexpr bool is_mod8 = blockWidth % 8 == 0;
-  constexpr int pixels_at_a_time = is_mod8 ? 8 : 4; // 4 for 4 and 12; 8 for all others 8, 16, 24, 32...
-
-  // base 8 bit -> 8 bit
-  const __m128i o = _mm_set1_epi16(128); // rounding
-  
-  uint16_t* pW = pWall + (uint64_t)iBlkSize; // shift by size of W0 weight buff
-
-  for (int h = 0; h < blockHeight; ++h)
-  {
-    for (int x = 0; x < blockWidth; x += pixels_at_a_time)
-    {
-      __m128i src;
-      if constexpr (is_mod8) // load 8 pixels
-        src = _mm_loadl_epi64((__m128i*) (pSrc + x));
-      else // load 4 pixels
-        src = _mm_cvtsi32_si128(*(uint32_t*)(pSrc + x));
-
-      __m128i weight_src = _mm_loadu_si128((__m128i*) (&pWall[0] + (uint64_t)h * blockWidth + x));
-
-      //        __m128i val = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(src, z), _mm_set1_epi16(Wall[0])), o);
-      __m128i val = _mm_add_epi16(_mm_mullo_epi16(_mm_unpacklo_epi8(src, z), weight_src), o);
-
-      for (int k = 0; k < trad; ++k)
-      {
-        __m128i src1, src2;
-        __m128i weight1, weight2;
-        if constexpr (is_mod8) // load 8-8 pixels
-        {
-          src1 = _mm_loadl_epi64((__m128i*) (pRef[k * 2] + x));
-          src2 = _mm_loadl_epi64((__m128i*) (pRef[k * 2 + 1] + x));
-
-          weight1 = _mm_loadu_si128((__m128i*)(pW + ((uint64_t)k * 2 * (uint64_t)iBlkSize + x)));
-          weight2 = _mm_loadu_si128((__m128i*)(pW + (((uint64_t)k * 2 + 1) * (uint64_t)iBlkSize + x))); // +x - not tested for > 8x8 blocks
-
-        }
-        else { // 4-4 pixels
-          src1 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2] + x));
-          src2 = _mm_cvtsi32_si128(*(uint32_t*)(pRef[k * 2 + 1] + x));
-        }
-        //          const __m128i s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), _mm_set1_epi16(Wall[k * 2 + 1]));
-        //          const __m128i s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), _mm_set1_epi16(Wall[k * 2 + 2]));
-          const __m128i s1 = _mm_mullo_epi16(_mm_unpacklo_epi8(src1, z), weight1);
-          const __m128i s2 = _mm_mullo_epi16(_mm_unpacklo_epi8(src2, z), weight2);
-
-        val = _mm_add_epi16(val, s1);
-        val = _mm_add_epi16(val, s2);
-      }
-
-      auto res = _mm_packus_epi16(_mm_srli_epi16(val, 8), z);
-
-      if constexpr (is_mod8) {
-        _mm_storel_epi64((__m128i*)(pDst + x), res);
-      }
-      else {
-        *(uint32_t*)(pDst + x) = _mm_cvtsi128_si32(res);
-      }
-    }
-
-    pW += blockWidth;
-
-    pDst += nDstPitch;
-    pSrc += nSrcPitch;
-    for (int k = 0; k < trad; ++k)
-    {
-      pRef[k * 2] += Pitch[k * 2];
-      pRef[k * 2 + 1] += Pitch[k * 2 + 1];
-    }
-  }
-
-}
-
-
-
 template<int blockWidth, int blockHeight, bool lessThan16bits>
 void DegrainN_16_sse41(
   BYTE* pDst, BYTE* pDstLsb, int nDstPitch,
@@ -628,7 +535,7 @@ MDegrainN::MDegrainN(
   sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
   sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
-  float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, int UseSubShift, int SEWBWidth,
+  float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, int UseSubShift, 
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -681,7 +588,6 @@ MDegrainN::MDegrainN(
   , fMVLPFGauss(MVLPFGauss)
   , ithMVLPFCorr(thMVLPFCorr)
   , nUseSubShift(UseSubShift)
-  , iSEWBWidth (SEWBWidth)
 {
   has_at_least_v8 = true;
   try { env_ptr->CheckVersion(8); }
@@ -1055,11 +961,11 @@ MDegrainN::MDegrainN(
   }
   else
   {
-    int iKS_d2 = ((SHIFTKERNELSIZE / 2) + 2); // +2 is to prevent run out of buffer for UV planes
-    iMinBlx = (-nBlkSizeX + iKS_d2) * nPel;
-    iMaxBlx = (nBlkSizeX * nBlkX - iKS_d2) * nPel;
-    iMinBly = (-nBlkSizeY + iKS_d2) * nPel;
-    iMaxBly = (nBlkSizeY * nBlkY - iKS_d2) * nPel;
+    int iKS_sh_d2 = ((SHIFTKERNELSIZE / 2) + 2); // +2 is to prevent run out of buffer for UV planes
+    iMinBlx = (-nBlkSizeX + iKS_sh_d2) * nPel;
+    iMaxBlx = (nBlkSizeX * nBlkX - iKS_sh_d2) * nPel;
+    iMinBly = (-nBlkSizeY + iKS_sh_d2) * nPel;
+    iMaxBly = (nBlkSizeY * nBlkY - iKS_sh_d2) * nPel;
   }
 
 }
@@ -1265,14 +1171,14 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
       _planes_ptr[k][1] = gof.GetFrame(0)->GetPlane(UPLANE);
       // set block size for MVplane
       if (_planes_ptr[k][1] != 0)
-        _planes_ptr[k][1]->SetBlockSize(nBlkSizeX >> nLogyRatioUV_super, nBlkSizeY >> nLogyRatioUV_super); // is it OK for 4:2:2 if supported ?
+        _planes_ptr[k][1]->SetBlockSize(nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super); 
     }
     if (_yuvplanes & VPLANE)
     {
       _planes_ptr[k][2] = gof.GetFrame(0)->GetPlane(VPLANE);
       // set block size for MVplane
       if (_planes_ptr[k][2] != 0)
-        _planes_ptr[k][2]->SetBlockSize(nBlkSizeX >> nLogyRatioUV_super, nBlkSizeY >> nLogyRatioUV_super); // is it OK for 4:2:2 if supported ?
+        _planes_ptr[k][2]->SetBlockSize(nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super); 
     }
   }
 
@@ -1285,12 +1191,13 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
   //call Filter MVs here because it equal for luma and all chroma planes
 //  const BYTE* pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
 
-  // to test per-block processing filtering
-  if (bMVsAddProc)
+  // it is currently faster to call once because of interconnectin of Y+UV via chroma blocks SADs,
+  // will be faster with per-block processing may be only in the combined Y+UV colour data processing (possibly).
+/*  if (bMVsAddProc)
   {
     FilterMVs();
   }
-
+  */ // TEST with use_block_yuv
 
   PROFILE_START(MOTION_PROFILE_COMPENSATION);
 
@@ -1320,21 +1227,20 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
     if (nOverlapX == 0 && nOverlapY == 0)
     {
       {
-/*        if (iSEWBWidth != 0)
+        if ((_yuvplanes & UPLANE) && (_yuvplanes & VPLANE) ) // YUV planes all present
         {
-          CreateFrameWeightsArr_C();
           slicer.start(
             nBlkY,
             *this,
-            &MDegrainN::process_luma_normal_slice_SEWB
+            &MDegrainN::process_luma_and_chroma_normal_slice 
           );
         }
-        else*/
+        else
         {
           slicer.start(
             nBlkY,
             *this,
-            &MDegrainN::process_luma_normal_slice
+            &MDegrainN::process_luma_normal_slice // Y plane only
           );
         }
       }
@@ -1478,8 +1384,11 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
   //-------------------------------------------------------------------------
   // CHROMA planes
 
-  process_chroma <1>(UPLANE & _nsupermodeyuv);
-  process_chroma <2>(VPLANE & _nsupermodeyuv);
+if ((nOverlapX != 0) || (nOverlapY != 0)) // still no proc as YUV
+  {
+    process_chroma <1>(UPLANE & _nsupermodeyuv);
+    process_chroma <2>(VPLANE & _nsupermodeyuv);
+  }
 
   //-------------------------------------------------------------------------
 
@@ -1778,11 +1687,6 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
           }
         }
         */
-/*      if (bMVsAddProc)
-      {
-        FilterBlkMVs(i, bx, by);
-      }
-      */
       for (int k = 0; k < _trad * 2; ++k)
       {
         if (!bMVsAddProc)
@@ -1879,132 +1783,6 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
   }	// for by
 
 }
-
-/*
-void	MDegrainN::process_luma_normal_slice_SEWB(Slicer::TaskData& td)
-{
-  assert(&td != 0);
-
-  const int rowsize = nBlkSizeY;
-  BYTE* pDstCur = _dst_ptr_arr[0] + td._y_beg * rowsize * _dst_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
-  const BYTE* pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
-
-  for (int by = td._y_beg; by < td._y_end; ++by)
-  {
-    int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
-
-    // prefetch source full row in linear lines reading
-    for (int iH = 0; iH < nBlkSizeY; ++iH)
-    {
-      HWprefetch_T1((char*)pSrcCur + _src_pitch_arr[0] * iH, nBlkX * nBlkSizeX);
-    }
-
-    for (int bx = 0; bx < nBlkX; ++bx)
-    {
-      int i = by * nBlkX + bx;
-      const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
-      int pitch_arr[MAX_TEMP_RAD * 2];
-//      int weight_arr[1 + MAX_TEMP_RAD * 2];
-
-      PrefetchMVs(i);
-
-      for (int k = 0; k < _trad * 2; ++k)
-      {
-        VECTOR* pMVsArray;
-        
-        if (_usable_flag_arr[k])
-        {
-          if (!bMVsAddProc)
-            pMVsArray = (VECTOR*)pMVsPlanesArrays[k];
-          else
-            pMVsArray = pFilteredMVsPlanesArrays[k];
-          const int blx = bx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
-          const int bly = by * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
-          ref_data_ptr_arr[k] = _planes_ptr[k][0]->GetPointer(blx, bly);
-          pitch_arr[k] = _planes_ptr[k][0]->GetPitch();
-        }
-        else
-        {
-          ref_data_ptr_arr[k] = pSrcCur + (xx << pixelsize_super_shift); 
-          pitch_arr[k] = _src_pitch_arr[0];
-        } 
-      }
-
-      /*
-      // temp copy weights from global weights arr to test
-      const int nbr_frames = _trad * 2 + 1;
-      uint16_t* pDst = pui16WeightsFrameArr + (bx + by * nBlkX) * nbr_frames; // norm directly to global array
-
-      for (int k = 0; k < nbr_frames; ++k)
-      {
-
-        weight_arr[k] = pDst[k];
-      }
-      
-      CreateBlocks2DWeightsArr(bx, by);
-
-      /*
-      // luma
-      _degrainluma_ptr(
-        pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
-        pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-        ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-      );
-      
-      DegrainN_sse2_SEWB<8,8,0>(
-        pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
-        pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-        ref_data_ptr_arr, pitch_arr, pui16Blocks2DWeightsArr, _trad
-      );
-
-      xx += (nBlkSizeX); // xx: indexing offset
-
-      if (bx == nBlkX - 1 && _covered_width < nWidth) // right non-covered region
-      {
-        if (_out16_flag) {
-          // copy 8 bit source to 16bit target
-          plane_copy_8_to_16_c(
-            pDstCur + (_covered_width << pixelsize_output_shift), _dst_pitch_arr[0],
-            pSrcCur + (_covered_width << pixelsize_super_shift), _src_pitch_arr[0],
-            nWidth - _covered_width, nBlkSizeY
-          );
-        }
-        else {
-          // luma
-          BitBlt(
-            pDstCur + (_covered_width << pixelsize_super_shift), _dst_pitch_arr[0],
-            pSrcCur + (_covered_width << pixelsize_super_shift), _src_pitch_arr[0],
-            (nWidth - _covered_width) << pixelsize_super_shift, nBlkSizeY);
-        }
-      }
-    }	// for bx
-
-    pDstCur += rowsize * _dst_pitch_arr[0];
-    pSrcCur += rowsize * _src_pitch_arr[0];
-
-    if (by == nBlkY - 1 && _covered_height < nHeight) // bottom uncovered region
-    {
-      // luma
-      if (_out16_flag) {
-        // copy 8 bit source to 16bit target
-        plane_copy_8_to_16_c(
-          pDstCur, _dst_pitch_arr[0],
-          pSrcCur, _src_pitch_arr[0],
-          nWidth, nHeight - _covered_height
-        );
-      }
-      else {
-        BitBlt(
-          pDstCur, _dst_pitch_arr[0],
-          pSrcCur, _src_pitch_arr[0],
-          nWidth << pixelsize_super_shift, nHeight - _covered_height
-        );
-      }
-    }
-  }	// for by
-
-}
-*/
 
 void	MDegrainN::process_luma_overlap_slice(Slicer::TaskData &td)
 {
@@ -2213,6 +1991,280 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
 
 }
 
+
+//  To reuse subshifted blocks in MVPlane in both MVLPF and MDegrainN, also use single block weight calc 
+void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
+{
+  assert(&td != 0);
+
+  const int rowsize = nBlkSizeY;
+  BYTE* pDstCur = _dst_ptr_arr[0] + td._y_beg * rowsize * _dst_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
+  const BYTE* pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
+
+  const int rowsizeUV = nBlkSizeY >> nLogyRatioUV_super; // bad name. it's height really
+  BYTE* pDstCurUV1 = _dst_ptr_arr[1] + td._y_beg * rowsizeUV * _dst_pitch_arr[1];
+  BYTE* pDstCurUV2 = _dst_ptr_arr[2] + td._y_beg * rowsizeUV * _dst_pitch_arr[2];
+  const BYTE* pSrcCurUV1 = _src_ptr_arr[1] + td._y_beg * rowsizeUV * _src_pitch_arr[1];
+  const BYTE* pSrcCurUV2 = _src_ptr_arr[2] + td._y_beg * rowsizeUV * _src_pitch_arr[2];
+
+  int effective_nSrcPitchUV1 = (nBlkSizeY >> nLogyRatioUV_super)* _src_pitch_arr[1]; // pitch is byte granularity
+  int effective_nDstPitchUV1 = (nBlkSizeY >> nLogyRatioUV_super)* _dst_pitch_arr[1]; // pitch is short granularity
+
+  int effective_nSrcPitchUV2 = (nBlkSizeY >> nLogyRatioUV_super)* _src_pitch_arr[2]; // pitch is byte granularity
+  int effective_nDstPitchUV2 = (nBlkSizeY >> nLogyRatioUV_super)* _dst_pitch_arr[2]; // pitch is short granularity
+
+  for (int by = td._y_beg; by < td._y_end; ++by)
+  {
+    int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
+    int xx_uv = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
+
+    // prefetch source full row in linear lines reading
+    for (int iH = 0; iH < nBlkSizeY; ++iH)
+    {
+      HWprefetch_T1((char*)pSrcCur + _src_pitch_arr[0] * iH, nBlkX * nBlkSizeX);
+    }
+
+    for (int bx = 0; bx < nBlkX; ++bx)
+    {
+
+      int i = by * nBlkX + bx;
+      const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
+      int pitch_arr[MAX_TEMP_RAD * 2];
+      int weight_arr[1 + MAX_TEMP_RAD * 2];
+
+      const BYTE* ref_data_ptr_arrUV1[MAX_TEMP_RAD * 2]; // vs: const uint8_t *pointers[radius * 2]; // Moved by the degrain function.
+      const BYTE* ref_data_ptr_arrUV2[MAX_TEMP_RAD * 2]; // vs: const uint8_t *pointers[radius * 2]; // Moved by the degrain function. 
+      int pitch_arrUV1[MAX_TEMP_RAD * 2];
+      int pitch_arrUV2[MAX_TEMP_RAD * 2];
+
+      PrefetchMVs(i);
+
+      if (bMVsAddProc)
+      {
+        FilterBlkMVs(i, bx, by);
+
+        for (int k = 0; k < _trad * 2; ++k)
+        {
+          use_block_yuv(
+            ref_data_ptr_arr[k],
+            pitch_arr[k],
+            ref_data_ptr_arrUV1[k],
+            pitch_arrUV1[k],
+            ref_data_ptr_arrUV2[k],
+            pitch_arrUV2[k],
+            weight_arr[k + 1],
+            _usable_flag_arr[k],
+            _mv_clip_arr[k],
+            i,
+            _planes_ptr[k][0],
+            pSrcCur,
+            _planes_ptr[k][1],
+            pSrcCurUV1,
+            _planes_ptr[k][2],
+            pSrcCurUV2,
+            xx << pixelsize_super_shift,
+            xx_uv << pixelsize_super_shift,
+            _src_pitch_arr[0],
+            _src_pitch_arr[1],
+            _src_pitch_arr[2],
+            bx,
+            by,
+            (const VECTOR*)pFilteredMVsPlanesArrays[k]
+          );
+        }
+      }
+      else
+      {
+        for (int k = 0; k < _trad * 2; ++k)
+        {
+          use_block_yuv(
+            ref_data_ptr_arr[k],
+            pitch_arr[k],
+            ref_data_ptr_arrUV1[k],
+            pitch_arrUV1[k],
+            ref_data_ptr_arrUV2[k],
+            pitch_arrUV2[k],
+            weight_arr[k + 1],
+            _usable_flag_arr[k],
+            _mv_clip_arr[k],
+            i,
+            _planes_ptr[k][0],
+            pSrcCur,
+            _planes_ptr[k][1],
+            pSrcCurUV1,
+            _planes_ptr[k][2],
+            pSrcCurUV2,
+            xx << pixelsize_super_shift,
+            xx_uv << pixelsize_super_shift,
+            _src_pitch_arr[0],
+            _src_pitch_arr[1],
+            _src_pitch_arr[2],
+            bx,
+            by,
+            pMVsPlanesArrays[k]
+          );
+        }
+      }
+
+      norm_weights(weight_arr, _trad);
+
+      // luma
+      _degrainluma_ptr(
+        pDstCur + (xx << pixelsize_output_shift),
+        pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
+        pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+        ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+      );
+      
+      // chroma first plane
+      _degrainchroma_ptr(
+        pDstCurUV1 + (xx_uv << pixelsize_output_shift),
+        pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
+        pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+        ref_data_ptr_arrUV1, pitch_arrUV1, weight_arr, _trad
+      );
+
+      // chroma second plane
+      _degrainchroma_ptr(
+        pDstCurUV2 + (xx_uv << pixelsize_output_shift),
+        pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
+        pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+        ref_data_ptr_arrUV2, pitch_arrUV2, weight_arr, _trad
+      );
+      
+      xx += (nBlkSizeX); // xx: indexing offset
+      xx_uv += (nBlkSizeX >> nLogxRatioUV_super); // xx: indexing offset
+
+      if (bx == nBlkX - 1 && _covered_width < nWidth) // right non-covered region
+      {
+        if (_out16_flag) {
+          // copy 8 bit source to 16bit target
+          plane_copy_8_to_16_c(
+            pDstCur + (_covered_width << pixelsize_output_shift), _dst_pitch_arr[0],
+            pSrcCur + (_covered_width << pixelsize_super_shift), _src_pitch_arr[0],
+            nWidth - _covered_width, nBlkSizeY
+          );
+        }
+        else {
+          // luma
+          BitBlt(
+            pDstCur + (_covered_width << pixelsize_super_shift), _dst_pitch_arr[0],
+            pSrcCur + (_covered_width << pixelsize_super_shift), _src_pitch_arr[0],
+            (nWidth - _covered_width) << pixelsize_super_shift, nBlkSizeY);
+        }
+      }
+      
+      // first chroma plane right non-covered
+      if (bx == nBlkX - 1 && _covered_width < nWidth) // right non-covered region
+      {
+        // chroma
+        if (_out16_flag) {
+          // copy 8 bit source to 16bit target
+          plane_copy_8_to_16_c(
+            pDstCurUV1 + ((_covered_width >> nLogxRatioUV_super) << pixelsize_output_shift), _dst_pitch_arr[1],
+            pSrcCurUV1 + ((_covered_width >> nLogxRatioUV_super) << pixelsize_super_shift), _src_pitch_arr[1],
+            (nWidth - _covered_width) >> nLogxRatioUV_super, rowsizeUV
+          );
+        }
+        else {
+          BitBlt(
+            pDstCurUV1 + ((_covered_width >> nLogxRatioUV_super) << pixelsize_super_shift), _dst_pitch_arr[1],
+            pSrcCurUV1 + ((_covered_width >> nLogxRatioUV_super) << pixelsize_super_shift), _src_pitch_arr[1],
+            ((nWidth - _covered_width) >> nLogxRatioUV_super) << pixelsize_super_shift, rowsizeUV
+          );
+        }
+      }
+
+      // second chroma plane right non-covered
+      if (bx == nBlkX - 1 && _covered_width < nWidth) // right non-covered region
+      {
+        // chroma
+        if (_out16_flag) {
+          // copy 8 bit source to 16bit target
+          plane_copy_8_to_16_c(
+            pDstCurUV2 + ((_covered_width >> nLogxRatioUV_super) << pixelsize_output_shift), _dst_pitch_arr[2],
+            pSrcCurUV2 + ((_covered_width >> nLogxRatioUV_super) << pixelsize_super_shift), _src_pitch_arr[2],
+            (nWidth - _covered_width) >> nLogxRatioUV_super, rowsizeUV
+          );
+        }
+        else {
+          BitBlt(
+            pDstCurUV2 + ((_covered_width >> nLogxRatioUV_super) << pixelsize_super_shift), _dst_pitch_arr[2],
+            pSrcCurUV2 + ((_covered_width >> nLogxRatioUV_super) << pixelsize_super_shift), _src_pitch_arr[2],
+            ((nWidth - _covered_width) >> nLogxRatioUV_super) << pixelsize_super_shift, rowsizeUV
+          );
+        }
+      }
+      
+    }	// for bx
+
+    pDstCur += rowsize * _dst_pitch_arr[0];
+    pSrcCur += rowsize * _src_pitch_arr[0];
+
+    pDstCurUV1 += effective_nDstPitchUV1;
+    pSrcCurUV1 += effective_nSrcPitchUV2;
+
+    pDstCurUV2 += effective_nDstPitchUV2;
+    pSrcCurUV2 += effective_nSrcPitchUV2;
+
+    if (by == nBlkY - 1 && _covered_height < nHeight) // bottom uncovered region
+    {
+      // luma
+      if (_out16_flag) {
+        // copy 8 bit source to 16bit target
+        plane_copy_8_to_16_c(
+          pDstCur, _dst_pitch_arr[0],
+          pSrcCur, _src_pitch_arr[0],
+          nWidth, nHeight - _covered_height
+        );
+      }
+      else {
+        BitBlt(
+          pDstCur, _dst_pitch_arr[0],
+          pSrcCur, _src_pitch_arr[0],
+          nWidth << pixelsize_super_shift, nHeight - _covered_height
+        );
+      }
+
+      // chroma plane 1
+      if (_out16_flag) {
+        // copy 8 bit source to 16bit target
+        plane_copy_8_to_16_c(
+          pDstCurUV1, _dst_pitch_arr[1],
+          pSrcCurUV1, _src_pitch_arr[1],
+          nWidth >> nLogxRatioUV_super, (nHeight - _covered_height) >> nLogyRatioUV_super /* height */
+        );
+      }
+      else {
+        BitBlt(
+          pDstCurUV1, _dst_pitch_arr[1],
+          pSrcCurUV1, _src_pitch_arr[1],
+          (nWidth >> nLogxRatioUV_super) << pixelsize_super_shift, (nHeight - _covered_height) >> nLogyRatioUV_super /* height */
+        );
+      }
+
+      // chroma plane 2
+      if (_out16_flag) {
+        // copy 8 bit source to 16bit target
+        plane_copy_8_to_16_c(
+          pDstCurUV2, _dst_pitch_arr[2],
+          pSrcCurUV2, _src_pitch_arr[2],
+          nWidth >> nLogxRatioUV_super, (nHeight - _covered_height) >> nLogyRatioUV_super /* height */
+        );
+      }
+      else {
+        BitBlt(
+          pDstCurUV2, _dst_pitch_arr[2],
+          pSrcCurUV2, _src_pitch_arr[2],
+          (nWidth >> nLogxRatioUV_super) << pixelsize_super_shift, (nHeight - _covered_height) >> nLogyRatioUV_super /* height */
+        );
+      }
+    }
+  }	// for by
+
+}
+
+
 template <int P>
 void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
 {
@@ -2228,8 +2280,8 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
   {
     int xx = 0; // index
 
-    int iIdxBlk_row_start = by * nBlkX;
-/*    for (int k = 0; k < _trad * 2; ++k)
+/*    int iIdxBlk_row_start = by * nBlkX;
+    for (int k = 0; k < _trad * 2; ++k)
     {
       // prefetch all vectors for all ref planes all blocks of row in linear reading
       const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
@@ -2259,12 +2311,7 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
       const BYTE *ref_data_ptr_arr[MAX_TEMP_RAD * 2]; // vs: const uint8_t *pointers[radius * 2]; // Moved by the degrain function. 
       int pitch_arr[MAX_TEMP_RAD * 2];
       int weight_arr[1 + MAX_TEMP_RAD * 2]; // 0th is special. vs:int WSrc, WRefs[radius * 2];
-/*
-      if (bMVsAddProc)
-      {
-        FilterBlkMVs(i, bx, by);
-      }
-      */
+
       for (int k = 0; k < _trad * 2; ++k)
       {
         if (!bMVsAddProc)
@@ -2668,6 +2715,104 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
   }
 }
 
+MV_FORCEINLINE void MDegrainN::use_block_yuv(const BYTE*& pY, int& npY, const BYTE*& pUV1, int& npUV1, const BYTE*& pUV2, int& npUV2, int& wref, bool usable_flag, const MvClipInfo& c_info,
+  int i, const MVPlane* plane_ptrY, const BYTE* src_ptrY, const MVPlane* plane_ptrUV1, const BYTE* src_ptrUV1, const MVPlane* plane_ptrUV2, const BYTE* src_ptrUV2,
+  int xx, int xx_uv, int src_pitchY, int src_pitchUV1, int src_pitchUV2, int ibx, int iby, const VECTOR* pMVsArray)
+{
+  if (usable_flag)
+  {
+    int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+    int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
+
+    // temp check - DX12_ME return invalid vectors sometime
+    ClipBlxBly
+
+    if (nPel != 1 && nUseSubShift != 0)
+    {
+      MVPlane* p_planeY = (MVPlane*)plane_ptrY;
+      pY = p_planeY->GetPointerSubShift(blx, bly, npY);
+
+      MVPlane* p_planeUV1 = (MVPlane*)plane_ptrUV1;
+      pUV1 = p_planeUV1->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npUV1);
+
+      MVPlane* p_planeUV2 = (MVPlane*)plane_ptrUV2;
+      pUV2 = p_planeUV2->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npUV2);
+
+    }
+    else
+    {
+      pY = plane_ptrY->GetPointer(blx, bly);
+      npY = plane_ptrY->GetPitch();
+
+      pUV1 = plane_ptrUV1->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
+      npUV1 = plane_ptrUV1->GetPitch();
+
+      pUV2 = plane_ptrUV2->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
+      npUV2 = plane_ptrUV2->GetPitch();
+
+    }
+
+    sad_t block_sad = pMVsArray[i].sad;
+
+    if ((fadjSADzeromv != 1.0f) || (fadjSADcohmv != 1.0f))
+    {
+      // pull SAD at static areas 
+      if ((pMVsArray[i].x == 0) && (pMVsArray[i].y == 0))
+      {
+        block_sad = (sad_t)((float)block_sad * fadjSADzeromv);
+      }
+      else
+      {
+        if (ithCohMV >= 0) // skip long calc if ithCohV<0
+        {
+          // pull SAD at common motion blocks 
+          int x_cur = pMVsArray[i].x, y_cur = pMVsArray[i].y;
+          // upper block
+          VECTOR v_upper, v_left, v_right, v_lower;
+          int i_upper = i - nBlkX;
+          if (i_upper < 0) i_upper = 0;
+          v_upper = pMVsArray[i_upper];
+
+          int i_left = i - 1;
+          if (i_left < 0) i_left = 0;
+          v_left = pMVsArray[i_left];
+
+          int i_right = i + 1;
+          if (i_right > nBlkX* nBlkY) i_right = nBlkX * nBlkY;
+          v_right = pMVsArray[i_right];
+
+          int i_lower = i + nBlkX;
+          if (i_lower > nBlkX* nBlkY) i_lower = i;
+          v_lower = pMVsArray[i_lower];
+
+          int iabs_dc_x = SADABS(v_upper.x - x_cur) + SADABS(v_left.x - x_cur) + SADABS(v_right.x - x_cur) + SADABS(v_lower.x - x_cur);
+          int iabs_dc_y = SADABS(v_upper.y - y_cur) + SADABS(v_left.y - y_cur) + SADABS(v_right.y - y_cur) + SADABS(v_lower.y - y_cur);
+
+          if ((iabs_dc_x + iabs_dc_y) <= ithCohMV)
+          {
+            block_sad = (sad_t)((float)block_sad * fadjSADcohmv);
+          }
+        }
+      }
+    }
+
+    wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
+  }
+  else
+  {
+    pY = src_ptrY + xx;
+    npY = src_pitchY;
+
+    pUV1 = src_ptrUV1 + xx;
+    npUV1 = src_pitchUV1;
+
+    pUV2 = src_ptrUV2 + xx;
+    npUV2 = src_pitchUV2;
+
+    wref = 0;
+  }
+}
+
 
 MV_FORCEINLINE void	MDegrainN::use_block_y_thSADzeromv_thSADcohmv(
   const BYTE*& p, int& np, int& wref, bool usable_flag, const MvClipInfo& c_info,
@@ -2684,10 +2829,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_y_thSADzeromv_thSADcohmv(
 
     if (nPel != 1 && nUseSubShift != 0)
     {
-//      p = plane_ptr->GetPointerSubShift(blx, bly, nBlkSizeX, nBlkSizeY, np);
-//      p = plane_ptr->GetPointerSubShift(blx, bly, np);
       MVPlane* p_plane = (MVPlane*)plane_ptr;
-      //       p = plane_ptr->GetPointerSubShift(blx, bly, np);
       p = p_plane->GetPointerSubShift(blx, bly, np);
 
     }
@@ -2763,8 +2905,6 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv(
 
      if (nPel != 1 && nUseSubShift != 0)
      {
-//       p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super, np);
-//       p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, np);
        MVPlane* p_plane = (MVPlane*)plane_ptr;
        p = p_plane->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, np);
      }
@@ -2802,8 +2942,6 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv_thSADzeromv_thSADcohmv(
 
     if (nPel != 1 && nUseSubShift != 0)
     {
-//      p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super, np);
-//      p = plane_ptr->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, np);
       MVPlane* p_plane = (MVPlane*)plane_ptr;
       p = p_plane->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, np);
     }
@@ -2928,253 +3066,6 @@ MV_FORCEINLINE int DegrainWeightN(int thSAD, double thSAD_pow, int blockSAD, int
 
 }
 
-void MDegrainN::CreateBlocks2DWeightsArr(int bx, int by) // still no internal MT supported - global class pBlocks2DWeightsArr array
-{
-  int iX0 = (iSEWBWidth / 2) + 1;
-  int iHalfSEWBWidth = iSEWBWidth / 2;
-
-  uint16_t* pScalarWeights = pui16WeightsFrameArr + (bx + by * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
-  // square hard weights at start
-  // todo: make fill with inner weight only inner part of weight area of size (nBlkSizeX-2*iSEWBWidth)x(nBlkSizeY-2*2*iSEWBWidth)
-  for (int k = 0; k < 2 * _trad + 1; ++k) // weight block counter, zero is weight of current frame' block 
-  {
-    uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k;
-    for (int h = 0; h < nBlkSizeY; h++)
-    {
-      for (int x = 0; x < nBlkSizeX; x++)
-      {
-        pDst2DWeights[x] = pScalarWeights[k];
-      }
-      pDst2DWeights+=nBlkSizeX;
-    }
-  }
-  
-  // linear 2-weight interpolation as first approach
-  for (int k = 0; k < 2 * _trad + 1; ++k) // weight block counter, zero is weight of current frame' block 
-  {
-    int iCurrBlockCenterWeight = pScalarWeights[k];
-
-    // upper block' weight border
-    if (by != 0)
-    {
-      uint16_t* pScalarWeightsUp = pui16WeightsFrameArr + (bx + (by - 1) * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
-      int iWeightUp = pScalarWeightsUp[k];
-
-      // temp float arg
-      float fMulCoeff = (float)(iCurrBlockCenterWeight - iWeightUp) / (float)(iSEWBWidth + 1);
-
-      uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k;
-      for (int h = 0; h < iHalfSEWBWidth; h++)
-      {
-        // here we have equal soft-weight per all samples of row, so calculate only single value per row and broadcast-save
-        // first float linear interpolation to test
-        float fRowSW = iWeightUp + fMulCoeff * (h + iX0);
-
-        for (int x = 0; x < nBlkSizeX; x++)
-        {
-          // place broadcast here
-          pDst2DWeights[x] = (uint16_t)(fRowSW + 0.5f);
-        }
-        pDst2DWeights += nBlkSizeX;
-      }
-    }
-
-    // lower block' weight border
-    if (by != nBlkY)
-    {
-      uint16_t* pScalarWeightsLow = pui16WeightsFrameArr + (bx + (by + 1) * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
-      int iWeightLow = pScalarWeightsLow[k];
-
-      // temp float arg
-      float fMulCoeff = (float)(iCurrBlockCenterWeight - iWeightLow) / (float)(iSEWBWidth + 1);
-
-      uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k + nBlkSizeX * (nBlkSizeY - 1); // point to start of last line
-      for (int h = 0; h < iHalfSEWBWidth; h++) // reverse step from block's bottom
-      {
-        float fRowSW = iWeightLow + fMulCoeff * (h + iX0);
-
-        for (int x = 0; x < nBlkSizeX; x++)
-        {
-          // place broadcast here
-          pDst2DWeights[x] = (uint16_t)(fRowSW + 0.5f);
-        }
-        pDst2DWeights -= nBlkSizeX; // reverse step from block's bottom
-      }
-    }
-
-    // left block' weight border
-    if (bx != 0)
-    {
-      uint16_t* pScalarWeightsLeft = pui16WeightsFrameArr + ((bx - 1) + by * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
-      int iWeightLeft = pScalarWeightsLeft[k];
-
-      // temp float arg
-      float fMulCoeff = (float)(iCurrBlockCenterWeight - iWeightLeft) / (float)(iSEWBWidth + 1);
-
-      for (int x = 0; x < iHalfSEWBWidth; x++) // top left and lower left corners overlap proc in next version
-      {
-        float fColumnSW = iWeightLeft + fMulCoeff * (x + iX0);
-        uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k + x;
-
-        for (int h = 0; h < nBlkSizeY; h++)
-        {
-          // put vertical broadcast
-          *pDst2DWeights = (uint16_t)(fColumnSW + 0.5f);
-          pDst2DWeights += nBlkSizeX;
-        }
-      }
-    }
-    // skip proc
-
-    // right block' weight border
-    if (bx != nBlkX)
-    {
-      uint16_t*  pScalarWeightsRight = pui16WeightsFrameArr + ((bx + 1) + by * nBlkX) * (2 * _trad + 1); // bx, by - current block coords
-      int iWeightRight = pScalarWeightsRight[k];
-
-      // temp float arg
-      float fMulCoeff = (float)(iCurrBlockCenterWeight - iWeightRight) / (float)(iSEWBWidth + 1);
-
-      for (int x = 0; x < iHalfSEWBWidth; x++) // top left and lower left corners overlap proc in next version
-      {
-        float fColumnSW = iWeightRight + fMulCoeff * (x + iX0);
-        uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + nBlkSizeX * nBlkSizeY * k + (nBlkSizeX - 1 - x); // reverse columns scan
-
-        for (int h = 0; h < nBlkSizeY; h++)
-        {
-          // put vertical broadcast
-          *pDst2DWeights = (uint16_t)(fColumnSW + 0.5f);
-          pDst2DWeights += nBlkSizeX;
-        }
-      }
-    }
-
-  }
-
-  // perform new re-weighting of processed borders of the width=iSEWBWidth/2
-  /*
-
-        pDst[0] = one;
-      int wsum = 1;
-      for (int k = 0; k < nbr_frames; ++k)
-      {
-        wsum += pDst[k];
-      }
-
-      // normalize weights to 256
-      int wsrc = one;
-      for (int k = 1; k < nbr_frames; ++k)
-      {
-        const int norm = pDst[k] * one / wsum;
-        pDst[k] = norm;
-        wsrc -= norm;
-      }
-      pDst[0] = wsrc;
-  */
-
-  const int one = 1 << DEGRAIN_WEIGHT_BITS; // 8 bit, 256
-  const int nbr_frames = _trad * 2 + 1;
-  const int iSizeOfWeightMask = nBlkSizeX * nBlkSizeY;
-
-  const int iLowNonProc = nBlkSizeY - iSEWBWidth / 2;
-  const int iRightNonProc = nBlkSizeX - iSEWBWidth / 2;
-  
-  // todo: make re-weight only outer part of block
-  for (int h = 0; h < nBlkSizeY; h++)
-  {
-    for (int x = 0; x < nBlkSizeX; x++)
-    {
-      // simple attempt of skip inner part of block
-//      if ((h > iHalfSEWBWidth) && (h < (iLowNonProc))) continue; //- some bug here ??
-//      if ((x > iHalfSEWBWidth) && (x < (iRightNonProc))) continue;
-
-      uint16_t* pDst2DWeights = pui16Blocks2DWeightsArr + (nBlkSizeX * h) + x;
-      uint16_t* pDst2DWeights_start = pDst2DWeights;
-      int wsum = 1;
-      for (int k = 0; k < nbr_frames; ++k) // weight block counter, zero is weight of current frame' block 
-      {
-        wsum += *pDst2DWeights;
-        pDst2DWeights += iSizeOfWeightMask;
-      }
-
-      // normalize weights to 256
-      int wsrc = one;
-      pDst2DWeights = pDst2DWeights_start + iSizeOfWeightMask;// first ref block
-      for (int k = 1; k < nbr_frames; ++k)
-      {
-        const int norm = (*pDst2DWeights) * one / wsum;
-        *pDst2DWeights = norm;
-        wsrc -= norm;
-        pDst2DWeights += iSizeOfWeightMask;
-      }
-      *pDst2DWeights_start = wsrc;
-    }
-  }
-  
-
-}
-
-void MDegrainN::CreateFrameWeightsArr_C(void)
-{
-  const int one = 1 << DEGRAIN_WEIGHT_BITS; // 8 bit, 256
-  //  for (int by = td._y_beg; by < td._y_end; ++by)
-  for (int by = 0; by < nBlkY; ++by) // single threaded proc
-  {
-    int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
-
-    for (int bx = 0; bx < nBlkX; ++bx) // todo: make this SIMD
-    {
-      int i = by * nBlkX + bx;
-
-      const int nbr_frames = _trad * 2 + 1;
-      uint16_t* pDst = pui16WeightsFrameArr + (bx + by * nBlkX) * nbr_frames; // norm directly to global array
-
-      PrefetchMVs(i);
-
-      for (int k = 0; k < _trad * 2; ++k)
-      {
-
-        if (_usable_flag_arr[k])
-        {
-          VECTOR* pMVsArray;
-          if (!bMVsAddProc)
-          {
-            pMVsArray = (VECTOR*)pMVsPlanesArrays[k];
-          }
-          else
-          {
-            pMVsArray = pFilteredMVsPlanesArrays[k];
-          }
-          const sad_t block_sad = pMVsArray[i].sad;
-
-          pDst[k + 1] = (uint16_t)DegrainWeightN(_mv_clip_arr[k]._thsad, _mv_clip_arr[k]._thsad_sq, block_sad, _wpow);
-        }
-        else
-        {
-          pDst[k + 1] = 0;
-        }
-      }
-      
-      pDst[0] = one;
-      int wsum = 1;
-      for (int k = 0; k < nbr_frames; ++k)
-      {
-        wsum += pDst[k];
-      }
-
-      // normalize weights to 256
-      int wsrc = one;
-      for (int k = 1; k < nbr_frames; ++k)
-      {
-        const int norm = pDst[k] * one / wsum;
-        pDst[k] = norm;
-        wsrc -= norm;
-      }
-      pDst[0] = wsrc; 
-
-    }	// for bx
-  }	// for by
-}
 
 float MDegrainN::fSinc(float x)
 {

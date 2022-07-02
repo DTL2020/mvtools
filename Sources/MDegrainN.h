@@ -39,7 +39,6 @@ public:
     sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow,
     float adjSADzeromv, float adjSADcohmv, int thCohMV,
     float fMVLPFCutoff, float fMVLPFSlope, float fMVLPFGauss, int thMVLPFCorr, int UseSubShift,
-    int SEWBWidth,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -129,7 +128,6 @@ private:
 
 
   void process_luma_normal_slice(Slicer::TaskData &td);
-  void process_luma_normal_slice_SEWB(Slicer::TaskData& td);
   void process_luma_overlap_slice(Slicer::TaskData &td);
   void process_luma_overlap_slice(int y_beg, int y_end);
 
@@ -139,6 +137,8 @@ private:
   void process_chroma_overlap_slice(Slicer::TaskData &td);
   template <int P>
   void process_chroma_overlap_slice(int y_beg, int y_end);
+
+  void process_luma_and_chroma_normal_slice(Slicer::TaskData& td); // for faster MVLPF proc
 
   MV_FORCEINLINE void
     use_block_y(
@@ -164,6 +164,13 @@ private:
       int i, const MVPlane* plane_ptr, const BYTE* src_ptr, int xx, int src_pitch, int ibx, int iby, const VECTOR* pMVsArray
   );
 
+  MV_FORCEINLINE void
+    use_block_yuv(
+      const BYTE*& pY, int& npY, const BYTE*& pUV1, int& npUV1, const BYTE*& pUV2, int& npUV2, int& wref, bool usable_flag, const MvClipInfo& c_info,
+      int i, const MVPlane* plane_ptrY, const BYTE* src_ptrY, const MVPlane* plane_ptrUV1, const BYTE* src_ptrUV1, const MVPlane* plane_ptrUV2, const BYTE* src_ptrUV2,
+      int xx, int xx_uv, int src_pitchY, int src_pitchUV1, int src_pitchUV2, int ibx, int iby, const VECTOR* pMVsArray
+    );
+  
   void(MDegrainN::* use_block_y_func)(
     const BYTE*& p, int& np, int& wref, bool usable_flag, const MvClipInfo& c_info,
     int i, const MVPlane* plane_ptr, const BYTE* src_ptr, int xx, int src_pitch, int ibx, int iby, const VECTOR* pMVsArray
@@ -177,13 +184,6 @@ private:
 
   static MV_FORCEINLINE void
     norm_weights(int wref_arr[], int trad);
-
-  void CreateBlocks2DWeightsArr(int bx, int by);
-
-  void CreateFrameWeightsArr_C(void);
-  void CreateFrameWeightsArr_SSE(void);
-  void CreateFrameWeightsArr_AVX2(void);
-  void CreateFrameWeightsArr_AVX512(void);
 
   void FilterMVs(void);
   MV_FORCEINLINE void FilterBlkMVs(int i, int bx, int by);
@@ -223,7 +223,6 @@ private:
   int _wpow;
   uint16_t* pui16Blocks2DWeightsArr;
   uint16_t* pui16WeightsFrameArr;
-  int iSEWBWidth;
   const VECTOR* pMVsPlanesArrays[MAX_TEMP_RAD * 2];
 
   float fadjSADzeromv;
