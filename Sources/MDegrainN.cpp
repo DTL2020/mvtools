@@ -2803,10 +2803,10 @@ MV_FORCEINLINE void MDegrainN::use_block_yuv(const BYTE*& pY, int& npY, const BY
     pY = src_ptrY + xx;
     npY = src_pitchY;
 
-    pUV1 = src_ptrUV1 + xx;
+    pUV1 = src_ptrUV1 + xx_uv;
     npUV1 = src_pitchUV1;
 
-    pUV2 = src_ptrUV2 + xx;
+    pUV2 = src_ptrUV2 + xx_uv;
     npUV2 = src_pitchUV2;
 
     wref = 0;
