@@ -138,8 +138,12 @@ private:
   template <int P>
   void process_chroma_overlap_slice(int y_beg, int y_end);
 
-  void process_luma_and_chroma_normal_slice(Slicer::TaskData& td); // for faster MVLPF proc
+  // 2.7.46
+  void process_luma_and_chroma_normal_slice(Slicer::TaskData& td); // for faster MVLPF proc, and faster total as single pass YUV proc ?
+  void process_luma_and_chroma_overlap_slice(Slicer::TaskData& td);
+  void process_luma_and_chroma_overlap_slice(int y_beg, int y_end); // for faster MVLPF proc, and faster total as single pass YUV proc ?
 
+  
   MV_FORCEINLINE void
     use_block_y(
       const BYTE * &p, int &np, int &wref, bool usable_flag, const MvClipInfo &c_info,
@@ -221,8 +225,8 @@ private:
 
   // 2.7.46
   int _wpow;
-  uint16_t* pui16Blocks2DWeightsArr;
-  uint16_t* pui16WeightsFrameArr;
+//  uint16_t* pui16Blocks2DWeightsArr;
+//  uint16_t* pui16WeightsFrameArr;
   const VECTOR* pMVsPlanesArrays[MAX_TEMP_RAD * 2];
 
   float fadjSADzeromv;
@@ -275,6 +279,21 @@ private:
   std::vector <int> _dst_int;
   int _dst_int_pitch;
 
+  // 2.7.46 for single pass proc of YUV
+  std::vector <uint16_t> _dst_shortUV1;
+  std::vector <uint16_t> _dst_shortUV2;
+  std::vector <int> _dst_intUV1;
+  std::vector <int> _dst_intUV2;
+  bool bYUVProc;
+  MV_FORCEINLINE void MemZoneSetY(uint16_t* pDstShort, int* pDstInt);
+  MV_FORCEINLINE void MemZoneSetUV(uint16_t* pDstShortUV, int* pDstIntUV);
+  MV_FORCEINLINE void post_overlap_luma_plane(void);
+  
+  MV_FORCEINLINE void post_overlap_chroma_plane(int P, uint16_t* pDstShort, int* pDstInt);
+
+  MV_FORCEINLINE void nlimit_luma(void);
+  MV_FORCEINLINE void nlimit_chroma(int P);
+
   bool _usable_flag_arr[MAX_TEMP_RAD * 2];
   MVPlane *_planes_ptr[MAX_TEMP_RAD * 2][3];
   BYTE *_dst_ptr_arr[3];
@@ -298,5 +317,6 @@ private:
 MV_FORCEINLINE int DegrainWeightN(int thSAD, double thSAD_pow, int blockSAD, int wpow);
 
 MV_FORCEINLINE unsigned int SADABS(int x) { return (x < 0) ? -x : x; }
+
 
 #endif

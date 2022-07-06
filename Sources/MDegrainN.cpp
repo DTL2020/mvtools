@@ -570,6 +570,10 @@ MDegrainN::MDegrainN(
   , _dst_short_pitch()
   , _dst_int()
   , _dst_int_pitch()
+  , _dst_shortUV1()
+  , _dst_intUV1()
+  , _dst_shortUV2()
+  , _dst_intUV2()
   //,	_usable_flag_arr ()
   //,	_planes_ptr ()
   //,	_dst_ptr_arr ()
@@ -752,6 +756,7 @@ MDegrainN::MDegrainN(
   }
   _dst_short_pitch = ((nWidth + 15) / 16) * 16;
   _dst_int_pitch = _dst_short_pitch;
+
   if (nOverlapX > 0 || nOverlapY > 0)
   {
     _overwins = std::unique_ptr <OverlapWindows>(
@@ -764,10 +769,14 @@ MDegrainN::MDegrainN(
     if (_lsb_flag || pixelsize_output > 1)
     {
       _dst_int.resize(_dst_int_pitch * nHeight);
+      _dst_intUV1.resize(_dst_int_pitch * nHeight);
+      _dst_intUV2.resize(_dst_int_pitch * nHeight);
     }
     else
     {
       _dst_short.resize(_dst_short_pitch * nHeight);
+      _dst_shortUV1.resize(_dst_short_pitch * nHeight); // really may be down to 4 times less for 4:2:0 ?
+      _dst_shortUV2.resize(_dst_short_pitch * nHeight);
     }
   }
   if (nOverlapY > 0)
@@ -870,9 +879,6 @@ MDegrainN::MDegrainN(
       vi.pixel_type = VideoInfo::CS_YUV444P16;
   }
 
-  pui16Blocks2DWeightsArr = new uint16_t[(_trad + 1) * 2 * (nBlkSizeX*nBlkSizeY) * pixelsize_super * sizeof(uint16_t)]; // pixelsize already set ?
-  pui16WeightsFrameArr = new uint16_t[(_trad + 1) * 2 * nBlkX *nBlkY * sizeof(uint16_t)];
-
   if ((fadjSADzeromv != 1.0f) || (fadjSADcohmv != 1.0f))
   {
     use_block_y_func = &MDegrainN::use_block_y_thSADzeromv_thSADcohmv;
@@ -974,8 +980,6 @@ MDegrainN::MDegrainN(
 MDegrainN::~MDegrainN()
 {
   // Nothing
-  delete pui16Blocks2DWeightsArr;
-  delete pui16WeightsFrameArr;
   for (int k = 0; k < _trad * 2; ++k)
   {
 #ifdef _WIN32
@@ -1199,6 +1203,8 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
   }
   */ // TEST with use_block_yuv
 
+  bYUVProc = (_planes_ptr[0][1] != 0) && (_planes_ptr[0][2] != 0);// colour planes exist, use single pass YUV proc for colour formats with colour processing
+
   PROFILE_START(MOTION_PROFILE_COMPENSATION);
 
   //-------------------------------------------------------------------------
@@ -1227,7 +1233,7 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
     if (nOverlapX == 0 && nOverlapY == 0)
     {
       {
-        if ((_yuvplanes & UPLANE) && (_yuvplanes & VPLANE) ) // YUV planes all present
+        if (bYUVProc) // YUV planes all present, single pass all 3 planes process
         {
           slicer.start(
             nBlkY,
@@ -1250,141 +1256,119 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
     // Overlap
     else
     {
-      uint16_t *pDstShort = (_dst_short.empty()) ? 0 : &_dst_short[0];
-      int *pDstInt = (_dst_int.empty()) ? 0 : &_dst_int[0];
-
-      if (_lsb_flag || pixelsize_output>1)
+      if (bYUVProc) // single pass YUV proc overlap
       {
-        MemZoneSet(
-          reinterpret_cast <unsigned char *> (pDstInt), 0,
-          _covered_width * sizeof(int), _covered_height, 0, 0, _dst_int_pitch * sizeof(int)
+        // luma
+        uint16_t* pDstShort = (_dst_short.empty()) ? 0 : &_dst_short[0];
+        int* pDstInt = (_dst_int.empty()) ? 0 : &_dst_int[0];
+        MemZoneSetY(pDstShort, pDstInt);
+
+        // chroma plane 1
+        uint16_t* pDstShortUV = (_dst_shortUV1.empty()) ? 0 : &_dst_shortUV1[0];
+        int* pDstIntUV = (_dst_intUV1.empty()) ? 0 : &_dst_intUV1[0];
+        MemZoneSetUV(pDstShortUV, pDstIntUV);
+
+        //chroma plane 2
+        pDstShortUV = (_dst_shortUV2.empty()) ? 0 : &_dst_shortUV2[0];
+        pDstIntUV = (_dst_intUV2.empty()) ? 0 : &_dst_intUV2[0];
+        MemZoneSetUV(pDstShortUV, pDstIntUV);
+        
+        if (nOverlapY > 0)
+        {
+          memset(
+            &_boundary_cnt_arr[0],
+            0,
+            _boundary_cnt_arr.size() * sizeof(_boundary_cnt_arr[0])
+          );
+        }
+
+        slicer.start(
+          nBlkY,
+          *this,
+          &MDegrainN::process_luma_and_chroma_overlap_slice,
+          2
         );
+        slicer.wait();
+
+        // luma
+        post_overlap_luma_plane();
+
+        // chroma 1
+        pDstShortUV = (_dst_shortUV1.empty()) ? 0 : &_dst_shortUV1[0];
+        pDstIntUV = (_dst_intUV1.empty()) ? 0 : &_dst_intUV1[0];
+        post_overlap_chroma_plane(1, pDstShortUV, pDstIntUV);
+
+        // chroma 2
+        pDstShortUV = (_dst_shortUV2.empty()) ? 0 : &_dst_shortUV2[0];
+        pDstIntUV = (_dst_intUV2.empty()) ? 0 : &_dst_intUV2[0];
+        post_overlap_chroma_plane(2, pDstShortUV, pDstIntUV);
+
+        if (_nlimit < 255)
+        {
+          nlimit_luma();
+        }
+
+        if (_nlimitc < 255)
+        {
+          nlimit_chroma(1);
+          nlimit_chroma(2);
+        }
+
+#ifndef _M_X64 
+        _mm_empty(); // (we may use double-float somewhere) Fizick
+#endif
+
+        PROFILE_STOP(MOTION_PROFILE_COMPENSATION);
+
+        if ((pixelType & VideoInfo::CS_YUY2) == VideoInfo::CS_YUY2 && !_planar_flag)
+        {
+          YUY2FromPlanes(
+            pDstYUY2, nDstPitchYUY2, nWidth, nHeight * _height_lsb_or_out16_mul,
+            _dst_ptr_arr[0], _dst_pitch_arr[0],
+            _dst_ptr_arr[1], _dst_ptr_arr[2], _dst_pitch_arr[1], _cpuFlags);
+        }
+
+        return (dst); // here is end of YUV single pass proc and GetFrame additional return
+
       }
       else
       {
-        MemZoneSet(
-          reinterpret_cast <unsigned char *> (pDstShort), 0,
-          _covered_width * sizeof(short), _covered_height, 0, 0, _dst_short_pitch * sizeof(short)
-        );
-      }
+        uint16_t* pDstShort = (_dst_short.empty()) ? 0 : &_dst_short[0];
+        int* pDstInt = (_dst_int.empty()) ? 0 : &_dst_int[0];
+        MemZoneSetY(pDstShort, pDstInt);
 
-      if (nOverlapY > 0)
-      {
-        memset(
-          &_boundary_cnt_arr[0],
-          0,
-          _boundary_cnt_arr.size() * sizeof(_boundary_cnt_arr[0])
-        );
-      }
+        if (nOverlapY > 0)
+        {
+          memset(
+            &_boundary_cnt_arr[0],
+            0,
+            _boundary_cnt_arr.size() * sizeof(_boundary_cnt_arr[0])
+          );
+        }
 
-      slicer.start(
-        nBlkY,
-        *this,
-        &MDegrainN::process_luma_overlap_slice,
-        2
-      );
-      slicer.wait();
-      // fixme: SSE versions from ShortToBytes family like in MDegrain3
-      if (_lsb_flag)
-      {
-        Short2BytesLsb(
-          _dst_ptr_arr[0],
-          _dst_ptr_arr[0] + _lsb_offset_arr[0],
-          _dst_pitch_arr[0],
-          &_dst_int[0], _dst_int_pitch,
-          _covered_width, _covered_height
+        slicer.start(
+          nBlkY,
+          *this,
+          &MDegrainN::process_luma_overlap_slice,
+          2
         );
-      }
-      else if (_out16_flag)
-      {
-        Short2Bytes_Int32toWord16(
-          (uint16_t *)_dst_ptr_arr[0], _dst_pitch_arr[0],
-          &_dst_int[0], _dst_int_pitch,
-          _covered_width, _covered_height,
-          bits_per_pixel_output
-        );
-      }
-      else if(pixelsize_super == 1)
-      {
-        Short2Bytes(
-          _dst_ptr_arr[0], _dst_pitch_arr[0],
-          &_dst_short[0], _dst_short_pitch,
-          _covered_width, _covered_height
-        );
-      }
-      else if (pixelsize_super == 2)
-      {
-        Short2Bytes_Int32toWord16(
-          (uint16_t *)_dst_ptr_arr[0], _dst_pitch_arr[0],
-          &_dst_int[0], _dst_int_pitch,
-          _covered_width, _covered_height,
-          bits_per_pixel_super
-        );
-      }
-      else if (pixelsize_super == 4)
-      {
-        Short2Bytes_FloatInInt32ArrayToFloat(
-          (float *)_dst_ptr_arr[0], _dst_pitch_arr[0],
-          (float *)&_dst_int[0], _dst_int_pitch,
-          _covered_width, _covered_height
-        );
-      }
-      if (_covered_width < nWidth)
-      {
-        if (_out16_flag) {
-          // copy 8 bit source to 16bit target
-          plane_copy_8_to_16_c(_dst_ptr_arr[0] + (_covered_width << pixelsize_output_shift), _dst_pitch_arr[0],
-            _src_ptr_arr[0] + _covered_width, _src_pitch_arr[0],
-            nWidth - _covered_width, _covered_height
-          );
-        }
-        else {
-          BitBlt(
-            _dst_ptr_arr[0] + (_covered_width << pixelsize_super_shift), _dst_pitch_arr[0],
-            _src_ptr_arr[0] + (_covered_width << pixelsize_super_shift), _src_pitch_arr[0],
-            (nWidth - _covered_width) << pixelsize_super_shift, _covered_height
-          );
-        }
-      }
-      if (_covered_height < nHeight) // bottom noncovered region
-      {
-        if (_out16_flag) {
-          // copy 8 bit source to 16bit target
-          plane_copy_8_to_16_c(_dst_ptr_arr[0] + _covered_height * _dst_pitch_arr[0], _dst_pitch_arr[0],
-            _src_ptr_arr[0] + _covered_height * _src_pitch_arr[0], _src_pitch_arr[0],
-            nWidth, nHeight - _covered_height
-          );
-        }
-        else {
-          BitBlt(
-            _dst_ptr_arr[0] + _covered_height * _dst_pitch_arr[0], _dst_pitch_arr[0],
-            _src_ptr_arr[0] + _covered_height * _src_pitch_arr[0], _src_pitch_arr[0],
-            nWidth << pixelsize_super_shift, nHeight - _covered_height
-          );
-        }
-      }
+        slicer.wait();
+
+        post_overlap_luma_plane();
+
+      } // !bYUVProc - old separated planes proc overlap
     }	// overlap - end
 
     if (_nlimit < 255)
     {
-      // limit is 0-255 relative, for any bit depth
-      float realLimit;
-      if (pixelsize_output <= 2)
-        realLimit = _nlimit * (1 << (bits_per_pixel_output - 8));
-      else
-        realLimit = _nlimit / 255.0f;
-      LimitFunction(_dst_ptr_arr[0], _dst_pitch_arr[0],
-        _src_ptr_arr[0], _src_pitch_arr[0],
-        nWidth, nHeight,
-        realLimit
-      );
+      nlimit_luma();
     }
   }
 
   //-------------------------------------------------------------------------
   // CHROMA planes
 
-if ((nOverlapX != 0) || (nOverlapY != 0)) // still no proc as YUV
+if ((nOverlapX != 0) || (nOverlapY != 0)) // if overlap processing of single plane going here
   {
     process_chroma <1>(UPLANE & _nsupermodeyuv);
     process_chroma <2>(VPLANE & _nsupermodeyuv);
@@ -1466,23 +1450,7 @@ void	MDegrainN::process_chroma(int plane_mask)
     {
       uint16_t * pDstShort = (_dst_short.empty()) ? 0 : &_dst_short[0];
       int * pDstInt = (_dst_int.empty()) ? 0 : &_dst_int[0];
-
-      if (_lsb_flag || pixelsize_output > 1)
-      {
-        MemZoneSet(
-          reinterpret_cast <unsigned char *> (pDstInt), 0,
-          (_covered_width * sizeof(int)) >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super,
-          0, 0, _dst_int_pitch * sizeof(int)
-        );
-      }
-      else
-      {  
-        MemZoneSet(
-          reinterpret_cast <unsigned char *> (pDstShort), 0,
-          (_covered_width * sizeof(short)) >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super,
-          0, 0, _dst_short_pitch * sizeof(short)
-        );
-      }
+      MemZoneSetUV(pDstShort, pDstInt);
 
       if (nOverlapY > 0)
       {
@@ -1611,25 +1579,6 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
   {
     int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
 
-/*    int iIdxBlk_row_start = by * nBlkX;
-    for (int k = 0; k < _trad * 2; ++k)
-    {
-      // prefetch all vectors for all ref planes all blocks of row in linear reading
-      const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
-      HWprefetch_T0((char*)pMVsArrayPref, nBlkX * sizeof(VECTOR));
-
-/*      // prefetch all rows of all ref blocks in linear lines of rows reading, use first MV in a row now as offset
-      const int blx = 0 + pMVsArrayPref[iIdxBlk_row_start].x; // or zero ??
-      const int bly = by * (nBlkSizeY - nOverlapY) * nPel + pMVsArrayPref[iIdxBlk_row_start].y;
-      const BYTE* p = _planes_ptr[k][0]->GetPointer(blx, bly);
-      int np = _planes_ptr[k][0]->GetPitch();
-
-      for (int iH = 0; iH < nBlkSizeY; ++iH)
-      {
-        HWprefetch_T1((char*)p + np * iH, nBlkX * nBlkSizeX);
-      } 
-    }
-    */
     // prefetch source full row in linear lines reading
     for (int iH = 0; iH < nBlkSizeY; ++iH)
     {
@@ -1645,48 +1594,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       int weight_arr[1 + MAX_TEMP_RAD * 2];
 
       PrefetchMVs(i);
-      /*
-      if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
-      {
-        if (bMVsAddProc)
-        {
-          for (int k = 0; k < _trad * 2; ++k)
-          {
-            const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
-            _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
-          }
-        }
-        else
-        {
-          for (int k = 0; k < _trad * 2; ++k)
-          {
-            const VECTOR* pMVsArrayPref = pFilteredMVsPlanesArrays[k];
-            _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
-          }
-        }
-      }*/
-/*
-      int iCacheLine = CACHE_LINE_SIZE / nBlkSizeX;
 
-      if ((bx % iCacheLine) == 0) // try to prefetch each next cacheline ??
-      // try to prefetch set of next ref blocks
-        if (bx < nBlkX - iCacheLine)
-        {
-          for (int k = 0; k < _trad * 2; ++k)
-          {
-            const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
-            const int blx = (bx + iCacheLine) * (nBlkSizeX - nOverlapX) * nPel + pMVsArrayPref[i + iCacheLine].x;
-            const int bly = by * (nBlkSizeY - nOverlapY) * nPel + pMVsArrayPref[i + iCacheLine].y;
-            const BYTE* p = _planes_ptr[k][0]->GetPointer(blx, bly);
-            int np = _planes_ptr[k][0]->GetPitch();
-
-            for (int iH = 0; iH < nBlkSizeY; ++iH)
-            {
-              _mm_prefetch(const_cast<const CHAR*>((const char*)p + np * iH), _MM_HINT_T1);
-            }
-          }
-        }
-        */
       for (int k = 0; k < _trad * 2; ++k)
       {
         if (!bMVsAddProc)
@@ -1826,6 +1734,48 @@ void	MDegrainN::process_luma_overlap_slice(Slicer::TaskData &td)
   }
 }
 
+void	MDegrainN::process_luma_and_chroma_overlap_slice(Slicer::TaskData& td)
+{
+  assert(&td != 0);
+
+  if (nOverlapY == 0
+    || (td._y_beg == 0 && td._y_end == nBlkY))
+  {
+    process_luma_and_chroma_overlap_slice(td._y_beg, td._y_end);
+  }
+
+  else
+  {
+    assert(td._y_end - td._y_beg >= 2);
+
+    process_luma_and_chroma_overlap_slice(td._y_beg, td._y_end - 1);
+
+    const conc::AioAdd <int>	inc_ftor(+1);
+
+    const int cnt_top = conc::AtomicIntOp::exec_new(
+      _boundary_cnt_arr[td._y_beg],
+      inc_ftor
+    );
+    if (td._y_beg > 0 && cnt_top == 2)
+    {
+      process_luma_and_chroma_overlap_slice(td._y_beg - 1, td._y_beg);
+    }
+
+    int cnt_bot = 2;
+    if (td._y_end < nBlkY)
+    {
+      cnt_bot = conc::AtomicIntOp::exec_new(
+        _boundary_cnt_arr[td._y_end],
+        inc_ftor
+      );
+    }
+    if (cnt_bot == 2)
+    {
+      process_luma_and_chroma_overlap_slice(td._y_end - 1, td._y_end);
+    }
+  }
+}
+
 
 
 void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
@@ -1873,38 +1823,7 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
       int weight_arr[1 + MAX_TEMP_RAD * 2];
 
       PrefetchMVs(i);
-      /*
-      if ((i % 5) == 0) // do not prefetch each block - the 12bytes VECTOR sit about 5 times in the 64byte cache line 
-      {
-        for (int k = 0; k < _trad * 2; ++k)
-        {
-          const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
-          _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
-        } 
-      }
-      */
-/*      // pref next ref blocks (try each 64byte cacheline)
-      if ((i % iDivCL) == 0)
-      {
-        for (int k = 0; k < _trad * 2; ++k)
-        {
-          if (_usable_flag_arr[k])
-          {
-            const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
-            // prefetch all rows of all ref blocks in linear lines of rows reading, use first MV in a row now as offset
-            const int blx = bx * (nBlkSizeX - nOverlapX) * nPel + pMVsArrayPref[i + 1].x; // or zero ??
-            const int bly = by * (nBlkSizeY - nOverlapY) * nPel + pMVsArrayPref[i + 1].y;
-            const BYTE* p = _planes_ptr[k][0]->GetPointer(blx, bly);
-            int np = _planes_ptr[k][0]->GetPitch();
 
-            for (int iH = 0; iH < nBlkSizeY; ++iH)
-            {
-              SWprefetch((char*)p + np * iH, nBlkSizeX);
-            }
-          }
-        }
-      }
-      */
       for (int k = 0; k < _trad * 2; ++k)
       {
         if (!bMVsAddProc)
@@ -2264,6 +2183,352 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
 
 }
 
+void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
+{
+  //luma
+  TmpBlock       tmp_block;
+
+  const int      rowsize = nBlkSizeY - nOverlapY;
+  const BYTE* pSrcCur = _src_ptr_arr[0] + y_beg * rowsize * _src_pitch_arr[0];
+
+  uint16_t* pDstShort = (_dst_short.empty()) ? 0 : &_dst_short[0] + y_beg * rowsize * _dst_short_pitch;
+  int* pDstInt = (_dst_int.empty()) ? 0 : &_dst_int[0] + y_beg * rowsize * _dst_int_pitch;
+  const int tmpPitch = nBlkSizeX;
+  assert(tmpPitch <= TmpBlock::MAX_SIZE);
+  
+  // chroma
+ 
+  TmpBlock       tmp_blockUV1;
+  TmpBlock       tmp_blockUV2;
+
+  const int rowsizeUV = (nBlkSizeY - nOverlapY) >> nLogyRatioUV_super; // bad name. it's height really
+  const BYTE* pSrcCurUV1 = _src_ptr_arr[1] + y_beg * rowsizeUV * _src_pitch_arr[1];
+  const BYTE* pSrcCurUV2 = _src_ptr_arr[2] + y_beg * rowsizeUV * _src_pitch_arr[2];
+
+  uint16_t* pDstShortUV1 = (_dst_shortUV1.empty()) ? 0 : &_dst_shortUV1[0] + y_beg * rowsizeUV * _dst_short_pitch;
+  int* pDstIntUV1 = (_dst_intUV1.empty()) ? 0 : &_dst_intUV1[0] + y_beg * rowsizeUV * _dst_int_pitch;
+  uint16_t* pDstShortUV2 = (_dst_shortUV2.empty()) ? 0 : &_dst_shortUV2[0] + y_beg * rowsizeUV * _dst_short_pitch;
+  int* pDstIntUV2 = (_dst_intUV2.empty()) ? 0 : &_dst_intUV2[0] + y_beg * rowsizeUV * _dst_int_pitch;
+
+//  const int tmpPitch = nBlkSizeX;
+//  assert(tmpPitch <= TmpBlock::MAX_SIZE);
+
+  int effective_nSrcPitchUV1 = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _src_pitch_arr[1]; // pitch is byte granularity
+  int effective_dstShortPitchUV1 = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _dst_short_pitch; // pitch is short granularity
+  int effective_dstIntPitchUV1 = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _dst_int_pitch; // pitch is int granularity
+
+  int effective_nSrcPitchUV2 = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _src_pitch_arr[2]; // pitch is byte granularity
+  int effective_dstShortPitchUV2 = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _dst_short_pitch; // pitch is short granularity
+  int effective_dstIntPitchUV2 = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _dst_int_pitch; // pitch is int granularity
+ 
+
+  for (int by = y_beg; by < y_end; ++by)
+  {
+    // indexing overlap windows weighting table: top=0 middle=3 bottom=6
+    /*
+    0 = Top Left    1 = Top Middle    2 = Top Right
+    3 = Middle Left 4 = Middle Middle 5 = Middle Right
+    6 = Bottom Left 7 = Bottom Middle 8 = Bottom Right
+    */
+
+    int wby = (by == 0) ? 0 * 3 : (by == nBlkY - 1) ? 2 * 3 : 1 * 3; // 0 for very first, 2*3 for very last, 1*3 for all others in the middle
+    int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
+
+    int xx_uv = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
+
+    // prefetch source full row in linear lines reading
+    for (int iH = 0; iH < nBlkSizeY; ++iH)
+    {
+      HWprefetch_T1((char*)pSrcCur + _src_pitch_arr[0] * iH, nBlkX * nBlkSizeX);
+    }
+
+    for (int iH = 0; iH < (nBlkSizeY >> nLogyRatioUV_super); ++iH)
+    {
+      HWprefetch_T1((char*)pSrcCurUV1 + _src_pitch_arr[1] * iH, nBlkX * (nBlkSizeX >> nLogxRatioUV_super));
+      HWprefetch_T1((char*)pSrcCurUV2 + _src_pitch_arr[2] * iH, nBlkX * (nBlkSizeX >> nLogxRatioUV_super));
+    }
+
+    for (int bx = 0; bx < nBlkX; ++bx)
+    {
+      // select window
+      // indexing overlap windows weighting table: left=+0 middle=+1 rightmost=+2
+      int wbx = (bx == 0) ? 0 : (bx == nBlkX - 1) ? 2 : 1; // 0 for very first, 2 for very last, 1 for all others in the middle
+      short* winOver = _overwins->GetWindow(wby + wbx);
+      short* winOverUV = _overwins_uv->GetWindow(wby + wbx);
+
+      int i = by * nBlkX + bx;
+      // luma
+      const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
+      int pitch_arr[MAX_TEMP_RAD * 2];
+      int weight_arr[1 + MAX_TEMP_RAD * 2];
+
+      // chroma
+
+      const BYTE* ref_data_ptr_arrUV1[MAX_TEMP_RAD * 2];
+      const BYTE* ref_data_ptr_arrUV2[MAX_TEMP_RAD * 2];
+      int pitch_arrUV1[MAX_TEMP_RAD * 2];
+      int pitch_arrUV2[MAX_TEMP_RAD * 2];
+
+      PrefetchMVs(i);
+
+/*      for (int k = 0; k < _trad * 2; ++k)
+      {
+        if (!bMVsAddProc)
+        {
+          (this->*use_block_y_func)(
+            ref_data_ptr_arr[k],
+            pitch_arr[k],
+            weight_arr[k + 1],
+            _usable_flag_arr[k],
+            _mv_clip_arr[k],
+            i,
+            _planes_ptr[k][0],
+            pSrcCur,
+            xx << pixelsize_super_shift,
+            _src_pitch_arr[0],
+            bx,
+            by,
+            pMVsPlanesArrays[k]
+            );
+        }
+        else
+        {
+          (this->*use_block_y_func)(
+            ref_data_ptr_arr[k],
+            pitch_arr[k],
+            weight_arr[k + 1],
+            _usable_flag_arr[k],
+            _mv_clip_arr[k],
+            i,
+            _planes_ptr[k][0],
+            pSrcCur,
+            xx << pixelsize_super_shift,
+            _src_pitch_arr[0],
+            bx,
+            by,
+            (const VECTOR*)pFilteredMVsPlanesArrays[k]
+            );
+        }
+      }
+      */
+      if (bMVsAddProc)
+      {
+        FilterBlkMVs(i, bx, by);
+
+        for (int k = 0; k < _trad * 2; ++k)
+        {
+          use_block_yuv(
+            ref_data_ptr_arr[k],
+            pitch_arr[k],
+            ref_data_ptr_arrUV1[k],
+            pitch_arrUV1[k],
+            ref_data_ptr_arrUV2[k],
+            pitch_arrUV2[k],
+            weight_arr[k + 1],
+            _usable_flag_arr[k],
+            _mv_clip_arr[k],
+            i,
+            _planes_ptr[k][0],
+            pSrcCur,
+            _planes_ptr[k][1],
+            pSrcCurUV1,
+            _planes_ptr[k][2],
+            pSrcCurUV2,
+            xx << pixelsize_super_shift,
+            xx_uv << pixelsize_super_shift,
+            _src_pitch_arr[0],
+            _src_pitch_arr[1],
+            _src_pitch_arr[2],
+            bx,
+            by,
+            (const VECTOR*)pFilteredMVsPlanesArrays[k]
+          );
+        }
+      }
+      else
+      {
+        for (int k = 0; k < _trad * 2; ++k)
+        {
+          use_block_yuv(
+            ref_data_ptr_arr[k],
+            pitch_arr[k],
+            ref_data_ptr_arrUV1[k],
+            pitch_arrUV1[k],
+            ref_data_ptr_arrUV2[k],
+            pitch_arrUV2[k],
+            weight_arr[k + 1],
+            _usable_flag_arr[k],
+            _mv_clip_arr[k],
+            i,
+            _planes_ptr[k][0],
+            pSrcCur,
+            _planes_ptr[k][1],
+            pSrcCurUV1,
+            _planes_ptr[k][2],
+            pSrcCurUV2,
+            xx << pixelsize_super_shift,
+            xx_uv << pixelsize_super_shift,
+            _src_pitch_arr[0],
+            _src_pitch_arr[1],
+            _src_pitch_arr[2],
+            bx,
+            by,
+            pMVsPlanesArrays[k]
+          );
+        }
+      }
+
+      norm_weights(weight_arr, _trad);
+
+      // luma
+      _degrainluma_ptr(
+        &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
+        pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+        ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+      );
+
+      // chroma
+      _degrainchroma_ptr(
+        &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
+        pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+        ref_data_ptr_arrUV1, pitch_arrUV1, weight_arr, _trad
+      );
+
+      _degrainchroma_ptr(
+        &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch << pixelsize_output_shift,
+        pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+        ref_data_ptr_arrUV2, pitch_arrUV2, weight_arr, _trad
+      );
+      
+
+      // luma
+      if (_lsb_flag)
+      {
+        _oversluma_lsb_ptr(
+          pDstInt + xx, _dst_int_pitch,
+          &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch,
+          winOver, nBlkSizeX
+        );
+      }
+      else if (_out16_flag)
+      {
+        // cast to match the prototype
+        _oversluma16_ptr((uint16_t*)(pDstInt + xx), _dst_int_pitch, &tmp_block._d[0], tmpPitch << pixelsize_output_shift, winOver, nBlkSizeX);
+      }
+      else if (pixelsize_super == 1)
+      {
+        _oversluma_ptr(
+          pDstShort + xx, _dst_short_pitch,
+          &tmp_block._d[0], tmpPitch,
+          winOver, nBlkSizeX
+        );
+      }
+      else if (pixelsize_super == 2) {
+        _oversluma16_ptr((uint16_t*)(pDstInt + xx), _dst_int_pitch, &tmp_block._d[0], tmpPitch << pixelsize_super_shift, winOver, nBlkSizeX);
+      }
+      else { // pixelsize_super == 4
+        _oversluma32_ptr((uint16_t*)(pDstInt + xx), _dst_int_pitch, &tmp_block._d[0], tmpPitch << pixelsize_super_shift, winOver, nBlkSizeX);
+      }
+
+      // chroma 1
+      if (_lsb_flag)
+      {
+        _overschroma_lsb_ptr(
+          pDstIntUV1 + xx_uv, _dst_int_pitch,
+          &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch,
+          winOverUV, nBlkSizeX >> nLogxRatioUV_super
+        );
+      }
+      else if (_out16_flag)
+      {
+        // cast to match the prototype
+        _overschroma16_ptr(
+          (uint16_t*)(pDstIntUV1 + xx_uv), _dst_int_pitch,
+          &tmp_blockUV1._d[0], tmpPitch << pixelsize_output_shift,
+          winOverUV, nBlkSizeX >> nLogxRatioUV_super);
+      }
+      else if (pixelsize_super == 1)
+      {
+        _overschroma_ptr(
+          pDstShortUV1 + xx_uv, _dst_short_pitch,
+          &tmp_blockUV1._d[0], tmpPitch,
+          winOverUV, nBlkSizeX >> nLogxRatioUV_super);
+      }
+      else if (pixelsize_super == 2)
+      {
+        _overschroma16_ptr(
+          (uint16_t*)(pDstIntUV1 + xx_uv), _dst_int_pitch,
+          &tmp_blockUV1._d[0], tmpPitch << pixelsize_super_shift,
+          winOverUV, nBlkSizeX >> nLogxRatioUV_super);
+      }
+      else // if (pixelsize_super == 4)
+      {
+        _overschroma32_ptr(
+          (uint16_t*)(pDstIntUV1 + xx_uv), _dst_int_pitch,
+          &tmp_blockUV1._d[0], tmpPitch << pixelsize_super_shift,
+          winOverUV, nBlkSizeX >> nLogxRatioUV_super);
+      }
+
+      // chroma 2
+      if (_lsb_flag)
+      {
+        _overschroma_lsb_ptr(
+          pDstIntUV2 + xx_uv, _dst_int_pitch,
+          &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch,
+          winOverUV, nBlkSizeX >> nLogxRatioUV_super
+        );
+      }
+      else if (_out16_flag)
+      {
+        // cast to match the prototype
+        _overschroma16_ptr(
+          (uint16_t*)(pDstIntUV2 + xx_uv), _dst_int_pitch,
+          &tmp_blockUV2._d[0], tmpPitch << pixelsize_output_shift,
+          winOverUV, nBlkSizeX >> nLogxRatioUV_super);
+      }
+      else if (pixelsize_super == 1)
+      {
+        _overschroma_ptr(
+          pDstShortUV2 + xx_uv, _dst_short_pitch,
+          &tmp_blockUV2._d[0], tmpPitch,
+          winOverUV, nBlkSizeX >> nLogxRatioUV_super);
+      }
+      else if (pixelsize_super == 2)
+      {
+        _overschroma16_ptr(
+          (uint16_t*)(pDstIntUV2 + xx_uv), _dst_int_pitch,
+          &tmp_blockUV2._d[0], tmpPitch << pixelsize_super_shift,
+          winOverUV, nBlkSizeX >> nLogxRatioUV_super);
+      }
+      else // if (pixelsize_super == 4)
+      {
+        _overschroma32_ptr(
+          (uint16_t*)(pDstIntUV2 + xx_uv), _dst_int_pitch,
+          &tmp_blockUV2._d[0], tmpPitch << pixelsize_super_shift,
+          winOverUV, nBlkSizeX >> nLogxRatioUV_super);
+      }
+      
+      xx += nBlkSizeX - nOverlapX;
+      xx_uv += ((nBlkSizeX - nOverlapX) >> nLogxRatioUV_super); // no pixelsize here
+
+    } // for bx
+
+    pSrcCur += rowsize * _src_pitch_arr[0]; // byte pointer
+    pDstShort += rowsize * _dst_short_pitch; // short pointer
+    pDstInt += rowsize * _dst_int_pitch; // int pointer
+
+    pSrcCurUV1 += effective_nSrcPitchUV1; // pitch is byte granularity
+    pDstShortUV1 += effective_dstShortPitchUV1; // pitch is short granularity
+    pDstIntUV1 += effective_dstIntPitchUV1; // pitch is int granularity
+
+    pSrcCurUV2 += effective_nSrcPitchUV2; // pitch is byte granularity
+    pDstShortUV2 += effective_dstShortPitchUV2; // pitch is short granularity
+    pDstIntUV2 += effective_dstIntPitchUV2; // pitch is int granularity
+  } // for by
+
+}
+
+
 
 template <int P>
 void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
@@ -2280,29 +2545,10 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
   {
     int xx = 0; // index
 
-/*    int iIdxBlk_row_start = by * nBlkX;
-    for (int k = 0; k < _trad * 2; ++k)
-    {
-      // prefetch all vectors for all ref planes all blocks of row in linear reading
-      const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
-      HWprefetch_T0((char*)pMVsArrayPref, nBlkX * sizeof(VECTOR));
-
-      // prefetch all rows of all ref blocks in linear lines of rows reading, use first MV in a row now as offset
-      const int blx = 0 + pMVsArrayPref[iIdxBlk_row_start].x; // or zero ??
-      const int bly = by * (nBlkSizeY - nOverlapY) * nPel + pMVsArrayPref[iIdxBlk_row_start].y;
-      const BYTE* p = _planes_ptr[k][P]->GetPointer(blx, bly);
-      int np = _planes_ptr[k][P]->GetPitch();
-
-      for (int iH = 0; iH < nBlkSizeY; ++iH)
-      {
-        HWprefetch_T1((char*)p + np * iH, nBlkX * nBlkSizeX);
-      }
-    }
-    */
     // prefetch source full row in linear lines reading
-    for (int iH = 0; iH < nBlkSizeY; ++iH)
+    for (int iH = 0; iH < (nBlkSizeY >> nLogyRatioUV_super); ++iH)
     {
-      HWprefetch_T1((char*)pSrcCur + _src_pitch_arr[0] * iH, nBlkX * nBlkSizeX);
+      HWprefetch_T1((char*)pSrcCur + _src_pitch_arr[0] * iH, nBlkX * (nBlkSizeX >> nLogxRatioUV_super));
     }
 
     for (int bx = 0; bx < nBlkX; ++bx)
@@ -2492,29 +2738,10 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
     int wby = (by == 0) ? 0 * 3 : (by == nBlkY - 1) ? 2 * 3 : 1 * 3; // 0 for very first, 2*3 for very last, 1*3 for all others in the middle
     int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
 
-/*    int iIdxBlk_row_start = by * nBlkX;
-    for (int k = 0; k < _trad * 2; ++k)
-    {
-      // prefetch all vectors for all ref planes all blocks of row in linear reading
-      const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
-      HWprefetch_T0((char*)pMVsArrayPref, nBlkX * sizeof(VECTOR));
-
-      // prefetch all rows of all ref blocks in linear lines of rows reading, use first MV in a row now as offset
-      const int blx = 0 + pMVsArrayPref[iIdxBlk_row_start].x; // or zero ??
-      const int bly = by * (nBlkSizeY - nOverlapY) * nPel + pMVsArrayPref[iIdxBlk_row_start].y;
-      const BYTE* p = _planes_ptr[k][0]->GetPointer(blx, bly);
-      int np = _planes_ptr[k][0]->GetPitch();
-
-      for (int iH = 0; iH < nBlkSizeY; ++iH)
-      {
-        HWprefetch_T1((char*)p + np * iH, nBlkX * nBlkSizeX);
-      }
-    }
-    */
     // prefetch source full row in linear lines reading
-    for (int iH = 0; iH < nBlkSizeY; ++iH)
+    for (int iH = 0; iH < (nBlkSizeY >> nLogyRatioUV_super); ++iH)
     {
-      HWprefetch_T1((char*)pSrcCur + _src_pitch_arr[0] * iH, nBlkX * nBlkSizeX);
+      HWprefetch_T1((char*)pSrcCur + _src_pitch_arr[0] * iH, nBlkX * (nBlkSizeX >> nLogxRatioUV_super));
     }
 
     for (int bx = 0; bx < nBlkX; ++bx)
@@ -3519,3 +3746,237 @@ MV_FORCEINLINE void MDegrainN::PrefetchMVs(int i)
   }
 }
 
+MV_FORCEINLINE void MDegrainN::MemZoneSetUV(uint16_t* pDstShortUV, int* pDstIntUV)
+{
+  if (_lsb_flag || pixelsize_output > 1)
+  {
+    MemZoneSet(
+      reinterpret_cast <unsigned char*> (pDstIntUV), 0,
+      (_covered_width * sizeof(int)) >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super,
+      0, 0, _dst_int_pitch * sizeof(int)
+    );
+  }
+  else
+  {
+    MemZoneSet(
+      reinterpret_cast <unsigned char*> (pDstShortUV), 0,
+      (_covered_width * sizeof(short)) >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super,
+      0, 0, _dst_short_pitch * sizeof(short)
+    );
+  }
+}
+
+MV_FORCEINLINE void MDegrainN::MemZoneSetY(uint16_t* pDstShort, int* pDstInt)
+{
+  if (_lsb_flag || pixelsize_output > 1)
+  {
+    MemZoneSet(
+      reinterpret_cast <unsigned char*> (pDstInt), 0,
+      _covered_width * sizeof(int), _covered_height, 0, 0, _dst_int_pitch * sizeof(int)
+    );
+  }
+  else
+  {
+    MemZoneSet(
+      reinterpret_cast <unsigned char*> (pDstShort), 0,
+      _covered_width * sizeof(short), _covered_height, 0, 0, _dst_short_pitch * sizeof(short)
+    );
+  }
+}
+
+MV_FORCEINLINE void MDegrainN::post_overlap_chroma_plane(int P, uint16_t* pDstShort, int* pDstInt)
+{
+  if (_lsb_flag)
+  {
+    Short2BytesLsb(
+      _dst_ptr_arr[P],
+      _dst_ptr_arr[P] + _lsb_offset_arr[P], // 8 bit only
+      _dst_pitch_arr[P],
+      pDstInt, _dst_int_pitch,
+      _covered_width >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super
+    );
+  }
+  else if (_out16_flag)
+  {
+    Short2Bytes_Int32toWord16(
+      (uint16_t*)_dst_ptr_arr[P], _dst_pitch_arr[P],
+      pDstInt, _dst_int_pitch,
+      _covered_width >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super,
+      bits_per_pixel_output
+    );
+  }
+  else if (pixelsize_super == 1)
+  {
+    Short2Bytes(
+      _dst_ptr_arr[P], _dst_pitch_arr[P],
+      pDstShort, _dst_short_pitch,
+      _covered_width >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super
+    );
+  }
+  else if (pixelsize_super == 2)
+  {
+    Short2Bytes_Int32toWord16(
+      (uint16_t*)_dst_ptr_arr[P], _dst_pitch_arr[P],
+      pDstInt, _dst_int_pitch,
+      _covered_width >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super,
+      bits_per_pixel_super
+    );
+  }
+  else if (pixelsize_super == 4)
+  {
+    Short2Bytes_FloatInInt32ArrayToFloat(
+      (float*)_dst_ptr_arr[P], _dst_pitch_arr[P],
+      (float*)pDstInt, _dst_int_pitch,
+      _covered_width >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super
+    );
+  }
+
+  if (_covered_width < nWidth)
+  {
+    if (_out16_flag) {
+      // copy 8 bit source to 16bit target
+      plane_copy_8_to_16_c(_dst_ptr_arr[P] + ((_covered_width >> nLogxRatioUV_super) << pixelsize_output_shift), _dst_pitch_arr[P],
+        _src_ptr_arr[P] + (_covered_width >> nLogxRatioUV_super), _src_pitch_arr[P],
+        (nWidth - _covered_width) >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super
+      );
+    }
+    else {
+      BitBlt(
+        _dst_ptr_arr[P] + ((_covered_width >> nLogxRatioUV_super) << pixelsize_super_shift), _dst_pitch_arr[P],
+        _src_ptr_arr[P] + ((_covered_width >> nLogxRatioUV_super) << pixelsize_super_shift), _src_pitch_arr[P],
+        ((nWidth - _covered_width) >> nLogxRatioUV_super) << pixelsize_super_shift, _covered_height >> nLogyRatioUV_super
+      );
+    }
+  }
+  if (_covered_height < nHeight) // bottom noncovered region
+  {
+    if (_out16_flag) {
+      // copy 8 bit source to 16bit target
+      plane_copy_8_to_16_c(_dst_ptr_arr[P] + ((_dst_pitch_arr[P] * _covered_height) >> nLogyRatioUV_super), _dst_pitch_arr[P],
+        _src_ptr_arr[P] + ((_src_pitch_arr[P] * _covered_height) >> nLogyRatioUV_super), _src_pitch_arr[P],
+        nWidth >> nLogxRatioUV_super, ((nHeight - _covered_height) >> nLogyRatioUV_super)
+      );
+    }
+    else {
+      BitBlt(
+        _dst_ptr_arr[P] + ((_dst_pitch_arr[P] * _covered_height) >> nLogyRatioUV_super), _dst_pitch_arr[P],
+        _src_ptr_arr[P] + ((_src_pitch_arr[P] * _covered_height) >> nLogyRatioUV_super), _src_pitch_arr[P],
+        (nWidth >> nLogxRatioUV_super) << pixelsize_super_shift, ((nHeight - _covered_height) >> nLogyRatioUV_super)
+      );
+    }
+  }
+}
+
+MV_FORCEINLINE void MDegrainN::post_overlap_luma_plane(void)
+{
+  // fixme: SSE versions from ShortToBytes family like in MDegrain3
+  if (_lsb_flag)
+  {
+    Short2BytesLsb(
+      _dst_ptr_arr[0],
+      _dst_ptr_arr[0] + _lsb_offset_arr[0],
+      _dst_pitch_arr[0],
+      &_dst_int[0], _dst_int_pitch,
+      _covered_width, _covered_height
+    );
+  }
+  else if (_out16_flag)
+  {
+    Short2Bytes_Int32toWord16(
+      (uint16_t*)_dst_ptr_arr[0], _dst_pitch_arr[0],
+      &_dst_int[0], _dst_int_pitch,
+      _covered_width, _covered_height,
+      bits_per_pixel_output
+    );
+  }
+  else if (pixelsize_super == 1)
+  {
+    Short2Bytes(
+      _dst_ptr_arr[0], _dst_pitch_arr[0],
+      &_dst_short[0], _dst_short_pitch,
+      _covered_width, _covered_height
+    );
+  }
+  else if (pixelsize_super == 2)
+  {
+    Short2Bytes_Int32toWord16(
+      (uint16_t*)_dst_ptr_arr[0], _dst_pitch_arr[0],
+      &_dst_int[0], _dst_int_pitch,
+      _covered_width, _covered_height,
+      bits_per_pixel_super
+    );
+  }
+  else if (pixelsize_super == 4)
+  {
+    Short2Bytes_FloatInInt32ArrayToFloat(
+      (float*)_dst_ptr_arr[0], _dst_pitch_arr[0],
+      (float*)&_dst_int[0], _dst_int_pitch,
+      _covered_width, _covered_height
+    );
+  }
+  if (_covered_width < nWidth)
+  {
+    if (_out16_flag) {
+      // copy 8 bit source to 16bit target
+      plane_copy_8_to_16_c(_dst_ptr_arr[0] + (_covered_width << pixelsize_output_shift), _dst_pitch_arr[0],
+        _src_ptr_arr[0] + _covered_width, _src_pitch_arr[0],
+        nWidth - _covered_width, _covered_height
+      );
+    }
+    else {
+      BitBlt(
+        _dst_ptr_arr[0] + (_covered_width << pixelsize_super_shift), _dst_pitch_arr[0],
+        _src_ptr_arr[0] + (_covered_width << pixelsize_super_shift), _src_pitch_arr[0],
+        (nWidth - _covered_width) << pixelsize_super_shift, _covered_height
+      );
+    }
+  }
+  if (_covered_height < nHeight) // bottom noncovered region
+  {
+    if (_out16_flag) {
+      // copy 8 bit source to 16bit target
+      plane_copy_8_to_16_c(_dst_ptr_arr[0] + _covered_height * _dst_pitch_arr[0], _dst_pitch_arr[0],
+        _src_ptr_arr[0] + _covered_height * _src_pitch_arr[0], _src_pitch_arr[0],
+        nWidth, nHeight - _covered_height
+      );
+    }
+    else {
+      BitBlt(
+        _dst_ptr_arr[0] + _covered_height * _dst_pitch_arr[0], _dst_pitch_arr[0],
+        _src_ptr_arr[0] + _covered_height * _src_pitch_arr[0], _src_pitch_arr[0],
+        nWidth << pixelsize_super_shift, nHeight - _covered_height
+      );
+    }
+  }
+
+}
+
+MV_FORCEINLINE void MDegrainN::nlimit_luma(void)
+{
+  // limit is 0-255 relative, for any bit depth
+  float realLimit;
+  if (pixelsize_output <= 2)
+    realLimit = _nlimit * (1 << (bits_per_pixel_output - 8));
+  else
+    realLimit = _nlimit / 255.0f;
+  LimitFunction(_dst_ptr_arr[0], _dst_pitch_arr[0],
+    _src_ptr_arr[0], _src_pitch_arr[0],
+    nWidth, nHeight,
+    realLimit
+  );
+}
+
+MV_FORCEINLINE void MDegrainN::nlimit_chroma(int P)
+{
+    // limit is 0-255 relative, for any bit depth
+  float realLimit;
+  if (pixelsize_output <= 2)
+    realLimit = _nlimitc * (1 << (bits_per_pixel_output - 8));
+  else
+    realLimit = (float)_nlimitc / 255.0f;
+  LimitFunction(_dst_ptr_arr[P], _dst_pitch_arr[P],
+    _src_ptr_arr[P], _src_pitch_arr[P],
+    nWidth >> nLogxRatioUV_super, nHeight >> nLogyRatioUV_super,
+    realLimit
+  );
+}
