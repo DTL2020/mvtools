@@ -535,7 +535,7 @@ MDegrainN::MDegrainN(
   sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
   sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
-  float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, int UseSubShift, 
+  float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, int UseSubShift, int InterpolateOverlap,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -592,6 +592,7 @@ MDegrainN::MDegrainN(
   , fMVLPFGauss(MVLPFGauss)
   , ithMVLPFCorr(thMVLPFCorr)
   , nUseSubShift(UseSubShift)
+  , iInterpolateOverlap(InterpolateOverlap)
 {
   has_at_least_v8 = true;
   try { env_ptr->CheckVersion(8); }
@@ -612,6 +613,32 @@ MDegrainN::MDegrainN(
   if (wpow < 1 || wpow > 7)
   {
     env_ptr->ThrowError("MDegrainN: wpow must be from 1 to 7. 7 = equal weights.");
+  }
+
+  if (iInterpolateOverlap > 0 && (nOverlapX > 0 || nOverlapY > 0))
+  {
+    env_ptr->ThrowError("MDegrainN: InterpolateOverlap > 0 but input cliip already have overlap.");
+  }
+
+  // adjust main params of current MVFilter to overlapped, remember source params
+  if (iInterpolateOverlap > 0)
+  {
+    // save original input MVFilter params
+    nInputBlkX = nBlkX;
+    nInputBlkY = nBlkY;
+    nInputBlkCount = nBlkCount;
+
+    //assume interpolated overlap is always BlkSize/2
+    nOverlapX = nBlkSizeX / 2;
+    nOverlapY = nBlkSizeY / 2;
+
+    nBlkX = (nWidth - nOverlapX)
+      / (nBlkSizeX - nOverlapX);
+    nBlkY = (nHeight - nOverlapY)
+      / (nBlkSizeY - nOverlapY);
+
+    nBlkCount = nBlkX * nBlkY;
+
   }
 
   _wpow = wpow;
@@ -951,9 +978,34 @@ MDegrainN::MDegrainN(
     pTmp = (VECTOR*)(pTmp_a + random);
 #else
     pTmp = new VECTOR[nBlkCount]; // allocate in heap ?
-    pFilteredMVsPlanesArrays_a[k] = pTmp;
+    pFilteredMVsPlanesArrays[k] = pTmp;
 #endif
     pFilteredMVsPlanesArrays[k] = pTmp;
+
+  }
+
+  // allocate interpolated overlap MVs arrays
+  for (int k = 0; k < _trad * 2; ++k)
+  {
+    uint8_t* pTmp_a;
+    VECTOR* pTmp;
+#ifdef _WIN32
+    // to prevent cache set overloading when accessing fpob MVs arrays - add random L2L3_CACHE_LINE_SIZE-bytes sized offset to different allocations
+    size_t random = rand();
+    random *= RAND_OFFSET_MAX;
+    random /= RAND_MAX;
+    random *= L2L3_CACHE_LINE_SIZE;
+
+    SIZE_T stSizeToAlloc = nBlkCount * sizeof(VECTOR) + RAND_OFFSET_MAX * L2L3_CACHE_LINE_SIZE;
+
+    pTmp_a = (BYTE*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+    pMVsIntOvlpPlanesArrays_a[k] = pTmp_a;
+    pTmp = (VECTOR*)(pTmp_a + random);
+#else
+    pTmp = new VECTOR[nBlkCount]; // allocate in heap ?
+    pMVsIntOvlpPlanesArrays_a[k] = pTmp;
+#endif
+    pMVsIntOvlpPlanesArrays[k] = pTmp;
 
   }
 
@@ -984,8 +1036,10 @@ MDegrainN::~MDegrainN()
   {
 #ifdef _WIN32
     VirtualFree((LPVOID)pFilteredMVsPlanesArrays_a[k], 0, MEM_FREE);
+    VirtualFree((LPVOID)pMVsIntOvlpPlanesArrays_a[k], 0, MEM_FREE);
 #else
-    delete pFilteredMVsPlanesArrays_a[k];
+    delete pFilteredMVsPlanesArrays[k];
+    delete pMVsIntOvlpPlanesArrays[k];
 #endif
   }
 
@@ -1187,11 +1241,20 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
   }
 
   // load pMVsArray into temp buf once, 2.7.46
-  for (int k = 0; k < _trad * 2; ++k)
+  if (iInterpolateOverlap == 0)
   {
-    pMVsPlanesArrays[k] = _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0);
+    for (int k = 0; k < _trad * 2; ++k)
+    {
+      pMVsPlanesArrays[k] = _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0);
+    }
   }
-
+  else
+  {
+    for (int k = 0; k < _trad * 2; ++k)
+    {
+      InterpolateOverlap(pMVsPlanesArrays[k], _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0));
+    }
+  }
   //call Filter MVs here because it equal for luma and all chroma planes
 //  const BYTE* pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
 
@@ -3979,4 +4042,9 @@ MV_FORCEINLINE void MDegrainN::nlimit_chroma(int P)
     nWidth >> nLogxRatioUV_super, nHeight >> nLogyRatioUV_super,
     realLimit
   );
+}
+
+void MDegrainN::InterpolateOverlap(const VECTOR* pInterpolatedMVs, const VECTOR* pInputMVs)
+{
+
 }

@@ -38,7 +38,8 @@ public:
     sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
     sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow,
     float adjSADzeromv, float adjSADcohmv, int thCohMV,
-    float fMVLPFCutoff, float fMVLPFSlope, float fMVLPFGauss, int thMVLPFCorr, int UseSubShift,
+    float fMVLPFCutoff, float fMVLPFSlope, float fMVLPFGauss, int thMVLPFCorr,
+    int UseSubShift, int InterpolateOverlap,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -225,8 +226,6 @@ private:
 
   // 2.7.46
   int _wpow;
-//  uint16_t* pui16Blocks2DWeightsArr;
-//  uint16_t* pui16WeightsFrameArr;
   const VECTOR* pMVsPlanesArrays[MAX_TEMP_RAD * 2];
 
   float fadjSADzeromv;
@@ -243,6 +242,14 @@ private:
   const uint8_t* pFilteredMVsPlanesArrays_a[MAX_TEMP_RAD * 2]; // pointers to aligned memory pages to free
   SADFunction* SAD;              /* function which computes the sad */
   SADFunction* SADCHROMA;
+
+  int iInterpolateOverlap;
+  VECTOR* pMVsIntOvlpPlanesArrays[MAX_TEMP_RAD * 2]; // interpolated overlap MVs
+  const uint8_t* pMVsIntOvlpPlanesArrays_a[MAX_TEMP_RAD * 2]; // pointers to aligned memory pages to free
+  int nInputBlkX;
+  int nInputBlkY;
+  int nInputBlkCount;
+  void InterpolateOverlap(const VECTOR* pInterpolatedMVs, const VECTOR * pOrigMVs);
 
   int nUseSubShift;
   int iMaxBlx; // max blx for GetPointer*()
