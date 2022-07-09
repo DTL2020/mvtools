@@ -38,7 +38,7 @@ public:
     sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
     sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow,
     float adjSADzeromv, float adjSADcohmv, int thCohMV,
-    float fMVLPFCutoff, float fMVLPFSlope, float fMVLPFGauss, int thMVLPFCorr,
+    float fMVLPFCutoff, float fMVLPFSlope, float fMVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
     int UseSubShift, int InterpolateOverlap,
     ::IScriptEnvironment* env_ptr
   );
@@ -230,6 +230,7 @@ private:
 
   float fadjSADzeromv;
   float fadjSADcohmv;
+  float fadjSADLPFedmv;
   int ithCohMV;
 
   float fMVLPFCutoff;

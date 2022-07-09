@@ -535,7 +535,8 @@ MDegrainN::MDegrainN(
   sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
   sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
-  float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, int UseSubShift, int InterpolateOverlap,
+  float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
+  int UseSubShift, int InterpolateOverlap,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -586,6 +587,7 @@ MDegrainN::MDegrainN(
   , _boundary_cnt_arr()
   , fadjSADzeromv(adjSADzeromv)
   , fadjSADcohmv(adjSADcohmv)
+  , fadjSADLPFedmv(adjSADLPFedmv)
   , ithCohMV(thCohMV) // need to scale to pel value ?
   , fMVLPFCutoff(MVLPFCutoff)
   , fMVLPFSlope(MVLPFSlope)
@@ -3513,8 +3515,11 @@ void MDegrainN::FilterMVs(void)
           }
         }
         vOrig = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
-        if ( (abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
+        if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
+        {
+          vLPFed.sad = (int)((float)vLPFed.sad * fadjSADLPFedmv); // make some boost of weight for filtered because they typically have worse SAD
           pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vLPFed;
+        }
         else // place original vector
           pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vOrig;
       }
@@ -3582,7 +3587,10 @@ void MDegrainN::FilterMVs(void)
         }
         vOrig = pMVsPlanesArrays[(k - 1) * 2][i];
         if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
+        {
+          vLPFed.sad = (int)((float)vLPFed.sad * fadjSADLPFedmv); // make some boost of weight for filtered because they typically have worse SAD
           pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vLPFed;
+        }
         else
           pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vOrig;
       }
@@ -3730,7 +3738,10 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
       }
     vOrig = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
     if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
+    {
+      vLPFed.sad = (int)((float)vLPFed.sad * fadjSADLPFedmv); // make some boost of weight for filtered because they typically have worse SAD
       pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vLPFed;
+    }
     else // place original vector
       pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vOrig;
   }
@@ -3798,7 +3809,10 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
       }
     vOrig = pMVsPlanesArrays[(k - 1) * 2][i];
     if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
+    {
+      vLPFed.sad = (int)((float)vLPFed.sad * fadjSADLPFedmv); // make some boost of weight for filtered because they typically have worse SAD
       pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vLPFed;
+    }
     else
       pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vOrig;
   }
