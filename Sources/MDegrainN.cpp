@@ -617,7 +617,7 @@ MDegrainN::MDegrainN(
 
   if (iInterpolateOverlap > 0 && (nOverlapX > 0 || nOverlapY > 0))
   {
-    env_ptr->ThrowError("MDegrainN: InterpolateOverlap > 0 but input cliip already have overlap.");
+    env_ptr->ThrowError("MDegrainN: InterpolateOverlap > 0 but input MVs clip already have overlap.");
   }
 
   // adjust main params of current MVFilter to overlapped, remember source params
@@ -661,6 +661,11 @@ MDegrainN::MDegrainN(
   thsadc = (uint64_t)thsadc  * mv_thscd1 / nscd1;	// chroma
   thsad2 = (uint64_t)thsad2  * mv_thscd1 / nscd1;
   thsadc2 = (uint64_t)thsadc2 * mv_thscd1 / nscd1;
+
+  if ((thsad != thsadc) || (thsad2 != thsadc2))
+    bthLC_diff = true; // thSAD luma and chroma different - use separate DegrainWeight and normweights proc in YUV single pass processing
+  else
+    bthLC_diff = false;
 
   const ::VideoInfo &vi_super = _super->GetVideoInfo();
 
@@ -2013,6 +2018,7 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
       const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
       int pitch_arr[MAX_TEMP_RAD * 2];
       int weight_arr[1 + MAX_TEMP_RAD * 2];
+      int weight_arrUV[1 + MAX_TEMP_RAD * 2];
 
       const BYTE* ref_data_ptr_arrUV1[MAX_TEMP_RAD * 2]; // vs: const uint8_t *pointers[radius * 2]; // Moved by the degrain function.
       const BYTE* ref_data_ptr_arrUV2[MAX_TEMP_RAD * 2]; // vs: const uint8_t *pointers[radius * 2]; // Moved by the degrain function. 
@@ -2035,6 +2041,7 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
             ref_data_ptr_arrUV2[k],
             pitch_arrUV2[k],
             weight_arr[k + 1],
+            weight_arrUV[k + 1],
             _usable_flag_arr[k],
             _mv_clip_arr[k],
             i,
@@ -2067,6 +2074,7 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
             ref_data_ptr_arrUV2[k],
             pitch_arrUV2[k],
             weight_arr[k + 1],
+            weight_arrUV[k + 1],
             _usable_flag_arr[k],
             _mv_clip_arr[k],
             i,
@@ -2090,6 +2098,8 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
 
       norm_weights(weight_arr, _trad);
 
+      if (bthLC_diff) norm_weights(weight_arrUV, _trad);
+
       // luma
       _degrainluma_ptr(
         pDstCur + (xx << pixelsize_output_shift),
@@ -2097,23 +2107,46 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
       );
-      
-      // chroma first plane
-      _degrainchroma_ptr(
-        pDstCurUV1 + (xx_uv << pixelsize_output_shift),
-        pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
-        pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-        ref_data_ptr_arrUV1, pitch_arrUV1, weight_arr, _trad
-      );
 
-      // chroma second plane
-      _degrainchroma_ptr(
-        pDstCurUV2 + (xx_uv << pixelsize_output_shift),
-        pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
-        pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-        ref_data_ptr_arrUV2, pitch_arrUV2, weight_arr, _trad
-      );
-      
+      if (!bthLC_diff)
+      {
+        // single weight for luma and chroma
+        // chroma first plane
+        _degrainchroma_ptr(
+          pDstCurUV1 + (xx_uv << pixelsize_output_shift),
+          pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
+          pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+          ref_data_ptr_arrUV1, pitch_arrUV1, weight_arr, _trad
+        );
+
+        // chroma second plane
+        _degrainchroma_ptr(
+          pDstCurUV2 + (xx_uv << pixelsize_output_shift),
+          pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
+          pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+          ref_data_ptr_arrUV2, pitch_arrUV2, weight_arr, _trad
+        );
+      }
+      else
+      {
+        // different weight for chroma
+        // chroma first plane
+        _degrainchroma_ptr(
+          pDstCurUV1 + (xx_uv << pixelsize_output_shift),
+          pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
+          pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+          ref_data_ptr_arrUV1, pitch_arrUV1, weight_arrUV, _trad
+        );
+
+        // chroma second plane
+        _degrainchroma_ptr(
+          pDstCurUV2 + (xx_uv << pixelsize_output_shift),
+          pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
+          pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+          ref_data_ptr_arrUV2, pitch_arrUV2, weight_arrUV, _trad
+        );
+
+      }
       xx += (nBlkSizeX); // xx: indexing offset
       xx_uv += (nBlkSizeX >> nLogxRatioUV_super); // xx: indexing offset
 
@@ -2320,60 +2353,21 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
       short* winOverUV = _overwins_uv->GetWindow(wby + wbx);
 
       int i = by * nBlkX + bx;
+
       // luma
       const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
       int pitch_arr[MAX_TEMP_RAD * 2];
       int weight_arr[1 + MAX_TEMP_RAD * 2];
 
       // chroma
-
       const BYTE* ref_data_ptr_arrUV1[MAX_TEMP_RAD * 2];
       const BYTE* ref_data_ptr_arrUV2[MAX_TEMP_RAD * 2];
       int pitch_arrUV1[MAX_TEMP_RAD * 2];
       int pitch_arrUV2[MAX_TEMP_RAD * 2];
+      int weight_arrUV[1 + MAX_TEMP_RAD * 2];
 
       PrefetchMVs(i);
 
-/*      for (int k = 0; k < _trad * 2; ++k)
-      {
-        if (!bMVsAddProc)
-        {
-          (this->*use_block_y_func)(
-            ref_data_ptr_arr[k],
-            pitch_arr[k],
-            weight_arr[k + 1],
-            _usable_flag_arr[k],
-            _mv_clip_arr[k],
-            i,
-            _planes_ptr[k][0],
-            pSrcCur,
-            xx << pixelsize_super_shift,
-            _src_pitch_arr[0],
-            bx,
-            by,
-            pMVsPlanesArrays[k]
-            );
-        }
-        else
-        {
-          (this->*use_block_y_func)(
-            ref_data_ptr_arr[k],
-            pitch_arr[k],
-            weight_arr[k + 1],
-            _usable_flag_arr[k],
-            _mv_clip_arr[k],
-            i,
-            _planes_ptr[k][0],
-            pSrcCur,
-            xx << pixelsize_super_shift,
-            _src_pitch_arr[0],
-            bx,
-            by,
-            (const VECTOR*)pFilteredMVsPlanesArrays[k]
-            );
-        }
-      }
-      */
       if (bMVsAddProc)
       {
         FilterBlkMVs(i, bx, by);
@@ -2388,6 +2382,7 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
             ref_data_ptr_arrUV2[k],
             pitch_arrUV2[k],
             weight_arr[k + 1],
+            weight_arrUV[k + 1],
             _usable_flag_arr[k],
             _mv_clip_arr[k],
             i,
@@ -2420,6 +2415,7 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
             ref_data_ptr_arrUV2[k],
             pitch_arrUV2[k],
             weight_arr[k + 1],
+            weight_arrUV[k + 1],
             _usable_flag_arr[k],
             _mv_clip_arr[k],
             i,
@@ -2442,6 +2438,7 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
       }
 
       norm_weights(weight_arr, _trad);
+      if (bthLC_diff) norm_weights(weight_arrUV, _trad);
 
       // luma
       _degrainluma_ptr(
@@ -2451,18 +2448,36 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
       );
 
       // chroma
-      _degrainchroma_ptr(
-        &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
-        pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-        ref_data_ptr_arrUV1, pitch_arrUV1, weight_arr, _trad
-      );
+      if (!bthLC_diff)
+      {
+        // luma and chroma equal weights
+        _degrainchroma_ptr(
+          &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
+          pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+          ref_data_ptr_arrUV1, pitch_arrUV1, weight_arr, _trad
+        );
 
-      _degrainchroma_ptr(
-        &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch << pixelsize_output_shift,
-        pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-        ref_data_ptr_arrUV2, pitch_arrUV2, weight_arr, _trad
-      );
-      
+        _degrainchroma_ptr(
+          &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch << pixelsize_output_shift,
+          pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+          ref_data_ptr_arrUV2, pitch_arrUV2, weight_arr, _trad
+        );
+      }
+      else
+      {
+        // chroma different weight
+        _degrainchroma_ptr(
+          &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
+          pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+          ref_data_ptr_arrUV1, pitch_arrUV1, weight_arrUV, _trad
+        );
+
+        _degrainchroma_ptr(
+          &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch << pixelsize_output_shift,
+          pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+          ref_data_ptr_arrUV2, pitch_arrUV2, weight_arrUV, _trad
+        );
+      }
 
       // luma
       if (_lsb_flag)
@@ -3005,8 +3020,8 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
   }
 }
 
-MV_FORCEINLINE void MDegrainN::use_block_yuv(const BYTE*& pY, int& npY, const BYTE*& pUV1, int& npUV1, const BYTE*& pUV2, int& npUV2, int& wref, bool usable_flag, const MvClipInfo& c_info,
-  int i, const MVPlane* plane_ptrY, const BYTE* src_ptrY, const MVPlane* plane_ptrUV1, const BYTE* src_ptrUV1, const MVPlane* plane_ptrUV2, const BYTE* src_ptrUV2,
+MV_FORCEINLINE void MDegrainN::use_block_yuv(const BYTE*& pY, int& npY, const BYTE*& pUV1, int& npUV1, const BYTE*& pUV2, int& npUV2, int& wref, int& wrefUV, bool usable_flag,
+  const MvClipInfo& c_info, int i, const MVPlane* plane_ptrY, const BYTE* src_ptrY, const MVPlane* plane_ptrUV1, const BYTE* src_ptrUV1, const MVPlane* plane_ptrUV2, const BYTE* src_ptrUV2,
   int xx, int xx_uv, int src_pitchY, int src_pitchUV1, int src_pitchUV2, int ibx, int iby, const VECTOR* pMVsArray)
 {
   if (usable_flag)
@@ -3087,6 +3102,8 @@ MV_FORCEINLINE void MDegrainN::use_block_yuv(const BYTE*& pY, int& npY, const BY
     }
 
     wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
+
+    if (bthLC_diff) wrefUV = DegrainWeightN(c_info._thsadc, c_info._thsadc_sq, block_sad, _wpow);
   }
   else
   {
@@ -3100,6 +3117,7 @@ MV_FORCEINLINE void MDegrainN::use_block_yuv(const BYTE*& pY, int& npY, const BY
     npUV2 = src_pitchUV2;
 
     wref = 0;
+    wrefUV = 0;
   }
 }
 
@@ -3206,7 +3224,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv(
 
     sad_t block_sad = pMVsArray[i].sad;
 
-    wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
+    wref = DegrainWeightN(c_info._thsadc, c_info._thsadc_sq, block_sad, _wpow);
   }
   else
   {
@@ -3282,7 +3300,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv_thSADzeromv_thSADcohmv(
       }
     }
 
-    wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
+    wref = DegrainWeightN(c_info._thsadc, c_info._thsadc_sq, block_sad, _wpow);
   }
   else
   {

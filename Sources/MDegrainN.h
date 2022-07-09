@@ -171,7 +171,7 @@ private:
 
   MV_FORCEINLINE void
     use_block_yuv(
-      const BYTE*& pY, int& npY, const BYTE*& pUV1, int& npUV1, const BYTE*& pUV2, int& npUV2, int& wref, bool usable_flag, const MvClipInfo& c_info,
+      const BYTE*& pY, int& npY, const BYTE*& pUV1, int& npUV1, const BYTE*& pUV2, int& npUV2, int& wref, int& wrefUV, bool usable_flag, const MvClipInfo& c_info,
       int i, const MVPlane* plane_ptrY, const BYTE* src_ptrY, const MVPlane* plane_ptrUV1, const BYTE* src_ptrUV1, const MVPlane* plane_ptrUV2, const BYTE* src_ptrUV2,
       int xx, int xx_uv, int src_pitchY, int src_pitchUV1, int src_pitchUV2, int ibx, int iby, const VECTOR* pMVsArray
     );
@@ -242,6 +242,8 @@ private:
   const uint8_t* pFilteredMVsPlanesArrays_a[MAX_TEMP_RAD * 2]; // pointers to aligned memory pages to free
   SADFunction* SAD;              /* function which computes the sad */
   SADFunction* SADCHROMA;
+
+  bool bthLC_diff;
 
   int iInterpolateOverlap;
   VECTOR* pMVsIntOvlpPlanesArrays[MAX_TEMP_RAD * 2]; // interpolated overlap MVs
