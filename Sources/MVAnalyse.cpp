@@ -231,7 +231,7 @@ MVAnalyse::MVAnalyse(
 
   _cpuFlags = _isse ? env->GetCPUFlags() : 0;
 
-  if (iUseSubShift == 0)
+//  if (iUseSubShift == 0)
   {
     pSrcGOF = new MVGroupOfFrames(
       nSuperLevels, analysisData.nWidth, analysisData.nHeight,
@@ -244,7 +244,7 @@ MVAnalyse::MVAnalyse(
       _cpuFlags, analysisData.xRatioUV, analysisData.yRatioUV, pixelsize, bits_per_pixel, mt_flag
     );
   }
-  else
+/*  else - need to find why system going unstable in init pel=1 with pel=4 processing
   {
     pSrcGOF = new MVGroupOfFrames(
       nSuperLevels, analysisData.nWidth, analysisData.nHeight,
@@ -256,7 +256,7 @@ MVAnalyse::MVAnalyse(
       1, nSuperHPad, nSuperVPad, nSuperModeYUV,
       _cpuFlags, analysisData.xRatioUV, analysisData.yRatioUV, pixelsize, bits_per_pixel, mt_flag
     );
-  }
+  }*/
 
   analysisData.nBlkSizeX = _blksizex;
   analysisData.nBlkSizeY = _blksizey;
@@ -785,10 +785,10 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
         // load Y plane directly
         MVFrame* SrcFrame;
-        if (optSearchOption == 5)
+//        if (optSearchOption == 5)
           SrcFrame = pSrcGOF->GetFrame(0); // use 0 - largest plane (original ?? or nPel enlarged ??)
-        else// (optSearchOption == 6)
-          SrcFrame = pSrcGOF->GetFrame(1); // use 1 - half sized plane (original ?? or nPel enlarged ??)
+//        else// (optSearchOption == 6)
+//          SrcFrame = pSrcGOF->GetFrame(1); // use 1 - half sized plane (original ?? or nPel enlarged ??)
 
         int SrcYPitch = SrcFrame->GetPlane(YPLANE)->GetPitch();
         int src_Yx0 = SrcFrame->GetPlane(YPLANE)->GetVPadding();
@@ -818,10 +818,10 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
       // load Y plane directly
       MVFrame* SrcFrameRef;
-      if (optSearchOption == 5)
+//      if (optSearchOption == 5)
         SrcFrameRef = pRefGOF->GetFrame(0); // use 0 - largest plane (original ?? or nPel enlarged ??)
-      else// (optSearchOption == 6)
-        SrcFrameRef = pRefGOF->GetFrame(1); // use 1 - half sized plane (original ?? or nPel enlarged ??)
+//      else// (optSearchOption == 6)
+//        SrcFrameRef = pRefGOF->GetFrame(1); // use 1 - half sized plane (original ?? or nPel enlarged ??)
 
       int SrcYPitchRef = SrcFrameRef->GetPlane(YPLANE)->GetPitch();
       int src_Yx0_Ref = SrcFrameRef->GetPlane(YPLANE)->GetVPadding();
@@ -903,14 +903,14 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
           {} };
 
       D3D12_RESOLVE_VIDEO_MOTION_VECTOR_HEAP_INPUT inputArgsRMVH = {};
-      if (optSearchOption == 5)
-      {
+//      if (optSearchOption == 5)
+//      {
         inputArgsRMVH = {
             spVideoMotionVectorHeap.Get(),
             (UINT)srd._analysis_data.nWidth,
             (UINT)srd._analysis_data.nHeight
         };
-      }
+/*      }
       else // SO==6
       {
         inputArgsRMVH = {
@@ -919,7 +919,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
             (UINT)srd._analysis_data.nHeight / 2
         };
       }
-
+      */
       m_VideoEncodeCommandList->ResolveMotionVectorHeap(&outputArgsRMVH, &inputArgsRMVH);
 
       m_VideoEncodeCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spResolvedMotionVectors.Get(), D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE, D3D12_RESOURCE_STATE_COMMON));
@@ -1099,12 +1099,13 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         }
         
       }
-      else // if == 6
+/*      else // if == 6
       {
 
       }
-      /*
-      if ((srd._analysis_data.nPel != 1) && (srd._analysis_data.nPel != 2)) // pel = 2 or pel = 4
+  */    
+//      if ((srd._analysis_data.nPel != 1) && (srd._analysis_data.nPel != 2)) // pel = 2 or pel = 4
+      if (optSearchOption == 6) // use onCPU SAD calculation
       {
         // copy to 'vectors' structure of plane 0 for sad calc only
         PlaneOfBlocks* pob = _vectorfields_aptr->GetPlane(0);
@@ -1121,58 +1122,60 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         }
 
 #endif
-        if (optSearchOption == 5)
-        {
-          if (srd._analysis_data.nPel == 2)
-          {
-            for (int h = 0; h < iNumBlocksY; ++h)
-            {
-              for (int w = 0; w < iNumBlocksX; ++w)
-              {
-                pVectors[0].x = pSrcMVs[w * 2] / 2; // for pel=2, qpel/2
-                pVectors[0].y = pSrcMVs[w * 2 + 1] / 2; // for pel=2, qpel/2 
 
-                pVectors++;
-              }
-              pSrcMVs += iRowPitch / 2; // pitch in bytes ?
-            }
-          }
-          else // nPel = 4
-          {
-            for (int h = 0; h < iNumBlocksY; ++h)
-            {
-              for (int w = 0; w < iNumBlocksX; ++w)
-              {
-                pVectors[0].x = pSrcMVs[w * 2]; // for pel=4, qpel
-                pVectors[0].y = pSrcMVs[w * 2 + 1]; // for pel=4, qpel 
-
-                pVectors++;
-              }
-              pSrcMVs += iRowPitch / 2; // pitch in bytes ?
-            }
-          }
-        }
-        else // if == 6
+        if (srd._analysis_data.nPel == 1)
         {
           for (int h = 0; h < iNumBlocksY; ++h)
           {
             for (int w = 0; w < iNumBlocksX; ++w)
             {
-              pVectors[0].x = pSrcMVs[w * 2] / 2; // for pel=1, divide qpel by 4
-              pVectors[0].y = pSrcMVs[w * 2 + 1] / 2; // for pel=1, divide qpel by 4
+              pVectors[0].x = pSrcMVs[w * 2] / 4; // for pel=1, qpel/4
+              pVectors[0].y = pSrcMVs[w * 2 + 1] / 4; // for pel=2, qpel/4 
 
               pVectors++;
             }
-            pSrcMVs += iRowPitch / 2; // pitch in bytes
+            pSrcMVs += iRowPitch / 2; // pitch in bytes ?
           }
         }
+
+        if (srd._analysis_data.nPel == 2)
+        {
+          for (int h = 0; h < iNumBlocksY; ++h)
+          {
+            for (int w = 0; w < iNumBlocksX; ++w)
+            {
+              pVectors[0].x = pSrcMVs[w * 2] / 2; // for pel=2, qpel/2
+              pVectors[0].y = pSrcMVs[w * 2 + 1] / 2; // for pel=2, qpel/2 
+
+              pVectors++;
+            }
+            pSrcMVs += iRowPitch / 2; // pitch in bytes ?
+          }
+        }
+
+        if (srd._analysis_data.nPel == 4) // nPel = 4
+        {
+          for (int h = 0; h < iNumBlocksY; ++h)
+          {
+            for (int w = 0; w < iNumBlocksX; ++w)
+            {
+              pVectors[0].x = pSrcMVs[w * 2]; // for pel=4, qpel
+              pVectors[0].y = pSrcMVs[w * 2 + 1]; // for pel=4, qpel 
+
+              pVectors++;
+            }
+            pSrcMVs += iRowPitch / 2; // pitch in bytes ?
+          }
+        }
+
       }
 
       spResolvedMotionVectorsReadBack->Unmap(0, NULL);
-      */
+      
 
 //      if ((srd._analysis_data.nPel == 1) || (srd._analysis_data.nPel == 2) ) // all pels now
-//      {
+      if (optSearchOption == 5 ) // use shader SAD calculation
+      {
         // calc SADs using loaded resources and D3D12 compute shader
         m_computeAllocator->Reset();
         m_computeCommandList->Reset(m_computeAllocator.Get(), m_computePSO.Get());
@@ -1291,8 +1294,8 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
         piDstSAD += 2; // SAD part
 
-        if (optSearchOption == 5)
-        {
+//        if (optSearchOption == 5)
+//        {
           for (int h = 0; h < iNumBlocksY; ++h)
           {
             for (int w = 0; w < iNumBlocksX; ++w)
@@ -1303,20 +1306,20 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
             }
             pSrcSADs += iSADRowPitch / 2; // pitch in bytes ?
           }
-        }
-        else // if == 6
-        {
+//        }
+//        else // if == 6
+//        {
 
-        }
+//        }
 
         // unmap finally
         spSADReadBack->Unmap(0, NULL);
-//      } // if pel ==1 or pel ==2
+      } // if optSearchOption == 5
  
     }
 #endif
 
-    if (((optSearchOption != 5) /*|| (srd._analysis_data.nPel != 1) || (srd._analysis_data.nPel != 2)*/) && (optSearchOption != 6) ) // do not call search from PlaneofBlocks if nPel=1 - all done with DX12
+    if (((optSearchOption != 5) /*|| (srd._analysis_data.nPel != 1) || (srd._analysis_data.nPel != 2)*/) /* && (optSearchOption != 6)*/ ) // optSearchOption=6 is now for onCPU SAD with DX12ME
     {
       _vectorfields_aptr->SearchMVs(
         pSrcGOF, pRefGOF,
@@ -1537,12 +1540,15 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     iHWNodeIndex = 1 << iAccNum; // is it correct ?? 0 = 1 adapter, mask=10b is 2nd adapter ???
   }
 
+  // optSearchOption == 6 is to calculate SAD in host CPU MAnalyse now
+  /*
   if (optSearchOption == 6)
   {
     nWidth /= 2; // nWidth must be divisible to 4 ?
     nHeight /= 2; // nHeight must be divisible to 4 ?
     iBlkSize /= 2; // BlkSize = 16 for MAnalyse, internally = 8 for half size search with qpel presicion
   }
+  */
 
 
 #if defined(_DEBUG)
@@ -2249,14 +2255,14 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     pCBsadCSparams->fKernelShift_11_1[3] = fKrn[7];
 
 
-    if (optSearchOption == 5)
+//    if (optSearchOption == 5)
     {
       pCBsadCSparams->precisionMVs = 2; // bitshift 2= /4
     }
-    else // ==6
-    {
-      pCBsadCSparams->precisionMVs = 1; // bitshift 1 = /2
-    }
+//    else // ==6
+//    {
+//      pCBsadCSparams->precisionMVs = 1; // bitshift 1 = /2
+//    }
 
     spSADCBResource->Unmap(0, nullptr);
   }
@@ -2331,10 +2337,10 @@ void MVAnalyse::LoadNV12(MVGroupOfFrames* pGOF, bool bChroma, int& iWidth, int& 
 
   // copy Y plane 8bit
   MVFrame* SrcFrame;
-  if (optSearchOption == 5)
+//  if (optSearchOption == 5)
     SrcFrame = pGOF->GetFrame(0); // use 0 - largest plane (original ?? or nPel enlarged ??)
-  else// (optSearchOption == 6)
-    SrcFrame = pGOF->GetFrame(1); // use 1 - half sized plane (original ?? or nPel enlarged ??)
+//  else// (optSearchOption == 6)
+//    SrcFrame = pGOF->GetFrame(1); // use 1 - half sized plane (original ?? or nPel enlarged ??)
 
   iWidth = SrcFrame->GetPlane(YPLANE)->GetWidth();
   iHeight = SrcFrame->GetPlane(YPLANE)->GetHeight();

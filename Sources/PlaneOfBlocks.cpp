@@ -359,6 +359,7 @@ void PlaneOfBlocks::SearchMVs(
   if (iUseSubShift > 0) // send blocksize to MVPlanes
   {
     pRefFrame->GetPlane(YPLANE)->SetBlockSize(nBlkSizeX, nBlkSizeY);
+
     if (chroma)
     {
       pRefFrame->GetPlane(UPLANE)->SetBlockSize(nBlkSizeX >> nLogxRatioUV, nBlkSizeY >> nLogxRatioUV);
@@ -4614,10 +4615,21 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
         int nHPaddingScaled = pSrcFrame->GetPlane(YPLANE)->GetHPadding() >> nLogScale;
         int nVPaddingScaled = pSrcFrame->GetPlane(YPLANE)->GetVPadding() >> nLogScale;
         /* computes search boundaries */
-        workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
-        workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
-        workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
-        workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
+        if (iUseSubShift == 0)
+        {
+          workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
+          workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
+          workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
+          workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
+        }
+        else
+        {
+          int iKS_sh_d2 = ((SHIFTKERNELSIZE / 2) + 2); // +2 is to prevent run out of buffer for UV planes
+          workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled - iKS_sh_d2);
+          workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled - iKS_sh_d2);
+          workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled - iKS_sh_d2);
+          workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled - iKS_sh_d2);
+        }
 
         /* search the mv */
         workarea.predictor = ClipMV(workarea, vectors[workarea.blkIdx]);
@@ -4630,14 +4642,36 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
           workarea.predictors[4] = ClipMV(workarea, zeroMV);
         }
 
-        if (optSearchOption == 5 || optSearchOption == 6) // only calc sad for x,y from DX12_ME
+//        if (optSearchOption == 5 || optSearchOption == 6) // only calc sad for x,y from DX12_ME
+        if (optSearchOption == 6) // only calc sad for x,y from DX12_ME, SO=5 is shader SAD now
         {
-          sad_t sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
-          sad_t saduv = (chroma) ? ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[1])
-            + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0;
+          sad_t sad = 0;
+          sad_t saduv = 0;
+
+          if (iUseSubShift == 0)
+          {
+            sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
+            saduv = (chroma) ? ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[1])
+              + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0;
+          }
+          else
+          {
+            if (chroma)
+            {
+              int iRefPitchU = 0;
+              int iRefPitchV = 0;
+              const unsigned char* ptrRefU = GetRefBlockUSubShifted(workarea, workarea.predictor.x, workarea.predictor.y, iRefPitchU);
+              const unsigned char* ptrRefV = GetRefBlockVSubShifted(workarea, workarea.predictor.x, workarea.predictor.y, iRefPitchV);
+              saduv = ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], ptrRefU, iRefPitchU)
+                + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], ptrRefV, iRefPitchV), effective_chromaSADscale, scaleCSADfine);
+            }
+            int iRefPitchY = 0;
+            const unsigned char* ptrRef = GetRefBlockSubShifted(workarea, workarea.predictor.x, workarea.predictor.y, iRefPitchY);
+            sad = SAD(workarea.pSrc[0], nSrcPitch[0], ptrRef, iRefPitchY); 
+          }
           workarea.bestMV = workarea.predictor; // clip outside - no need in MDegrain 
           workarea.bestMV.sad = sad + saduv;
-
+          
         }
         else 
         {
