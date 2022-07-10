@@ -83,7 +83,7 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
     _average_ptr = _isse ? Average2_sse2<uint8_t> : Average2<uint8_t>;
     _reduce_ptr = &RB2BilinearFiltered<uint8_t>;
 
-    _sub_shift_ptr = SubShiftBlock_Cs;// <uint8_t>;
+    _sub_shift_ptr = SubShiftBlock_Cs<uint8_t>;
   }
   else if (pixelsize == 2) {
     _bilin_hor_ptr = _isse ? HorizontalBilin_sse2<uint16_t> : HorizontalBilin<uint16_t>;
@@ -96,7 +96,7 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
     _average_ptr = _isse ? Average2_sse2<uint16_t> : Average2<uint16_t>;
     _reduce_ptr = &RB2BilinearFiltered<uint16_t>;
 
-    _sub_shift_ptr = SubShiftBlock_Cs;// <uint16_t>;
+    _sub_shift_ptr = SubShiftBlock_Cs<uint16_t>;
   }
   else {
     _bilin_hor_ptr = HorizontalBilin<float>;
@@ -109,7 +109,7 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
     _average_ptr = Average2<float>;
     _reduce_ptr = &RB2BilinearFiltered<float>;
 
-    _sub_shift_ptr = SubShiftBlock_Cs;// <float>;
+    _sub_shift_ptr = SubShiftBlock_Cs<float>;
   }
   // Nothing
 
@@ -675,11 +675,13 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch, bool 
       SubShiftBlock4x4_KS6_i16_uint8_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
     }
     else
-      _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+//   _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+     _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nBlkSizeX, SHIFTKERNELSIZE);
   }
   else
   {
-    _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+//    _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+    _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nBlkSizeX, SHIFTKERNELSIZE);
   }
 
   pDstPitch = nShiftedBufPitch;

@@ -2788,48 +2788,70 @@ void SubShiftBlock_C(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, 
   }
 }
 
-
+template<typename pixel_t>
 void SubShiftBlock_Cs(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, short* sKernelH, short* sKernelV, int nSrcPitch, int nDstPitch, int iKS)
 {
-  unsigned char CurrBlockShiftH[64 * (64 + 20)];// temp buf for H-shifted block, size of max block size + vertical margins about 10 ?
-  unsigned char* pSrc; // _pSrc - points to top left sample of block, need to add KS/2 borders
+//  unsigned char CurrBlockShiftH[64 * (64 + 20)];// temp buf for H-shifted block, size of max block size + vertical margins about 10 ?
+  float CurrBlockShiftH[64 * (64 + 20)];// temp buf for H-shifted block, size of max block size + vertical margins about 10 ?
+//  unsigned char* pSrc; // _pSrc - points to top left sample of block, need to add KS/2 borders
+  pixel_t* pctDst = reinterpret_cast<pixel_t*>(pDst);
+  const pixel_t* pSrc;
+
   const int iKS_d2 = iKS / 2;
+  float fOut;
 
   if (sKernelH != 0)
   {
-    pSrc = _pSrc - (iKS_d2 - 1) - ((iKS_d2 - 1) * nSrcPitch);
+    pSrc = reinterpret_cast<const pixel_t*>(_pSrc) - (iKS_d2 - 1) - ((iKS_d2 - 1) * nSrcPitch);
 
     for (int j = 0; j < (iBlockSizeY + iKS); j++)
     {
       for (int i = 0; i < iBlockSizeX; i++)
       {
-        short sOut = 0;
+//        short sOut = 0;
+        fOut = 0;
 
         for (int k = 0; k < iKS; k++)
         {
-          short sSample = (short)pSrc[j * nSrcPitch + i + k];
-          sOut += sSample * sKernelH[k];
+//          short sSample = (short)pSrc[j * nSrcPitch + i + k];
+//          fOut += sSample * sKernelH[k];
+          fOut += (float)pSrc[j * nSrcPitch + i + k] * (float)sKernelH[k];
         }
 
-        sOut += sKernelH[iKS]; // 16 for 0.25 and 0.75 and 32 for 0.5
-        sOut = sOut >> 6;
+//        sOut += sKernelH[iKS]; // 16 for 0.25 and 0.75 and 32 for 0.5
+//        sOut = sOut >> 6;
+        fOut += (float)sKernelH[iKS]; // 16 for 0.25 and 0.75 and 32 for 0.5
+        fOut = fOut / 64.0f;
 
-        if (sOut < 0) sOut = 0;
-        if (sOut > 255) sOut = 255;
+//        if (sOut < 0) sOut = 0;
+//        if (sOut > 255) sOut = 255;
+        if (sizeof(pixel_t) == 1)
+        {
+          if (fOut < 0.0f) fOut = 0.0f;
+          if (fOut > 255.0f) fOut = 255.0f;
+        }
 
-        CurrBlockShiftH[j * iBlockSizeX + i] = (unsigned char)sOut;
+        if (sizeof(pixel_t) == 2)
+        {
+          if (fOut < 0.0f) fOut = 0.0f;
+          if (fOut > 65535.0f) fOut = 65535.0f;
+        }
+
+//        CurrBlockShiftH[j * iBlockSizeX + i] = (unsigned char)sOut;
+        CurrBlockShiftH[j * iBlockSizeX + i] = fOut;
       }
     }
   }
   else // copy to CurrBlockShiftH temp buf
   {
-    pSrc = _pSrc - ((iKS_d2 - 1) * nSrcPitch);
+    pSrc = reinterpret_cast<const pixel_t*>(_pSrc) - ((iKS_d2 - 1) * nSrcPitch);
 
     for (int j = 0; j < (iBlockSizeY + iKS); j++)
     {
       for (int i = 0; i < iBlockSizeX; i++)
       {
-        CurrBlockShiftH[j * iBlockSizeX + i] = (unsigned char)pSrc[j * nSrcPitch + i];
+//        CurrBlockShiftH[j * iBlockSizeX + i] = (unsigned char)pSrc[j * nSrcPitch + i];
+        CurrBlockShiftH[j * iBlockSizeX + i] = (float)pSrc[j * nSrcPitch + i];
       }
     }
   }
@@ -2841,21 +2863,39 @@ void SubShiftBlock_Cs(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX
     {
       for (int j = 0; j < iBlockSizeY; j++)
       {
-        short sOut = 0;
+//        short sOut = 0;
+        fOut = 0;
 
         for (int k = 0; k < iKS; k++)
         {
-          short sSample = CurrBlockShiftH[(j + k) * iBlockSizeX + i];
-          sOut += sSample * sKernelV[k];
+//          short sSample = CurrBlockShiftH[(j + k) * iBlockSizeX + i];
+//          sOut += sSample * sKernelV[k];
+          fOut += CurrBlockShiftH[(j + k) * iBlockSizeX + i] * (float)sKernelV[k];
         }
 
-        sOut += sKernelV[iKS];
-        sOut = sOut >> 6;
+//        sOut += sKernelV[iKS];
+//        sOut = sOut >> 6;
+        fOut += (float)sKernelV[iKS];
+        fOut = fOut / 64.0f;
 
-        if (sOut < 0) sOut = 0;
-        if (sOut > 255) sOut = 255;
+//        if (sOut < 0) sOut = 0;
+//        if (sOut > 255) sOut = 255;
+        if (sizeof(pixel_t) == 1)
+        {
+          if (fOut < 0.0f) fOut = 0.0f;
+          if (fOut > 255.0f) fOut = 255.0f;
+        }
 
-        pDst[j * iBlockSizeX + i] = (unsigned char)(sOut);
+        if (sizeof(pixel_t) == 2)
+        {
+          if (fOut < 0.0f) fOut = 0.0f;
+          if (fOut > 65535.0f) fOut = 65535.0f;
+        }
+
+//        pDst[j * iBlockSizeX + i] = (unsigned char)(sOut);
+        if (sizeof(pixel_t) < 4) fOut += 0.5f;
+        pctDst[j * nDstPitch + i] = (pixel_t)(fOut);
+
       }
     }
   }
@@ -2865,8 +2905,12 @@ void SubShiftBlock_Cs(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX
     {
       for (int j = 0; j < iBlockSizeY; j++)
       {
-        unsigned char ucOut = CurrBlockShiftH[(j + (iKS_d2 - 1)) * iBlockSizeX + i];
-        pDst[j * iBlockSizeX + i] = ucOut;
+//        unsigned char ucOut = CurrBlockShiftH[(j + (iKS_d2 - 1)) * iBlockSizeX + i];
+//        pDst[j * iBlockSizeX + i] = ucOut;
+        fOut = CurrBlockShiftH[(j + (iKS_d2 - 1)) * iBlockSizeX + i];
+        if (sizeof(pixel_t) < 4) fOut += 0.5f;
+        pctDst[j * nDstPitch + i] = (pixel_t)fOut;
+
       }
     }
   }
@@ -3394,10 +3438,10 @@ void SubShiftBlock4x4_KS6_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* _p
       // store and return
       unsigned char* pucDst = _pDst;
 
-      _mm_storeu_si64(pucDst, _mm_packus_epi16(_mm256_castsi256_si128(ymm_outH_row0), xmm_zero)); // starting from row0
-      _mm_storeu_si64(pucDst + 1 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(ymm_outH_row1), xmm_zero));
-      _mm_storeu_si64(pucDst + 2 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(ymm_outH_row2), xmm_zero));
-      _mm_storeu_si64(pucDst + 3 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(ymm_outH_row3), xmm_zero));
+      _mm_storeu_si32(pucDst, _mm_packus_epi16(_mm256_castsi256_si128(ymm_outH_row0), xmm_zero)); // starting from row0
+      _mm_storeu_si32(pucDst + 1 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(ymm_outH_row1), xmm_zero));
+      _mm_storeu_si32(pucDst + 2 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(ymm_outH_row2), xmm_zero));
+      _mm_storeu_si32(pucDst + 3 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(ymm_outH_row3), xmm_zero));
 
       return;
   }
@@ -3457,10 +3501,10 @@ void SubShiftBlock4x4_KS6_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* _p
     // store and return
     unsigned char* pucDst = _pDst;
 
-    _mm_storeu_si64(pucDst, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row0), xmm_zero));
-    _mm_storeu_si64(pucDst + 1 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row1), xmm_zero));
-    _mm_storeu_si64(pucDst + 2 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row2), xmm_zero));
-    _mm_storeu_si64(pucDst + 3 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row3), xmm_zero));
+    _mm_storeu_si32(pucDst, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row0), xmm_zero));
+    _mm_storeu_si32(pucDst + 1 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row1), xmm_zero));
+    _mm_storeu_si32(pucDst + 2 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row2), xmm_zero));
+    _mm_storeu_si32(pucDst + 3 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row3), xmm_zero));
 
     return;
   }
@@ -3620,10 +3664,10 @@ void SubShiftBlock4x4_KS6_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* _p
     // store and return
     unsigned char* pucDst = _pDst;
 
-    _mm_storeu_si64(pucDst, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row0), xmm_zero));
-    _mm_storeu_si64(pucDst + 1 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row1), xmm_zero));
-    _mm_storeu_si64(pucDst + 2 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row2), xmm_zero));
-    _mm_storeu_si64(pucDst + 3 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row3), xmm_zero));
+    _mm_storeu_si32(pucDst, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row0), xmm_zero));
+    _mm_storeu_si32(pucDst + 1 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row1), xmm_zero));
+    _mm_storeu_si32(pucDst + 2 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row2), xmm_zero));
+    _mm_storeu_si32(pucDst + 3 * nDstPitch, _mm_packus_epi16(_mm256_castsi256_si128(outHV_row3), xmm_zero));
 
     return;
 
@@ -3726,8 +3770,11 @@ template void Average2<float>(unsigned char *pDst, const unsigned char *pSrc1, c
 template void Average2_sse2<uint8_t>(unsigned char *pDst, const unsigned char *pSrc1, const unsigned char *pSrc2, int nPitch, int nWidth, int nHeight);
 template void Average2_sse2<uint16_t>(unsigned char *pDst, const unsigned char *pSrc1, const unsigned char *pSrc2, int nPitch, int nWidth, int nHeight);
 
-template void SubShiftBlock_C<uint8_t>(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
-template void SubShiftBlock_C<uint16_t>(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
-template void SubShiftBlock_C<float>(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
+//template void SubShiftBlock_C<uint8_t>(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
+//template void SubShiftBlock_C<uint16_t>(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
+//template void SubShiftBlock_C<float>(unsigned char* pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, float* fKernelH, float* fKernelV, int nSrcPitch, int nDstPitch, int iKS);
 
+template void SubShiftBlock_Cs<uint8_t>(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, short* sKernelH, short* sKernelV, int nSrcPitch, int nDstPitch, int iKS);
+template void SubShiftBlock_Cs<uint16_t>(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, short* sKernelH, short* sKernelV, int nSrcPitch, int nDstPitch, int iKS);
+template void SubShiftBlock_Cs<float>(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX, int iBlockSizeY, short* sKernelH, short* sKernelV, int nSrcPitch, int nDstPitch, int iKS);
 
