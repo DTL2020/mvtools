@@ -674,6 +674,10 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch, bool 
     {
       SubShiftBlock4x4_KS6_i16_uint8_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
     }
+    else if (nBlkSizeX == 16 && nBlkSizeY == 16 && pixelsize == 1)
+    {
+      SubShiftBlock16x16_KS6_i16_uint8_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+    }
     else
 //   _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
      _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nBlkSizeX, SHIFTKERNELSIZE);

@@ -2916,6 +2916,243 @@ void SubShiftBlock_Cs(unsigned char* _pSrc, unsigned char* pDst, int iBlockSizeX
   }
 }
 
+#define SubShift3rows16 \
+y_row0l = _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)pSrc)); \
+y_row0r = _mm256_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)(pSrc + 16))); \
+y_row1l = _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)(pSrc + nSrcPitch * 1))); \
+y_row1r = _mm256_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)(pSrc + nSrcPitch * 1 + 16))); \
+y_row2l = _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)(pSrc + nSrcPitch * 2))); \
+y_row2r = _mm256_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)(pSrc + nSrcPitch * 2 + 16))); \
+\
+ymm_Krn = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)sKernelH)); \
+\
+y_outH_row0l = _mm256_mullo_epi16(y_row0l, ymm_Krn);\
+y_outH_row1l = _mm256_mullo_epi16(y_row1l, ymm_Krn);\
+y_outH_row2l = _mm256_mullo_epi16(y_row2l, ymm_Krn);\
+\
+for (int x = 1; x < 6; x++) \
+{ \
+  y_row0l = _mm256_alignr_epi8(_mm256_permute2x128_si256(y_row0l, y_row0l, 1), y_row0l, 2); \
+  y_row0r = _mm256_alignr_epi8(y_row0r, y_row0r, 2); \
+  y_row0l = _mm256_blendv_epi8(y_row0l, _mm256_permute2x128_si256(y_row0r, y_row0r, 1), y_blend_mask); \
+    \
+  y_row1l = _mm256_alignr_epi8(_mm256_permute2x128_si256(y_row1l, y_row1l, 1), y_row1l, 2); \
+  y_row1r = _mm256_alignr_epi8(y_row1r, y_row1r, 2); \
+  y_row1l = _mm256_blendv_epi8(y_row1l, _mm256_permute2x128_si256(y_row1r, y_row1r, 1), y_blend_mask); \
+\
+  y_row2l = _mm256_alignr_epi8(_mm256_permute2x128_si256(y_row2l, y_row2l, 1), y_row2l, 2); \
+  y_row2r = _mm256_alignr_epi8(y_row2r, y_row2r, 2); \
+  y_row2l = _mm256_blendv_epi8(y_row2l, _mm256_permute2x128_si256(y_row2r, y_row2r, 1), y_blend_mask); \
+\
+  ymm_Krn = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelH + x))); \
+\
+  y_outH_row0l = _mm256_adds_epi16(y_outH_row0l, _mm256_mullo_epi16(y_row0l, ymm_Krn)); \
+  y_outH_row1l = _mm256_adds_epi16(y_outH_row1l, _mm256_mullo_epi16(y_row1l, ymm_Krn)); \
+  y_outH_row2l = _mm256_adds_epi16(y_outH_row2l, _mm256_mullo_epi16(y_row2l, ymm_Krn)); \
+} \
+\
+ymm_Krn = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelH + 6))); \
+\
+y_outH_row0l = _mm256_adds_epi16(y_outH_row0l, ymm_Krn); \
+y_outH_row1l = _mm256_adds_epi16(y_outH_row1l, ymm_Krn); \
+y_outH_row2l = _mm256_adds_epi16(y_outH_row2l, ymm_Krn); \
+\
+y_outH_row0l = _mm256_srli_epi16(y_outH_row0l, 6); \
+y_outH_row1l = _mm256_srli_epi16(y_outH_row1l, 6); \
+y_outH_row2l = _mm256_srli_epi16(y_outH_row2l, 6);
+
+void SubShiftBlock16x16_KS6_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* _pDst, const int iBlockSizeX, const int iBlockSizeY, short* sKernelH, short* sKernelV, const int nSrcPitch, const int nDstPitch, const int iKS)
+{
+  unsigned char* pSrc;
+  // 16x16 -> 21x21 for H and V shift
+  // 2ymms to store H-shift 1 row 32+10bytes, 21 shortsx16bit
+  __m256i y_row0l, y_row0r, y_row1l, y_row1r, y_row2l, y_row2r;
+  __m256i y_outH_row0l, y_outH_row1l, y_outH_row2l;
+  __m256i ymm_Krn;
+  __m256i y_blend_mask = _mm256_set_epi8(0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+  __m256i y_outH_row00, y_outH_row01, y_outH_row02, y_outH_row03, y_outH_row04, y_outH_row05, y_outH_row06, y_outH_row07, \
+    y_outH_row08, y_outH_row09, y_outH_row10, y_outH_row11, y_outH_row12, y_outH_row13, y_outH_row14, y_outH_row15, \
+    y_outH_row16, y_outH_row17, y_outH_row18, y_outH_row19, y_outH_row20;
+
+  __m256i y_zero = _mm256_setzero_si256();
+
+  if ((sKernelH != 0) && (sKernelV == 0))  // H subshift
+  {
+    pSrc = _pSrc - (2); // 3-1
+
+    // total rows 16, total columns = 21 
+    // 6 groups of 3 rows (?)
+    // group 1 of 7 of 3 rows
+    SubShift3rows16
+    y_outH_row00 = y_outH_row0l;
+    y_outH_row01 = y_outH_row1l;
+    y_outH_row02 = y_outH_row2l;
+
+    // group 2 of 7 of 3 rows
+    pSrc = pSrc + (nSrcPitch * 3); // in bytes
+    SubShift3rows16
+    y_outH_row03 = y_outH_row0l;
+    y_outH_row04 = y_outH_row1l;
+    y_outH_row05 = y_outH_row2l;
+
+    // group 3 of 7 of 3 rows
+    pSrc = pSrc + (nSrcPitch * 3); // in bytes
+    SubShift3rows16
+    y_outH_row06 = y_outH_row0l;
+    y_outH_row07 = y_outH_row1l;
+    y_outH_row08 = y_outH_row2l;
+
+    // group 4 of 7 of 3 rows
+    pSrc = pSrc + (nSrcPitch * 3); // in bytes
+    SubShift3rows16
+    y_outH_row09 = y_outH_row0l;
+    y_outH_row10 = y_outH_row1l;
+    y_outH_row11 = y_outH_row2l;
+
+    // group 5 of 7 of 3 rows
+    pSrc = pSrc + (nSrcPitch * 3); // in bytes
+    SubShift3rows16
+    y_outH_row12 = y_outH_row0l;
+    y_outH_row13 = y_outH_row1l;
+    y_outH_row14 = y_outH_row2l;
+
+    // group 6 of 7 of 3 rows
+    pSrc = pSrc + (nSrcPitch * 3); // in bytes
+    SubShift3rows16
+    y_outH_row15 = y_outH_row0l;
+
+    // store and return
+    unsigned char* pucDst = _pDst;
+
+    _mm_storeu_si128((__m128i*)pucDst, _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row00, y_zero), 216))); // starting from row0
+    _mm_storeu_si128((__m128i*)(pucDst + 1 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row01, y_zero), 216)));
+    _mm_storeu_si128((__m128i*)(pucDst + 2 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row02, y_zero), 216)));
+    _mm_storeu_si128((__m128i*)(pucDst + 3 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row03, y_zero), 216)));
+    _mm_storeu_si128((__m128i*)(pucDst + 4 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row04, y_zero), 216)));
+    _mm_storeu_si128((__m128i*)(pucDst + 5 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row05, y_zero), 216)));
+    _mm_storeu_si128((__m128i*)(pucDst + 6 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row06, y_zero), 216)));
+    _mm_storeu_si128((__m128i*)(pucDst + 7 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row07, y_zero), 216)));
+    _mm_storeu_si128((__m128i*)(pucDst + 8 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row08, y_zero), 216)));
+    _mm_storeu_si128((__m128i*)(pucDst + 9 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row09, y_zero), 216)));
+    _mm_storeu_si128((__m128i*)(pucDst + 10 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row10, y_zero), 216)));
+    _mm_storeu_si128((__m128i*)(pucDst + 11 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row11, y_zero), 216)));
+    _mm_storeu_si128((__m128i*)(pucDst + 12 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row12, y_zero), 216)));
+    _mm_storeu_si128((__m128i*)(pucDst + 13 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row13, y_zero), 216)));
+    _mm_storeu_si128((__m128i*)(pucDst + 14 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row14, y_zero), 216)));
+    _mm_storeu_si128((__m128i*)(pucDst + 15 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row15, y_zero), 216)));
+
+
+    return;
+
+  }
+
+
+  if ((sKernelH != 0) && (sKernelV != 0))  // H and V subshift
+  {
+    pSrc = _pSrc - (2) - ((2) * nSrcPitch); // 3-1
+
+    // total rows 2+16+3=21, total columns = 21 too
+    // 7 groups of 3 rows (?)
+    // group 1 of 7 of 3 rows
+/*    {
+      y_row0l = _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)pSrc));
+      y_row0r = _mm256_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)(pSrc+16)));
+      y_row1l = _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)(pSrc + nSrcPitch * 1)));
+      y_row1r = _mm256_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)(pSrc + nSrcPitch * 1 + 16)));
+      y_row2l = _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)(pSrc + nSrcPitch * 2)));
+      y_row2r = _mm256_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)(pSrc + nSrcPitch * 2 + 16)));
+
+      ymm_Krn = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)sKernelH));
+
+      y_outH_row0l = _mm256_mullo_epi16(y_row0l, ymm_Krn);
+      y_outH_row1l = _mm256_mullo_epi16(y_row1l, ymm_Krn);
+      y_outH_row2l = _mm256_mullo_epi16(y_row2l, ymm_Krn);
+
+      for (int x = 1; x < 6; x++)
+      {
+        // shift 1 unsigned short sample between 2 ymms of l and r
+        y_row0l = _mm256_alignr_epi8(_mm256_permute2x128_si256(y_row0l, y_row0l, 1), y_row0l, 2);
+        y_row0r = _mm256_alignr_epi8(y_row0r, y_row0r, 2);
+        y_row0l = _mm256_blendv_epi8(y_row0l, _mm256_permute2x128_si256(y_row0r, y_row0r, 1), y_blend_mask);
+
+        y_row1l = _mm256_alignr_epi8(_mm256_permute2x128_si256(y_row1l, y_row1l, 1), y_row1l, 2);
+        y_row1r = _mm256_alignr_epi8(y_row1r, y_row1r, 2);
+        y_row1l = _mm256_blendv_epi8(y_row1l, _mm256_permute2x128_si256(y_row1r, y_row1r, 1), y_blend_mask);
+
+        y_row2l = _mm256_alignr_epi8(_mm256_permute2x128_si256(y_row2l, y_row2l, 1), y_row2l, 2);
+        y_row2r = _mm256_alignr_epi8(y_row2r, y_row2r, 2);
+        y_row2l = _mm256_blendv_epi8(y_row2l, _mm256_permute2x128_si256(y_row2r, y_row2r, 1), y_blend_mask);
+
+        ymm_Krn = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelH + x)));
+
+        y_outH_row0l = _mm256_adds_epi16(y_outH_row0l, _mm256_mullo_epi16(y_row0l, ymm_Krn));
+        y_outH_row1l = _mm256_adds_epi16(y_outH_row1l, _mm256_mullo_epi16(y_row1l, ymm_Krn));
+        y_outH_row2l = _mm256_adds_epi16(y_outH_row2l, _mm256_mullo_epi16(y_row2l, ymm_Krn));
+      }
+
+      // add last kernel sample
+      ymm_Krn = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelH + 6)));
+
+      y_outH_row0l = _mm256_adds_epi16(y_outH_row0l, ymm_Krn);
+      y_outH_row1l = _mm256_adds_epi16(y_outH_row1l, ymm_Krn);
+      y_outH_row2l = _mm256_adds_epi16(y_outH_row2l, ymm_Krn);
+
+      y_outH_row0l = _mm256_srli_epi16(y_outH_row0l, 6); // div 64
+      y_outH_row1l = _mm256_srli_epi16(y_outH_row1l, 6);
+      y_outH_row2l = _mm256_srli_epi16(y_outH_row2l, 6);
+    }*/
+    SubShift3rows16
+    y_outH_row00 = y_outH_row0l;
+    y_outH_row01 = y_outH_row1l;
+    y_outH_row02 = y_outH_row2l;
+
+    // group 2 of 7 of 3 rows
+    pSrc = pSrc + (nSrcPitch * 3); // in bytes
+    SubShift3rows16
+    y_outH_row03 = y_outH_row0l;
+    y_outH_row04 = y_outH_row1l;
+    y_outH_row05 = y_outH_row2l;
+
+    // group 3 of 7 of 3 rows
+    pSrc = pSrc + (nSrcPitch * 3); // in bytes
+    SubShift3rows16
+    y_outH_row06 = y_outH_row0l;
+    y_outH_row07 = y_outH_row1l;
+    y_outH_row08 = y_outH_row2l;
+
+    // group 4 of 7 of 3 rows
+    pSrc = pSrc + (nSrcPitch * 3); // in bytes
+    SubShift3rows16
+    y_outH_row09 = y_outH_row0l;
+    y_outH_row10 = y_outH_row1l;
+    y_outH_row11 = y_outH_row2l;
+
+    // group 5 of 7 of 3 rows
+    pSrc = pSrc + (nSrcPitch * 3); // in bytes
+    SubShift3rows16
+    y_outH_row12 = y_outH_row0l;
+    y_outH_row13 = y_outH_row1l;
+    y_outH_row14 = y_outH_row2l;
+
+    // group 6 of 7 of 3 rows
+    pSrc = pSrc + (nSrcPitch * 3); // in bytes
+    SubShift3rows16
+    y_outH_row15 = y_outH_row0l;
+    y_outH_row16 = y_outH_row1l;
+    y_outH_row17 = y_outH_row2l;
+
+    // group 7 of 7 of 3 rows
+    pSrc = pSrc + (nSrcPitch * 3); // in bytes
+    SubShift3rows16
+    y_outH_row18 = y_outH_row0l;
+    y_outH_row19 = y_outH_row1l;
+    y_outH_row20 = y_outH_row2l;
+
+
+  }
+}
+
 void SubShiftBlock8x8_KS6_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* _pDst, const int iBlockSizeX, const int iBlockSizeY, short* sKernelH, short* sKernelV, const int nSrcPitch, const int nDstPitch, const int iKS)
 {
   unsigned char* pSrc;
@@ -3143,7 +3380,7 @@ void SubShiftBlock8x8_KS6_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* _p
   }
 
 
-  if ((sKernelH != 0) && (sKernelH != 0))  // H and V subshift
+  if ((sKernelH != 0) && (sKernelV != 0))  // H and V subshift
   {
     pSrc = _pSrc - (2) - ((2) * nSrcPitch); // 3-1
 
