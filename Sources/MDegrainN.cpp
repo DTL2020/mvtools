@@ -2974,7 +2974,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
 //       p = plane_ptr->GetPointerSubShift(blx, bly, np);
        p = p_plane->GetPointerSubShift(blx, bly, np);
 
-       const BYTE* pold = plane_ptr->GetPointer(blx, bly);
+/*       const BYTE* pold = plane_ptr->GetPointer(blx, bly);
        int np_old = plane_ptr->GetPitch();
 
        int or0 = pold[0];
@@ -3000,7 +3000,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
            }
          }
        }
-       
+  */     
      }
      else
      {
