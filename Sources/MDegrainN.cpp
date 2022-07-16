@@ -1438,11 +1438,8 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
   //-------------------------------------------------------------------------
   // CHROMA planes
 
-if ((nOverlapX != 0) || (nOverlapY != 0)) // if overlap processing of single plane going here
-  {
-    process_chroma <1>(UPLANE & _nsupermodeyuv);
-    process_chroma <2>(VPLANE & _nsupermodeyuv);
-  }
+  process_chroma <1>(UPLANE & _nsupermodeyuv);
+  process_chroma <2>(VPLANE & _nsupermodeyuv);
 
   //-------------------------------------------------------------------------
 

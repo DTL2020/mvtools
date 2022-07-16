@@ -2975,6 +2975,10 @@ void SubShiftBlock16x16_KS6_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* 
     y_outH_row08, y_outH_row09, y_outH_row10, y_outH_row11, y_outH_row12, y_outH_row13, y_outH_row14, y_outH_row15, \
     y_outH_row16, y_outH_row17, y_outH_row18, y_outH_row19, y_outH_row20;
 
+  __m256i y_row00, y_row01, y_row02, y_row03, y_row04, y_row05, y_row06;
+  __m256i y_Krn0, y_Krn1, y_Krn2, y_Krn3, y_Krn4, y_Krn5, y_Krn6;
+  __m256i y_outV;
+
   __m256i y_zero = _mm256_setzero_si256();
 
   if ((sKernelH != 0) && (sKernelV == 0))  // H subshift
@@ -3042,15 +3046,60 @@ void SubShiftBlock16x16_KS6_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* 
     _mm_storeu_si128((__m128i*)(pucDst + 14 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row14, y_zero), 216)));
     _mm_storeu_si128((__m128i*)(pucDst + 15 * nDstPitch), _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outH_row15, y_zero), 216)));
 
-
     return;
-
   }
 
+  if ((sKernelH == 0) && (sKernelV != 0)) // V-only subshift
+  {
+    // load 21 rows for V shift only
+    pSrc = _pSrc - ((2) * nSrcPitch); // 3-1
+    unsigned char* pucDst = _pDst;
+
+    y_Krn0 = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelV + 0)));
+    y_Krn1 = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelV + 1)));
+    y_Krn2 = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelV + 2)));
+    y_Krn3 = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelV + 3)));
+    y_Krn4 = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelV + 4)));
+    y_Krn5 = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelV + 5)));
+    y_Krn6 = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelV + 6)));
+
+    // single out row at a cycle pass
+
+    for (int y = 0; y < 16; y++) // out rows cnt, may be unroll aggressive will help compiler to understand V-shift of rows ?
+    {
+      y_row00 = _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)pSrc));
+      y_row01 = _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)(pSrc + nSrcPitch * 1)));
+      y_row02 = _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)(pSrc + nSrcPitch * 2)));
+      y_row03 = _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)(pSrc + nSrcPitch * 3)));
+      y_row04 = _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)(pSrc + nSrcPitch * 4)));
+      y_row05 = _mm256_cvtepu8_epi16(_mm_lddqu_si128((const __m128i*)(pSrc + nSrcPitch * 5)));
+
+      y_outV = _mm256_setzero_si256();
+
+      y_outV = _mm256_adds_epi16(y_outV, _mm256_mullo_epi16(y_row00, y_Krn0));
+      y_outV = _mm256_adds_epi16(y_outV, _mm256_mullo_epi16(y_row01, y_Krn1));
+      y_outV = _mm256_adds_epi16(y_outV, _mm256_mullo_epi16(y_row02, y_Krn2));
+      y_outV = _mm256_adds_epi16(y_outV, _mm256_mullo_epi16(y_row03, y_Krn3));
+      y_outV = _mm256_adds_epi16(y_outV, _mm256_mullo_epi16(y_row04, y_Krn4));
+      y_outV = _mm256_adds_epi16(y_outV, _mm256_mullo_epi16(y_row05, y_Krn5));
+      y_outV = _mm256_adds_epi16(y_outV, _mm256_mullo_epi16(y_row02, y_Krn2));
+      y_outV = _mm256_adds_epi16(y_outV, y_Krn6);
+
+      y_outV = _mm256_srli_epi16(y_outV, 6);
+
+      _mm_storeu_si128((__m128i*)pucDst, _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outV, y_zero), 216)));
+      pSrc += nSrcPitch;
+      pucDst += nDstPitch;
+    }
+
+    return;
+  }
 
   if ((sKernelH != 0) && (sKernelV != 0))  // H and V subshift
   {
     pSrc = _pSrc - (2) - ((2) * nSrcPitch); // 3-1
+
+    __m256i rows_tmp[21];
 
     // total rows 2+16+3=21, total columns = 21 too
     // 7 groups of 3 rows (?)
@@ -3103,52 +3152,92 @@ void SubShiftBlock16x16_KS6_i16_uint8_avx2(unsigned char* _pSrc, unsigned char* 
       y_outH_row2l = _mm256_srli_epi16(y_outH_row2l, 6);
     }*/
     SubShift3rows16
-    y_outH_row00 = y_outH_row0l;
-    y_outH_row01 = y_outH_row1l;
-    y_outH_row02 = y_outH_row2l;
+    rows_tmp[0] = y_outH_row0l;
+    rows_tmp[1] = y_outH_row1l;
+    rows_tmp[2] = y_outH_row2l;
 
     // group 2 of 7 of 3 rows
     pSrc = pSrc + (nSrcPitch * 3); // in bytes
     SubShift3rows16
-    y_outH_row03 = y_outH_row0l;
-    y_outH_row04 = y_outH_row1l;
-    y_outH_row05 = y_outH_row2l;
+    rows_tmp[3] = y_outH_row0l;
+    rows_tmp[4] = y_outH_row1l;
+    rows_tmp[5] = y_outH_row2l;
 
     // group 3 of 7 of 3 rows
     pSrc = pSrc + (nSrcPitch * 3); // in bytes
     SubShift3rows16
-    y_outH_row06 = y_outH_row0l;
-    y_outH_row07 = y_outH_row1l;
-    y_outH_row08 = y_outH_row2l;
+    rows_tmp[6] = y_outH_row0l;
+    rows_tmp[7] = y_outH_row1l;
+    rows_tmp[8] = y_outH_row2l;
 
     // group 4 of 7 of 3 rows
     pSrc = pSrc + (nSrcPitch * 3); // in bytes
     SubShift3rows16
-    y_outH_row09 = y_outH_row0l;
-    y_outH_row10 = y_outH_row1l;
-    y_outH_row11 = y_outH_row2l;
+    rows_tmp[9] = y_outH_row0l;
+    rows_tmp[10] = y_outH_row1l;
+    rows_tmp[11] = y_outH_row2l;
 
     // group 5 of 7 of 3 rows
     pSrc = pSrc + (nSrcPitch * 3); // in bytes
     SubShift3rows16
-    y_outH_row12 = y_outH_row0l;
-    y_outH_row13 = y_outH_row1l;
-    y_outH_row14 = y_outH_row2l;
+    rows_tmp[12] = y_outH_row0l;
+    rows_tmp[13] = y_outH_row1l;
+    rows_tmp[14] = y_outH_row2l;
 
     // group 6 of 7 of 3 rows
     pSrc = pSrc + (nSrcPitch * 3); // in bytes
     SubShift3rows16
-    y_outH_row15 = y_outH_row0l;
-    y_outH_row16 = y_outH_row1l;
-    y_outH_row17 = y_outH_row2l;
+    rows_tmp[15] = y_outH_row0l;
+    rows_tmp[16] = y_outH_row1l;
+    rows_tmp[17] = y_outH_row2l;
 
     // group 7 of 7 of 3 rows
     pSrc = pSrc + (nSrcPitch * 3); // in bytes
     SubShift3rows16
-    y_outH_row18 = y_outH_row0l;
-    y_outH_row19 = y_outH_row1l;
-    y_outH_row20 = y_outH_row2l;
+    rows_tmp[18] = y_outH_row0l;
+    rows_tmp[19] = y_outH_row1l;
+    rows_tmp[20] = y_outH_row2l;
 
+    // V subshift next
+    unsigned char* pucDst = _pDst;
+
+    y_Krn0 = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelV + 0)));
+    y_Krn1 = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelV + 1)));
+    y_Krn2 = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelV + 2)));
+    y_Krn3 = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelV + 3)));
+    y_Krn4 = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelV + 4)));
+    y_Krn5 = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelV + 5)));
+    y_Krn6 = _mm256_broadcastw_epi16(_mm_loadu_si128((const __m128i*)(sKernelV + 6)));
+
+    // single out row at a cycle pass
+
+    for (int y = 0; y < 16; y++) // out rows cnt, may be unroll aggressive will help compiler to understand V-shift of rows ?
+    {
+      y_row00 = rows_tmp[y];
+      y_row01 = rows_tmp[y + 1];
+      y_row02 = rows_tmp[y + 2];
+      y_row03 = rows_tmp[y + 3];
+      y_row04 = rows_tmp[y + 4];
+      y_row05 = rows_tmp[y + 5];
+
+      y_outV = _mm256_setzero_si256();
+
+      y_outV = _mm256_adds_epi16(y_outV, _mm256_mullo_epi16(y_row00, y_Krn0));
+      y_outV = _mm256_adds_epi16(y_outV, _mm256_mullo_epi16(y_row01, y_Krn1));
+      y_outV = _mm256_adds_epi16(y_outV, _mm256_mullo_epi16(y_row02, y_Krn2));
+      y_outV = _mm256_adds_epi16(y_outV, _mm256_mullo_epi16(y_row03, y_Krn3));
+      y_outV = _mm256_adds_epi16(y_outV, _mm256_mullo_epi16(y_row04, y_Krn4));
+      y_outV = _mm256_adds_epi16(y_outV, _mm256_mullo_epi16(y_row05, y_Krn5));
+      y_outV = _mm256_adds_epi16(y_outV, _mm256_mullo_epi16(y_row02, y_Krn2));
+      y_outV = _mm256_adds_epi16(y_outV, y_Krn6);
+
+      y_outV = _mm256_srli_epi16(y_outV, 6);
+
+      _mm_storeu_si128((__m128i*)pucDst, _mm256_castsi256_si128(_mm256_permute4x64_epi64(_mm256_packus_epi16(y_outV, y_zero), 216)));
+      pucDst += nDstPitch;
+    }
+
+    return;
 
   }
 }

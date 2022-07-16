@@ -130,7 +130,7 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
 
 //  _sub_shift_ptr = SubShiftBlock_C<uint8_t>;
 #ifdef _WIN32
- // to prevent cache set overloading when accessing fpob MVs arrays - add random L2L3_CACHE_LINE_SIZE-bytes sized offset to different allocations
+ // to prevent cache set overloading when accessing cached subshifted blocks - add random L2L3_CACHE_LINE_SIZE-bytes sized offset to different allocations
   size_t random = rand();
   random *= RAND_OFFSET_MAX;
   random /= RAND_MAX;
@@ -139,6 +139,8 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
   SIZE_T stSizeToAlloc = (pixelsize * (64*64))+ RAND_OFFSET_MAX * L2L3_CACHE_LINE_SIZE; // 64x64 - max block size ??
 
   pShiftedBlockBuf_a = (uint8_t*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+  // Allocated with 4096 bytes granularity, most of these bytes is never used for host bus transfer
+  // and only point is to have enough address range to hit different cache sets to prevent cache set overload with large enough tr-value
   pShiftedBlockBuf = (uint8_t*)(pShiftedBlockBuf_a + random);
 #else
   pShiftedBlockBuf = new uint8_t[pixelsize * (64 * 64)]; // allocate in heap ?
