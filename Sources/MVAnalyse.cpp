@@ -978,8 +978,8 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
       // Get the copy target location
       D3D12_PLACED_SUBRESOURCE_FOOTPRINT bufferFootprint = {};
-      bufferFootprint.Footprint.Width = iNumBlocksX; // num blocks W 
-      bufferFootprint.Footprint.Height = iNumBlocksY; // num Blocks H
+      bufferFootprint.Footprint.Width = Align(srd._analysis_data.nWidth, srd._analysis_data.GetBlkSizeX()) / srd._analysis_data.GetBlkSizeX(); // num blocks W 
+      bufferFootprint.Footprint.Height = Align(srd._analysis_data.nHeight, srd._analysis_data.GetBlkSizeY()) / srd._analysis_data.GetBlkSizeY(); // num Blocks H
       bufferFootprint.Footprint.Depth = 1;
       bufferFootprint.Footprint.RowPitch = iRowPitch; // 16+16 * num blocks W and multiply of 256 ?
       bufferFootprint.Footprint.Format = DXGI_FORMAT_R16G16_SINT;
@@ -1219,7 +1219,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
         // Get the copy target location
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT bufferSADFootprint = {};
-        bufferSADFootprint.Footprint.Width = iNumBlocksX; // num blocks W 
+        bufferSADFootprint.Footprint.Width = iNumBlocksX; // num blocks W ?? do it OK ? May be use Align() ? 
         bufferSADFootprint.Footprint.Height = iNumBlocksY; // num Blocks H
         bufferSADFootprint.Footprint.Depth = 1;
         bufferSADFootprint.Footprint.RowPitch = iSADRowPitch; // 16+16 * num blocks W and multiply of 256 ?

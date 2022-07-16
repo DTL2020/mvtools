@@ -2974,7 +2974,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
 //       p = plane_ptr->GetPointerSubShift(blx, bly, np);
        p = p_plane->GetPointerSubShift(blx, bly, np);
 
-/*       const BYTE* pold = plane_ptr->GetPointer(blx, bly);
+       const BYTE* pold = plane_ptr->GetPointer(blx, bly);
        int np_old = plane_ptr->GetPitch();
 
        int or0 = pold[0];
@@ -2986,21 +2986,43 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
        int or6 = pold[6 * np_old];
        int or7 = pold[7 * np_old];
 
-
-       for (int x = 0; x < nBlkSizeX; x++)
+       if (pixelsize == 1)
        {
-         for (int y = 0; y < nBlkSizeY; y++)
+         for (int x = 0; x < nBlkSizeX; x++)
          {
-           int isample = p[y * np + x];
-           int isample_old = pold[y * np_old + x];
-
-           if (abs (isample - isample_old) > 3)
+           for (int y = 0; y < nBlkSizeY; y++)
            {
-             int idbr = 0;
+             int isample = p[y * np + x];
+             int isample_old = pold[y * np_old + x];
+
+             if (abs(isample - isample_old) > 3)
+             {
+               int idbr = 0;
+             }
            }
          }
        }
-  */     
+       else if (pixelsize == 2)
+       {
+         unsigned short* pus = (unsigned short*)p;
+         unsigned short* pusold = (unsigned short*)pold;
+
+         for (int x = 0; x < nBlkSizeX; x++)
+         {
+           for (int y = 0; y < nBlkSizeY; y++)
+           {
+             int isample = p[y * np + x];
+             int isample_old = pold[y * np_old + x];
+
+             if (abs(isample - isample_old) > 3)
+             {
+               int idbr = 0;
+             }
+           }
+         }
+
+       }
+       
      }
      else
      {
