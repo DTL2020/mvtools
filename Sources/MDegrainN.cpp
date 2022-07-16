@@ -3004,15 +3004,18 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
        }
        else if (pixelsize == 2)
        {
-         unsigned short* pus = (unsigned short*)p;
-         unsigned short* pusold = (unsigned short*)pold;
-
          for (int x = 0; x < nBlkSizeX; x++)
          {
            for (int y = 0; y < nBlkSizeY; y++)
            {
-             int isample = p[y * np + x];
-             int isample_old = pold[y * np_old + x];
+             BYTE* puc = (BYTE*)p + y * np + x;
+             unsigned short* pus = (unsigned short*)puc;
+
+             BYTE* pucold = (BYTE*)pold + y * np_old + x;
+             unsigned short* pusold = (unsigned short*)pucold;
+
+             int isample = *pus;
+             int isample_old = *pusold;
 
              if (abs(isample - isample_old) > 3)
              {
