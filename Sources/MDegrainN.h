@@ -252,7 +252,10 @@ private:
   int nInputBlkX;
   int nInputBlkY;
   int nInputBlkCount;
-  void InterpolateOverlap(const VECTOR* pInterpolatedMVs, const VECTOR * pOrigMVs);
+  void InterpolateOverlap(VECTOR* pInterpolatedMVs, const VECTOR* pInputMVs, int idx);
+  VECTOR* pMVsWorkPlanesArrays[MAX_TEMP_RAD * 2]; // curernt working MVs
+  MV_FORCEINLINE sad_t CheckSAD(int bx_src, int by_src, int ref_idx, int blx_ref, int bly_ref);
+
 
   int nUseSubShift;
   int iMaxBlx; // max blx for GetPointer*()

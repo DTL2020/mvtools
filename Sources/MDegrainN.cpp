@@ -655,7 +655,12 @@ MDegrainN::MDegrainN(
     static const char *name_0[2] = { "mvbw", "mvfw" };
     char txt_0[127 + 1];
     sprintf(txt_0, "%s%d", name_0[k & 1], 1 + k / 2);
-    CheckSimilarity(*(_mv_clip_arr[k]._clip_sptr), txt_0, env_ptr);
+//    CheckSimilarity(*(_mv_clip_arr[k]._clip_sptr), txt_0, env_ptr);
+    if (iInterpolateOverlap == 0)
+      CheckSimilarity(*(_mv_clip_arr[k]._clip_sptr), txt_0, env_ptr);
+    else
+      CheckSimilarityEO(*(_mv_clip_arr[k]._clip_sptr), txt_0, env_ptr);
+
   }
 
   const sad_t mv_thscd1 = _mv_clip_arr[0]._clip_sptr->GetThSCD1();
@@ -1253,14 +1258,17 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
     for (int k = 0; k < _trad * 2; ++k)
     {
       pMVsPlanesArrays[k] = _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0);
+      pMVsWorkPlanesArrays[k] = (VECTOR*)pMVsPlanesArrays[k];
     }
   }
   else
   {
     for (int k = 0; k < _trad * 2; ++k)
     {
-      InterpolateOverlap(pMVsPlanesArrays[k], _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0));
+      InterpolateOverlap(pMVsIntOvlpPlanesArrays[k], _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0), k);
+      pMVsWorkPlanesArrays[k] = pMVsIntOvlpPlanesArrays[k];
     }
+
   }
   //call Filter MVs here because it equal for luma and all chroma planes
 //  const BYTE* pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
@@ -1679,7 +1687,8 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
             _src_pitch_arr[0],
             bx,
             by,
-            pMVsPlanesArrays[k]
+//            pMVsPlanesArrays[k]
+              pMVsWorkPlanesArrays[k]
             );
         }
         else
@@ -1908,7 +1917,8 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
             _src_pitch_arr[0],
             bx,
             by,
-            pMVsPlanesArrays[k]
+//            pMVsPlanesArrays[k]
+              pMVsWorkPlanesArrays[k]
             );
         }
         else
@@ -2090,7 +2100,8 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
             _src_pitch_arr[2],
             bx,
             by,
-            pMVsPlanesArrays[k]
+//            pMVsPlanesArrays[k]
+              pMVsWorkPlanesArrays[k]
           );
         }
       }
@@ -2431,7 +2442,8 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
             _src_pitch_arr[2],
             bx,
             by,
-            pMVsPlanesArrays[k]
+//            pMVsPlanesArrays[k]
+            pMVsWorkPlanesArrays[k]
           );
         }
       }
@@ -2653,7 +2665,8 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
             _src_pitch_arr[P],
             bx,
             by,
-            pMVsPlanesArrays[k]
+//            pMVsPlanesArrays[k]
+            pMVsWorkPlanesArrays[k]
             ); // vs: extra nLogPel, plane, xSubUV, ySubUV, thSAD
         }
         else
@@ -2866,7 +2879,8 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
             _src_pitch_arr[P],
             bx,
             by,
-            pMVsPlanesArrays[k]
+//            pMVsPlanesArrays[k]
+            pMVsWorkPlanesArrays[k]
             ); // vs: extra nLogPel, plane, xSubUV, ySubUV, thSAD
         }
         else
@@ -3441,7 +3455,8 @@ void MDegrainN::FilterMVs(void)
       // -3, -2, -1, 0, +1, +2, +3 timed sequence
       for (int k = 0; k < _trad; ++k)
       {
-        p2fvectors[k] = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
+//        p2fvectors[k] = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
+        p2fvectors[k] = pMVsWorkPlanesArrays[(_trad - k - 1) * 2 + 1][i];
       }
 
       p2fvectors[_trad].x = 0; // zero trad - source block itself
@@ -3450,7 +3465,8 @@ void MDegrainN::FilterMVs(void)
 
       for (int k = 1; k < _trad + 1; ++k)
       {
-        p2fvectors[k + _trad] = pMVsPlanesArrays[(k - 1) * 2][i];
+//        p2fvectors[k + _trad] = pMVsPlanesArrays[(k - 1) * 2][i];
+        p2fvectors[k + _trad] = pMVsWorkPlanesArrays[(k - 1) * 2][i];
       }
 
       // perform lpf of all good vectors in tr-scope
@@ -3536,7 +3552,8 @@ void MDegrainN::FilterMVs(void)
             vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
           }
         }
-        vOrig = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
+//        vOrig = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
+        vOrig = pMVsWorkPlanesArrays[(_trad - k - 1) * 2 + 1][i];
         if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
         {
           vLPFed.sad = (int)((float)vLPFed.sad * fadjSADLPFedmv); // make some boost of weight for filtered because they typically have worse SAD
@@ -3607,7 +3624,8 @@ void MDegrainN::FilterMVs(void)
             vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
           }
         }
-        vOrig = pMVsPlanesArrays[(k - 1) * 2][i];
+//        vOrig = pMVsPlanesArrays[(k - 1) * 2][i];
+        vOrig = pMVsWorkPlanesArrays[(k - 1) * 2][i];
         if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
         {
           vLPFed.sad = (int)((float)vLPFed.sad * fadjSADLPFedmv); // make some boost of weight for filtered because they typically have worse SAD
@@ -3663,7 +3681,8 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
 // -3, -2, -1, 0, +1, +2, +3 timed sequence
   for (int k = 0; k < _trad; ++k)
   {
-    p2fvectors[k] = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
+//    p2fvectors[k] = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
+    p2fvectors[k] = pMVsWorkPlanesArrays[(_trad - k - 1) * 2 + 1][i];
   }
 
   p2fvectors[_trad].x = 0; // zero trad - source block itself
@@ -3672,7 +3691,8 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
 
   for (int k = 1; k < _trad + 1; ++k)
   {
-    p2fvectors[k + _trad] = pMVsPlanesArrays[(k - 1) * 2][i];
+//    p2fvectors[k + _trad] = pMVsPlanesArrays[(k - 1) * 2][i];
+    p2fvectors[k + _trad] = pMVsWorkPlanesArrays[(k - 1) * 2][i];
   }
 
   // perform lpf of all good vectors in tr-scope
@@ -3758,7 +3778,8 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
           vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
         }
       }
-    vOrig = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
+//    vOrig = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
+    vOrig = pMVsWorkPlanesArrays[(_trad - k - 1) * 2 + 1][i];
     if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
     {
       vLPFed.sad = (int)((float)vLPFed.sad * fadjSADLPFedmv); // make some boost of weight for filtered because they typically have worse SAD
@@ -3829,7 +3850,8 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
           vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
         }
       }
-    vOrig = pMVsPlanesArrays[(k - 1) * 2][i];
+//    vOrig = pMVsPlanesArrays[(k - 1) * 2][i];
+    vOrig = pMVsWorkPlanesArrays[(k - 1) * 2][i];
     if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
     {
       vLPFed.sad = (int)((float)vLPFed.sad * fadjSADLPFedmv); // make some boost of weight for filtered because they typically have worse SAD
@@ -3848,7 +3870,8 @@ MV_FORCEINLINE void MDegrainN::PrefetchMVs(int i)
     {
       for (int k = 0; k < _trad * 2; ++k)
       {
-        const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+//        const VECTOR* pMVsArrayPref = pMVsPlanesArrays[k];
+        const VECTOR* pMVsArrayPref = pMVsWorkPlanesArrays[k];
         _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(&pMVsArrayPref[i + 5])), _MM_HINT_T0);
       }
     }
@@ -4098,7 +4121,145 @@ MV_FORCEINLINE void MDegrainN::nlimit_chroma(int P)
   );
 }
 
-void MDegrainN::InterpolateOverlap(const VECTOR* pInterpolatedMVs, const VECTOR* pInputMVs)
+void MDegrainN::InterpolateOverlap(VECTOR* pInterpolatedMVs, const VECTOR* pInputMVs, int idx)
 {
+  // InterpolateOverlap modes: 1 - no SAD re-check for interpolated MVs, 2 - make SAD re-check for interpolated MVs (slower)
 
+  VECTOR* pInp = (VECTOR*)pInputMVs;
+
+  // use linear interpolate 2x of x first
+  int i;
+  int bxInp = 0;
+  int byInp = 0;
+  int j;
+  for (int by = 0; by < nBlkY; by += 2) // output blkY
+  {
+    bxInp = 0;
+    for (int bx = 0; bx < nBlkX; bx++) // output blkX
+    {
+      i = by * nBlkX + bx;
+      j = byInp * nInputBlkX + bxInp;
+      // original MVs in each 2nd MV
+      if ((bx % 2) == 0)
+        pInterpolatedMVs[i] = pInputMVs[j];
+      else
+      {
+        int blx = (pInputMVs[j].x + pInputMVs[j + 1].x) / 2;
+        int bly = (pInputMVs[j].y + pInputMVs[j + 1].y) / 2;
+        ClipBlxBly
+          pInterpolatedMVs[i].x = blx;
+        pInterpolatedMVs[i].y = bly;
+        // update SAD
+        pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly);
+
+        bxInp++;
+      }
+    }// for bx
+
+    byInp++;
+
+  }	// for by
+
+  // linear interpolate 2x by y of output array
+  byInp = 0;
+
+  for (int by = 1; by < nBlkY; by += 2) // output blkY
+  {
+    for (int bx = 0; bx < nBlkX; bx++) // output blkX
+    {
+      i = by * nBlkX + bx;
+      j = byInp * nBlkX + bx;
+
+      int blx = (pInterpolatedMVs[j].x + pInterpolatedMVs[j + nBlkX * 2].x) / 2;
+      int bly = (pInterpolatedMVs[j].y + pInterpolatedMVs[j + nBlkX * 2].y) / 2;
+      ClipBlxBly
+        pInterpolatedMVs[i].x = blx;
+      pInterpolatedMVs[i].y = bly;
+      // update SAD
+      pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly);
+
+    }// for by
+
+    byInp += 2;
+
+  }	// for by
+
+}
+
+MV_FORCEINLINE sad_t MDegrainN::CheckSAD(int bx_src, int by_src, int ref_idx, int blx_ref, int bly_ref)
+{
+  sad_t sad_out = INT_MAX; // invalid value up to 64bit ? for unusable frames
+
+  if (!_usable_flag_arr[ref_idx]) // nothing to process
+  {
+    return sad_out;
+  }
+
+  const int  rowsize = nBlkSizeY - nOverlapY; // num of lines in row of blocks = block height - overlap ?
+  const BYTE* pSrcCur = _src_ptr_arr[0];
+  const BYTE* pSrcCurU = _src_ptr_arr[1];
+  const BYTE* pSrcCurV = _src_ptr_arr[2];
+
+  pSrcCur += by_src * (rowsize * _src_pitch_arr[0]);
+
+  const int effective_nSrcPitch = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _src_pitch_arr[1]; // pitch is byte granularity, from 1st chroma plane
+
+  pSrcCurU += by_src * (effective_nSrcPitch);
+  pSrcCurV += by_src * (effective_nSrcPitch);
+
+  const int xx = bx_src * (nBlkSizeX - nOverlapX); // xx: indexing offset, - overlap ?
+  const int xx_uv = bx_src * ((nBlkSizeX - nOverlapX) >> nLogxRatioUV_super); // xx_uv: indexing offset
+
+  bool bChroma = (_nsupermodeyuv & UPLANE) && (_nsupermodeyuv & VPLANE); // chroma present in super clip ?
+// scaleCSAD in the MVclip props
+  int chromaSADscale = _mv_clip_arr[0]._clip_sptr->chromaSADScale; // from 1st ?
+
+  const uint8_t* pRef;
+  int npitchRef;
+
+  if (nPel != 1 && nUseSubShift != 0)
+  {
+    pRef = _planes_ptr[ref_idx][0]->GetPointerSubShift(blx_ref, bly_ref, npitchRef);
+  }
+  else
+  {
+    pRef = _planes_ptr[ref_idx][0]->GetPointer(blx_ref, bly_ref);
+    npitchRef = _planes_ptr[ref_idx][0]->GetPitch();
+  }
+
+  sad_t sad_chroma = 0;
+
+  if (bChroma)
+  {
+    const uint8_t* pRefU;
+    const uint8_t* pRefV;
+    int npitchRefU, npitchRefV;
+
+    if (nPel != 1 && nUseSubShift != 0)
+    {
+      pRefU = _planes_ptr[ref_idx][1]->GetPointerSubShift(blx_ref >> nLogxRatioUV_super, bly_ref >> nLogyRatioUV_super, npitchRefU);
+      pRefV = _planes_ptr[ref_idx][2]->GetPointerSubShift(blx_ref >> nLogxRatioUV_super, bly_ref >> nLogyRatioUV_super, npitchRefV);
+    }
+    else
+    {
+      pRefU = _planes_ptr[ref_idx][1]->GetPointer(blx_ref >> nLogxRatioUV_super, bly_ref >> nLogyRatioUV_super);
+      npitchRefU = _planes_ptr[ref_idx][1]->GetPitch();
+      pRefV = _planes_ptr[ref_idx][2]->GetPointer(blx_ref >> nLogxRatioUV_super, bly_ref >> nLogyRatioUV_super);
+      npitchRefV = _planes_ptr[ref_idx][2]->GetPitch();
+    }
+
+    sad_chroma = ScaleSadChroma(SADCHROMA(pSrcCurU + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1], pRefU, npitchRefU)
+      + SADCHROMA(pSrcCurV + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2], pRefV, npitchRefV), chromaSADscale);
+
+    sad_t luma_sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
+
+    sad_out = luma_sad + sad_chroma;
+
+  }
+  else
+  {
+    sad_out = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
+  }
+
+  return sad_out;
 }

@@ -92,3 +92,35 @@ void MVFilter::CheckSimilarity(const MVClip &vector, const char *vectorName, ISc
      env->ThrowError("Error in %s : %s's bit depth is incorrect", name, vectorName);
 
 }
+
+void MVFilter::CheckSimilarityEO(const MVClip& vector, const char* vectorName, IScriptEnvironment* env)
+{
+  if (nWidth != vector.GetWidth())
+    env->ThrowError("Error in %s : %s's width is incorrect", name, vectorName); //v1.8
+//      env->ThrowError("Error in %s : %s's width is incorrect", name.c_str(), vectorName);
+
+  if (nHeight != vector.GetHeight())
+    env->ThrowError("Error in %s : %s's height is incorrect", name, vectorName);
+  //      env->ThrowError("Error in %s : %s's height is incorrect", name.c_str(), vectorName);
+
+  if (nBlkSizeX != vector.GetBlkSizeX() || nBlkSizeY != vector.GetBlkSizeY())
+    env->ThrowError("Error in %s : %s's block size is incorrect", name, vectorName);
+  //      env->ThrowError("Error in %s : %s's block size is incorrect", name.c_str(), vectorName);
+
+  if (nPel != vector.GetPel())
+    env->ThrowError("Error in %s : %s's pel precision is incorrect", name, vectorName);
+  //      env->ThrowError("Error in %s : %s's pel precision is incorrect", name.c_str(), vectorName);
+
+  if (yRatioUV != vector.GetYRatioUV())
+    env->ThrowError("Error in %s : %s's Y Ratio UV is incorrect", name, vectorName);
+  //      env->ThrowError("Error in %s : %s's Y Ratio UV is incorrect", name.c_str(), vectorName);
+  if (xRatioUV != vector.GetXRatioUV())
+    env->ThrowError("Error in %s : %s's X Ratio UV is incorrect", name, vectorName);
+
+  if (pixelsize != vector.GetPixelSize())
+    env->ThrowError("Error in %s : %s's pixel size (bit depth) is incorrect", name, vectorName);
+
+  if (bits_per_pixel != vector.GetBitsPerPixel())
+    env->ThrowError("Error in %s : %s's bit depth is incorrect", name, vectorName);
+
+}

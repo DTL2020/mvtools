@@ -83,6 +83,8 @@ protected:
   MVFilter(const ::PClip &vector, const char *filterName, ::IScriptEnvironment *env, int group_len, int group_ofs);
 
   void CheckSimilarity(const MVClip &vector, const char *vectorName, ::IScriptEnvironment *env);
+  // 2.7.46
+  void CheckSimilarityEO(const MVClip& vector, const char* vectorName, ::IScriptEnvironment* env); // check all Except Overlap
 };
 
 
