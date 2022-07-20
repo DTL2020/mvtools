@@ -3432,27 +3432,12 @@ float MDegrainN::fSinc(float x)
 
 void MDegrainN::FilterMVs(void)
 {
-  const int  rowsize = nBlkSizeY - nOverlapY; // num of lines in row of blocks = block height - overlap ?
-  const BYTE* pSrcCur = _src_ptr_arr[0];
-  const BYTE* pSrcCurU = _src_ptr_arr[1];
-  const BYTE* pSrcCurV = _src_ptr_arr[2];
-  int effective_nSrcPitch = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _src_pitch_arr[1]; // pitch is byte granularity, from 1st chroma plane
-
-  bool bChroma = (_nsupermodeyuv & UPLANE) && (_nsupermodeyuv & VPLANE); // chroma present in super clip ?
-  // scaleCSAD in the MVclip props
-  int chromaSADscale = _mv_clip_arr[0]._clip_sptr->chromaSADScale; // from 1st ?
-
-  // todo: add chroma check in SAD if it present in super clip
-
   VECTOR filteredp2fvectors[(MAX_TEMP_RAD * 2) + 1];
 
   VECTOR p2fvectors[(MAX_TEMP_RAD * 2) + 1];
 
   for (int by = 0; by < nBlkY; by++)
   {
-    int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
-    int xx_uv = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
-
     for (int bx = 0; bx < nBlkX; bx++)
     {
       int i = by * nBlkX + bx;
@@ -3461,7 +3446,6 @@ void MDegrainN::FilterMVs(void)
       // -3, -2, -1, 0, +1, +2, +3 timed sequence
       for (int k = 0; k < _trad; ++k)
       {
-//        p2fvectors[k] = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
         p2fvectors[k] = pMVsWorkPlanesArrays[(_trad - k - 1) * 2 + 1][i];
       }
 
@@ -3471,7 +3455,6 @@ void MDegrainN::FilterMVs(void)
 
       for (int k = 1; k < _trad + 1; ++k)
       {
-//        p2fvectors[k + _trad] = pMVsPlanesArrays[(k - 1) * 2][i];
         p2fvectors[k + _trad] = pMVsWorkPlanesArrays[(k - 1) * 2][i];
       }
 
@@ -3503,62 +3486,8 @@ void MDegrainN::FilterMVs(void)
         vLPFed = filteredp2fvectors[k];
         int idx_mvto = (_trad - k - 1) * 2 + 1;
 
-        int blx = bx * (nBlkSizeX - nOverlapX) * nPel + vLPFed.x;
-        int bly = by * (nBlkSizeY - nOverlapY) * nPel + vLPFed.y;
+        vLPFed.sad = CheckSAD(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
 
-        // temp check - DX12_ME return invalid vectors sometime
-        ClipBlxBly
-
-        if (_usable_flag_arr[idx_mvto])
-        {
-          const uint8_t* pRef;
-          int npitchRef;
-
-          if (nPel != 1 && nUseSubShift != 0)
-          {
-            pRef = _planes_ptr[idx_mvto][0]->GetPointerSubShift(blx, bly, npitchRef);
-          }
-          else
-          {
-            pRef = _planes_ptr[idx_mvto][0]->GetPointer(blx, bly);
-            npitchRef = _planes_ptr[idx_mvto][0]->GetPitch();
-          }
-
-          sad_t sad_chroma = 0;
-
-          if (bChroma)
-          {
-            const uint8_t* pRefU;
-            const uint8_t* pRefV;
-            int npitchRefU, npitchRefV;
-
-            if (nPel != 1 && nUseSubShift != 0)
-            {
-              pRefU = _planes_ptr[idx_mvto][1]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefU);
-              pRefV = _planes_ptr[idx_mvto][2]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefV);
-            }
-            else
-            {
-              pRefU = _planes_ptr[idx_mvto][1]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
-              npitchRefU = _planes_ptr[idx_mvto][1]->GetPitch();
-              pRefV = _planes_ptr[idx_mvto][2]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
-              npitchRefV = _planes_ptr[idx_mvto][2]->GetPitch();
-            }
-
-            sad_chroma = ScaleSadChroma(SADCHROMA(pSrcCurU + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1], pRefU, npitchRefU)
-              + SADCHROMA(pSrcCurV + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2], pRefV, npitchRefV), chromaSADscale);
-
-            sad_t luma_sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
-
-            vLPFed.sad = luma_sad + sad_chroma;
-
-          }
-          else
-          {
-            vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
-          }
-        }
-//        vOrig = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
         vOrig = pMVsWorkPlanesArrays[(_trad - k - 1) * 2 + 1][i];
         if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
         {
@@ -3575,62 +3504,8 @@ void MDegrainN::FilterMVs(void)
         vLPFed = filteredp2fvectors[k + _trad];
         int idx_mvto = (k - 1) * 2;
 
-        int blx = bx * (nBlkSizeX - nOverlapX) * nPel + vLPFed.x;
-        int bly = by * (nBlkSizeY - nOverlapY) * nPel + vLPFed.y;
+        vLPFed.sad = CheckSAD(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
 
-        // temp check - DX12_ME return invalid vectors sometime
-        ClipBlxBly
-
-        if (_usable_flag_arr[idx_mvto])
-        {
-          const uint8_t* pRef;
-          int npitchRef;
-
-          if (nPel != 1 && nUseSubShift != 0)
-          {
-            pRef = _planes_ptr[idx_mvto][0]->GetPointerSubShift(blx, bly, npitchRef);
-          }
-          else
-          {
-            pRef = _planes_ptr[idx_mvto][0]->GetPointer(blx, bly);
-            npitchRef = _planes_ptr[idx_mvto][0]->GetPitch();
-          }
-
-          sad_t sad_chroma = 0;
-
-          //  looks still somwhere bug with chroma sad
-          if (bChroma)
-          {
-            const uint8_t* pRefU;
-            const uint8_t* pRefV;
-            int npitchRefU, npitchRefV;
-
-            if (nPel != 1 && nUseSubShift != 0)
-            {
-              pRefU = _planes_ptr[idx_mvto][1]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefU);
-              pRefV = _planes_ptr[idx_mvto][2]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefV);
-            }
-            else
-            {
-              pRefU = _planes_ptr[idx_mvto][1]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
-              npitchRefU = _planes_ptr[idx_mvto][1]->GetPitch();
-              pRefV = _planes_ptr[idx_mvto][2]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
-              npitchRefV = _planes_ptr[idx_mvto][2]->GetPitch();
-            }
-
-            sad_chroma = ScaleSadChroma(SADCHROMA(pSrcCurU + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1], pRefU, npitchRefU)
-              + SADCHROMA(pSrcCurV + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2], pRefV, npitchRefV), chromaSADscale);
-
-            sad_t luma_sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
-
-            vLPFed.sad = luma_sad + sad_chroma;
-          }
-          else 
-          {
-            vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
-          }
-        }
-//        vOrig = pMVsPlanesArrays[(k - 1) * 2][i];
         vOrig = pMVsWorkPlanesArrays[(k - 1) * 2][i];
         if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
         {
@@ -3640,46 +3515,15 @@ void MDegrainN::FilterMVs(void)
         else
           pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vOrig;
       }
-
-      xx += (nBlkSizeX - nOverlapX); // xx: indexing offset, - overlap ?
-      xx_uv += ((nBlkSizeX - nOverlapX) >> nLogxRatioUV_super); // xx_uv: indexing offset
-
     } // bx
-
-    pSrcCur += rowsize * _src_pitch_arr[0];
-    
-    pSrcCurU += effective_nSrcPitch;
-    pSrcCurV += effective_nSrcPitch;
-
   } // by
 
 }
 
+
 // single block processing FilterMVs to allow to use cached subshifted block
 MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
 {
-  const int  rowsize = nBlkSizeY - nOverlapY; // num of lines in row of blocks = block height - overlap ?
-  const BYTE* pSrcCur = _src_ptr_arr[0];
-  const BYTE* pSrcCurU = _src_ptr_arr[1];
-  const BYTE* pSrcCurV = _src_ptr_arr[2];
-
-  pSrcCur += by * (rowsize * _src_pitch_arr[0]);
-
-  const int effective_nSrcPitch = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _src_pitch_arr[1]; // pitch is byte granularity, from 1st chroma plane
-
-  pSrcCurU += by * (effective_nSrcPitch);
-  pSrcCurV += by * (effective_nSrcPitch);
-
-  const int xx = bx * (nBlkSizeX - nOverlapX); // xx: indexing offset, - overlap ?
-  const int xx_uv = bx * ((nBlkSizeX - nOverlapX) >> nLogxRatioUV_super); // xx_uv: indexing offset
-
-
-  bool bChroma = (_nsupermodeyuv & UPLANE) && (_nsupermodeyuv & VPLANE); // chroma present in super clip ?
-// scaleCSAD in the MVclip props
-  int chromaSADscale = _mv_clip_arr[0]._clip_sptr->chromaSADScale; // from 1st ?
-
-  // todo: add chroma check in SAD if it present in super clip
-
   VECTOR filteredp2fvectors[(MAX_TEMP_RAD * 2) + 1];
 
   VECTOR p2fvectors[(MAX_TEMP_RAD * 2) + 1];
@@ -3687,7 +3531,6 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
 // -3, -2, -1, 0, +1, +2, +3 timed sequence
   for (int k = 0; k < _trad; ++k)
   {
-//    p2fvectors[k] = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
     p2fvectors[k] = pMVsWorkPlanesArrays[(_trad - k - 1) * 2 + 1][i];
   }
 
@@ -3697,7 +3540,6 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
 
   for (int k = 1; k < _trad + 1; ++k)
   {
-//    p2fvectors[k + _trad] = pMVsPlanesArrays[(k - 1) * 2][i];
     p2fvectors[k + _trad] = pMVsWorkPlanesArrays[(k - 1) * 2][i];
   }
 
@@ -3726,65 +3568,12 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
   for (int k = 0; k < _trad; ++k)
   {
     // recheck SAD:
+
     vLPFed = filteredp2fvectors[k];
     int idx_mvto = (_trad - k - 1) * 2 + 1;
 
-    int blx = bx * (nBlkSizeX - nOverlapX) * nPel + vLPFed.x;
-    int bly = by * (nBlkSizeY - nOverlapY) * nPel + vLPFed.y;
+    vLPFed.sad = CheckSAD(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
 
-    // temp check - DX12_ME return invalid vectors sometime
-    ClipBlxBly
-
-      if (_usable_flag_arr[idx_mvto])
-      {
-        const uint8_t* pRef;
-        int npitchRef;
-
-        if (nPel != 1 && nUseSubShift != 0)
-        {
-          pRef = _planes_ptr[idx_mvto][0]->GetPointerSubShift(blx, bly, npitchRef);
-        }
-        else
-        {
-          pRef = _planes_ptr[idx_mvto][0]->GetPointer(blx, bly);
-          npitchRef = _planes_ptr[idx_mvto][0]->GetPitch();
-        }
-
-        sad_t sad_chroma = 0;
-
-        if (bChroma)
-        {
-          const uint8_t* pRefU;
-          const uint8_t* pRefV;
-          int npitchRefU, npitchRefV;
-
-          if (nPel != 1 && nUseSubShift != 0)
-          {
-            pRefU = _planes_ptr[idx_mvto][1]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefU);
-            pRefV = _planes_ptr[idx_mvto][2]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefV);
-          }
-          else
-          {
-            pRefU = _planes_ptr[idx_mvto][1]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
-            npitchRefU = _planes_ptr[idx_mvto][1]->GetPitch();
-            pRefV = _planes_ptr[idx_mvto][2]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
-            npitchRefV = _planes_ptr[idx_mvto][2]->GetPitch();
-          }
-
-          sad_chroma = ScaleSadChroma(SADCHROMA(pSrcCurU + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1], pRefU, npitchRefU)
-            + SADCHROMA(pSrcCurV + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2], pRefV, npitchRefV), chromaSADscale);
-
-          sad_t luma_sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
-
-          vLPFed.sad = luma_sad + sad_chroma;
-
-        }
-        else
-        {
-          vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
-        }
-      }
-//    vOrig = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i];
     vOrig = pMVsWorkPlanesArrays[(_trad - k - 1) * 2 + 1][i];
     if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
     {
@@ -3801,62 +3590,8 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
     vLPFed = filteredp2fvectors[k + _trad];
     int idx_mvto = (k - 1) * 2;
 
-    int blx = bx * (nBlkSizeX - nOverlapX) * nPel + vLPFed.x;
-    int bly = by * (nBlkSizeY - nOverlapY) * nPel + vLPFed.y;
+    vLPFed.sad = CheckSAD(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
 
-    // temp check - DX12_ME return invalid vectors sometime
-    ClipBlxBly
-
-      if (_usable_flag_arr[idx_mvto])
-      {
-        const uint8_t* pRef;
-        int npitchRef;
-
-        if (nPel != 1 && nUseSubShift != 0)
-        {
-          pRef = _planes_ptr[idx_mvto][0]->GetPointerSubShift(blx, bly, npitchRef);
-        }
-        else
-        {
-          pRef = _planes_ptr[idx_mvto][0]->GetPointer(blx, bly);
-          npitchRef = _planes_ptr[idx_mvto][0]->GetPitch();
-        }
-
-        sad_t sad_chroma = 0;
-
-        //  looks still somwhere bug with chroma sad
-        if (bChroma)
-        {
-          const uint8_t* pRefU;
-          const uint8_t* pRefV;
-          int npitchRefU, npitchRefV;
-
-          if (nPel != 1 && nUseSubShift != 0)
-          {
-            pRefU = _planes_ptr[idx_mvto][1]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefU);
-            pRefV = _planes_ptr[idx_mvto][2]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefV);
-          }
-          else
-          {
-            pRefU = _planes_ptr[idx_mvto][1]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
-            npitchRefU = _planes_ptr[idx_mvto][1]->GetPitch();
-            pRefV = _planes_ptr[idx_mvto][2]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
-            npitchRefV = _planes_ptr[idx_mvto][2]->GetPitch();
-          }
-
-          sad_chroma = ScaleSadChroma(SADCHROMA(pSrcCurU + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1], pRefU, npitchRefU)
-            + SADCHROMA(pSrcCurV + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2], pRefV, npitchRefV), chromaSADscale);
-
-          sad_t luma_sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
-
-          vLPFed.sad = luma_sad + sad_chroma;
-        }
-        else
-        {
-          vLPFed.sad = SAD(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
-        }
-      }
-//    vOrig = pMVsPlanesArrays[(k - 1) * 2][i];
     vOrig = pMVsWorkPlanesArrays[(k - 1) * 2][i];
     if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
     {
@@ -3867,6 +3602,8 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
       pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vOrig;
   }
 }
+
+
 
 MV_FORCEINLINE void MDegrainN::PrefetchMVs(int i)
 {
@@ -4136,6 +3873,7 @@ void MDegrainN::InterpolateOverlap(VECTOR* pInterpolatedMVs, const VECTOR* pInpu
   int bxInp = 0;
   int byInp = 0;
   int j;
+
   for (int by = 0; by < nBlkY; by += 2) // output blkY
   {
     bxInp = 0;
@@ -4148,8 +3886,8 @@ void MDegrainN::InterpolateOverlap(VECTOR* pInterpolatedMVs, const VECTOR* pInpu
         pInterpolatedMVs[i] = pInputMVs[j];
       else
       {
-        int blx = (pInputMVs[j].x + pInputMVs[j + 1].x) / 2;
-        int bly = (pInputMVs[j].y + pInputMVs[j + 1].y) / 2;
+        const int blx = (pInputMVs[j].x + pInputMVs[j + 1].x) / 2;
+        const int bly = (pInputMVs[j].y + pInputMVs[j + 1].y) / 2;
         pInterpolatedMVs[i].x = blx;
         pInterpolatedMVs[i].y = bly;
         // update SAD
@@ -4173,8 +3911,8 @@ void MDegrainN::InterpolateOverlap(VECTOR* pInterpolatedMVs, const VECTOR* pInpu
       i = by * nBlkX + bx;
       j = byInp * nBlkX + bx;
 
-      int blx = (pInterpolatedMVs[j].x + pInterpolatedMVs[j + nBlkX * 2].x) / 2;
-      int bly = (pInterpolatedMVs[j].y + pInterpolatedMVs[j + nBlkX * 2].y) / 2;
+      const int blx = (pInterpolatedMVs[j].x + pInterpolatedMVs[j + nBlkX * 2].x) / 2;
+      const int bly = (pInterpolatedMVs[j].y + pInterpolatedMVs[j + nBlkX * 2].y) / 2;
       pInterpolatedMVs[i].x = blx;
       pInterpolatedMVs[i].y = bly;
       // update SAD
