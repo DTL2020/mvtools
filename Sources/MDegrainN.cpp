@@ -595,6 +595,7 @@ MDegrainN::MDegrainN(
   , ithMVLPFCorr(thMVLPFCorr)
   , nUseSubShift(UseSubShift)
   , iInterpolateOverlap(InterpolateOverlap)
+  , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
   try { env_ptr->CheckVersion(8); }
@@ -1025,17 +1026,21 @@ MDegrainN::MDegrainN(
   if (nUseSubShift == 0)
   {
     iMinBlx = -nBlkSizeX * nPel;
-    iMaxBlx = nBlkSizeX * nBlkX * nPel;
+//    iMaxBlx = nBlkSizeX * nBlkX * nPel;
+    iMaxBlx = nWidth * nPel;
     iMinBly = -nBlkSizeY * nPel;
-    iMaxBly = nBlkSizeY * nBlkY * nPel;
+//    iMaxBly = nBlkSizeY * nBlkY * nPel;
+    iMaxBly = nHeight * nPel;
   }
   else
   {
     int iKS_sh_d2 = ((SHIFTKERNELSIZE / 2) + 2); // +2 is to prevent run out of buffer for UV planes
     iMinBlx = (-nBlkSizeX + iKS_sh_d2) * nPel;
-    iMaxBlx = (nBlkSizeX * nBlkX - iKS_sh_d2) * nPel;
+//    iMaxBlx = (nBlkSizeX * nBlkX - iKS_sh_d2) * nPel;
+    iMaxBlx = (nWidth - iKS_sh_d2) * nPel;
     iMinBly = (-nBlkSizeY + iKS_sh_d2) * nPel;
-    iMaxBly = (nBlkSizeY * nBlkY - iKS_sh_d2) * nPel;
+//    iMaxBly = (nBlkSizeY * nBlkY - iKS_sh_d2) * nPel;
+    iMaxBly = (nHeight - iKS_sh_d2) * nPel;
   }
 
 }
@@ -1273,15 +1278,16 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
   //call Filter MVs here because it equal for luma and all chroma planes
 //  const BYTE* pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
 
-  // it is currently faster to call once because of interconnectin of Y+UV via chroma blocks SADs,
+  bYUVProc = (_planes_ptr[0][1] != 0) && (_planes_ptr[0][2] != 0);// colour planes exist, use single pass YUV proc for colour formats with colour processing
+
+    // it is currently faster to call once because of interconnectin of Y+UV via chroma blocks SADs,
   // will be faster with per-block processing may be only in the combined Y+UV colour data processing (possibly).
-/*  if (bMVsAddProc)
+  if (bMVsAddProc && !bYUVProc) // if interpolate overlap - may be it is better (and definitely faster) to make with input non-overlapped MVs ?
   {
     FilterMVs();
   }
-  */ // TEST with use_block_yuv
+  // TEST with use_block_yuv
 
-  bYUVProc = (_planes_ptr[0][1] != 0) && (_planes_ptr[0][2] != 0);// colour planes exist, use single pass YUV proc for colour formats with colour processing
 
   PROFILE_START(MOTION_PROFILE_COMPENSATION);
 
@@ -4123,8 +4129,6 @@ MV_FORCEINLINE void MDegrainN::nlimit_chroma(int P)
 
 void MDegrainN::InterpolateOverlap(VECTOR* pInterpolatedMVs, const VECTOR* pInputMVs, int idx)
 {
-  // InterpolateOverlap modes: 1 - no SAD re-check for interpolated MVs, 2 - make SAD re-check for interpolated MVs (slower)
-
   VECTOR* pInp = (VECTOR*)pInputMVs;
 
   // use linear interpolate 2x of x first
@@ -4146,8 +4150,7 @@ void MDegrainN::InterpolateOverlap(VECTOR* pInterpolatedMVs, const VECTOR* pInpu
       {
         int blx = (pInputMVs[j].x + pInputMVs[j + 1].x) / 2;
         int bly = (pInputMVs[j].y + pInputMVs[j + 1].y) / 2;
-        ClipBlxBly
-          pInterpolatedMVs[i].x = blx;
+        pInterpolatedMVs[i].x = blx;
         pInterpolatedMVs[i].y = bly;
         // update SAD
         pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly);
@@ -4172,8 +4175,7 @@ void MDegrainN::InterpolateOverlap(VECTOR* pInterpolatedMVs, const VECTOR* pInpu
 
       int blx = (pInterpolatedMVs[j].x + pInterpolatedMVs[j + nBlkX * 2].x) / 2;
       int bly = (pInterpolatedMVs[j].y + pInterpolatedMVs[j + nBlkX * 2].y) / 2;
-      ClipBlxBly
-        pInterpolatedMVs[i].x = blx;
+      pInterpolatedMVs[i].x = blx;
       pInterpolatedMVs[i].y = bly;
       // update SAD
       pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly);
@@ -4186,15 +4188,15 @@ void MDegrainN::InterpolateOverlap(VECTOR* pInterpolatedMVs, const VECTOR* pInpu
 
 }
 
-MV_FORCEINLINE sad_t MDegrainN::CheckSAD(int bx_src, int by_src, int ref_idx, int blx_ref, int bly_ref)
+MV_FORCEINLINE sad_t MDegrainN::CheckSAD(int bx_src, int by_src, int ref_idx, int dx_ref, int dy_ref)
 {
-  sad_t sad_out = INT_MAX; // invalid value up to 64bit ? for unusable frames
+  sad_t sad_out; 
 
   if (!_usable_flag_arr[ref_idx]) // nothing to process
   {
-    return sad_out;
+    return veryBigSAD;
   }
-
+  
   const int  rowsize = nBlkSizeY - nOverlapY; // num of lines in row of blocks = block height - overlap ?
   const BYTE* pSrcCur = _src_ptr_arr[0];
   const BYTE* pSrcCurU = _src_ptr_arr[1];
@@ -4217,13 +4219,18 @@ MV_FORCEINLINE sad_t MDegrainN::CheckSAD(int bx_src, int by_src, int ref_idx, in
   const uint8_t* pRef;
   int npitchRef;
 
+  int blx = bx_src * (nBlkSizeX - nOverlapX) * nPel + dx_ref;
+  int bly = by_src * (nBlkSizeY - nOverlapY) * nPel + dy_ref;
+
+  ClipBlxBly
+
   if (nPel != 1 && nUseSubShift != 0)
   {
-    pRef = _planes_ptr[ref_idx][0]->GetPointerSubShift(blx_ref, bly_ref, npitchRef);
+    pRef = _planes_ptr[ref_idx][0]->GetPointerSubShift(blx, bly, npitchRef);
   }
   else
   {
-    pRef = _planes_ptr[ref_idx][0]->GetPointer(blx_ref, bly_ref);
+    pRef = _planes_ptr[ref_idx][0]->GetPointer(blx, bly);
     npitchRef = _planes_ptr[ref_idx][0]->GetPitch();
   }
 
@@ -4237,14 +4244,14 @@ MV_FORCEINLINE sad_t MDegrainN::CheckSAD(int bx_src, int by_src, int ref_idx, in
 
     if (nPel != 1 && nUseSubShift != 0)
     {
-      pRefU = _planes_ptr[ref_idx][1]->GetPointerSubShift(blx_ref >> nLogxRatioUV_super, bly_ref >> nLogyRatioUV_super, npitchRefU);
-      pRefV = _planes_ptr[ref_idx][2]->GetPointerSubShift(blx_ref >> nLogxRatioUV_super, bly_ref >> nLogyRatioUV_super, npitchRefV);
+      pRefU = _planes_ptr[ref_idx][1]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefU);
+      pRefV = _planes_ptr[ref_idx][2]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefV);
     }
     else
     {
-      pRefU = _planes_ptr[ref_idx][1]->GetPointer(blx_ref >> nLogxRatioUV_super, bly_ref >> nLogyRatioUV_super);
+      pRefU = _planes_ptr[ref_idx][1]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
       npitchRefU = _planes_ptr[ref_idx][1]->GetPitch();
-      pRefV = _planes_ptr[ref_idx][2]->GetPointer(blx_ref >> nLogxRatioUV_super, bly_ref >> nLogyRatioUV_super);
+      pRefV = _planes_ptr[ref_idx][2]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
       npitchRefV = _planes_ptr[ref_idx][2]->GetPitch();
     }
 
