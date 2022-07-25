@@ -325,6 +325,73 @@ void Short2Bytes_sse2(unsigned char *pDst, int nDstPitch, uint16_t *pDstShort, i
   }
 }
 
+void Short2Bytes_avx2(unsigned char* pDst, int nDstPitch, uint16_t* pDstShort, int dstShortPitch, int nWidth, int nHeight)
+{
+  // v.2.7.25-: round 16 here, round 32 earlier. See comments in C
+  // process 8ymm = 128 shorts at load 64bytes at store
+  const int rounder_i = 1 << 4;
+  __m256i rounder = _mm256_set1_epi16(rounder_i);
+  const int nSrcPitch = dstShortPitch * sizeof(short); // back to byte size
+  BYTE* pSrc8 = reinterpret_cast<BYTE*>(pDstShort);
+  BYTE* pDst8 = reinterpret_cast<BYTE*>(pDst);
+  int wMod128 = (nWidth / 128) * 128;
+  int wMod8 = (nWidth / 8) * 8;
+  for (int y = 0; y < nHeight; y++)
+  {
+    for (int x = 0; x < wMod128; x += 128)
+    { // 256 source bytes = 128 short sized pixels
+                                            // 2*4 int -> 8 uint16_t
+      __m256i src_0 = _mm256_loadu_si256((__m256i*)(pSrc8 + x * 2));
+      __m256i src_1 = _mm256_loadu_si256((__m256i*)(pSrc8 + x * 2 + 32));
+      __m256i src_2 = _mm256_loadu_si256((__m256i*)(pSrc8 + x * 2 + 32 * 2));
+      __m256i src_3 = _mm256_loadu_si256((__m256i*)(pSrc8 + x * 2 + 32 * 3));
+      __m256i src_4 = _mm256_loadu_si256((__m256i*)(pSrc8 + x * 2 + 32 * 4));
+      __m256i src_5 = _mm256_loadu_si256((__m256i*)(pSrc8 + x * 2 + 32 * 5));
+      __m256i src_6 = _mm256_loadu_si256((__m256i*)(pSrc8 + x * 2 + 32 * 6));
+      __m256i src_7 = _mm256_loadu_si256((__m256i*)(pSrc8 + x * 2 + 32 * 7));
+
+// total shift is 11: 6+5. Shift 6 is already done, we shift the rest 5. See 6+5
+      // round, shift and limit
+      __m256i res_0 = _mm256_srai_epi16(_mm256_add_epi16(src_0, rounder), 5);
+      __m256i res_1 = _mm256_srai_epi16(_mm256_add_epi16(src_1, rounder), 5);
+      __m256i res_2 = _mm256_srai_epi16(_mm256_add_epi16(src_2, rounder), 5);
+      __m256i res_3 = _mm256_srai_epi16(_mm256_add_epi16(src_3, rounder), 5);
+      __m256i res_4 = _mm256_srai_epi16(_mm256_add_epi16(src_4, rounder), 5);
+      __m256i res_5 = _mm256_srai_epi16(_mm256_add_epi16(src_5, rounder), 5);
+      __m256i res_6 = _mm256_srai_epi16(_mm256_add_epi16(src_6, rounder), 5);
+      __m256i res_7 = _mm256_srai_epi16(_mm256_add_epi16(src_7, rounder), 5);
+
+      __m256i res_01 = _mm256_permute4x64_epi64(_mm256_packus_epi16(res_0, res_1), 216);
+      __m256i res_23 = _mm256_permute4x64_epi64(_mm256_packus_epi16(res_2, res_3), 216);
+      __m256i res_45 = _mm256_permute4x64_epi64(_mm256_packus_epi16(res_4, res_5), 216);
+      __m256i res_67 = _mm256_permute4x64_epi64(_mm256_packus_epi16(res_6, res_7), 216);
+
+      _mm256_storeu_si256((__m256i*)(pDst8 + x), res_01);
+      _mm256_storeu_si256((__m256i*)(pDst8 + x + 32), res_23);
+      _mm256_storeu_si256((__m256i*)(pDst8 + x + 32 * 2), res_45);
+      _mm256_storeu_si256((__m256i*)(pDst8 + x + 32 * 3), res_67);
+    }
+    // remainder mod8
+    if (nWidth != wMod128)
+    {
+      for (int x = wMod128; x < wMod8; x+=8)
+      {
+        __m128i src07 = _mm_loadu_si128((__m128i*)(pSrc8 + (x * 2))); // 8 short pixels
+        __m128i res07 = _mm_srai_epi16(_mm_add_epi16(src07, _mm256_castsi256_si128(rounder)), 5); // shift, round and limit
+        __m128i res = _mm_packus_epi16(res07, res07);
+        _mm_storel_epi64((__m128i*)(pDst8 + x), res);
+      }
+      for (int x = wMod8; x < nWidth; x++) {
+        int a = (reinterpret_cast<uint16_t*>(pSrc8)[x] + rounder_i) >> 5;
+        pDst8[x] = min(255, a);
+      }
+    }
+    pDst8 += nDstPitch;
+    pSrc8 += nSrcPitch;
+  }
+}
+
+
 void Short2Bytes(unsigned char *pDst, int nDstPitch, uint16_t *pDstShort, int dstShortPitch, int nWidth, int nHeight)
 {
   for (int h=0; h<nHeight; h++)

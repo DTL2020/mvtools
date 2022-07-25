@@ -3681,29 +3681,68 @@ MV_FORCEINLINE void MDegrainN::post_overlap_chroma_plane(int P, uint16_t* pDstSh
   }
   else if (_out16_flag)
   {
-    Short2Bytes_Int32toWord16(
+    if ((_cpuFlags & CPU_SSE4) != 0)
+    {
+      Short2Bytes_Int32toWord16_sse4(
+        (uint16_t*)_dst_ptr_arr[P], _dst_pitch_arr[P],
+        pDstInt, _dst_int_pitch,
+        _covered_width >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super,
+        bits_per_pixel_output
+      );
+    }
+    else
+      Short2Bytes_Int32toWord16(
       (uint16_t*)_dst_ptr_arr[P], _dst_pitch_arr[P],
-      pDstInt, _dst_int_pitch,
-      _covered_width >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super,
-      bits_per_pixel_output
-    );
+        pDstInt, _dst_int_pitch,
+        _covered_width >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super,
+        bits_per_pixel_output
+      );
   }
   else if (pixelsize_super == 1)
   {
-    Short2Bytes(
-      _dst_ptr_arr[P], _dst_pitch_arr[P],
-      pDstShort, _dst_short_pitch,
-      _covered_width >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super
-    );
+    if ((_cpuFlags & CPUF_AVX2) != 0)
+    {
+      Short2Bytes_avx2(
+        _dst_ptr_arr[P], _dst_pitch_arr[P],
+        pDstShort, _dst_short_pitch,
+        _covered_width >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super
+      );
+    }
+    else if ((_cpuFlags & CPUF_SSE2) != 0)
+    {
+      Short2Bytes_sse2(
+        _dst_ptr_arr[P], _dst_pitch_arr[P],
+        pDstShort, _dst_short_pitch,
+        _covered_width >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super
+      );
+    }
+    else
+    {
+      Short2Bytes(
+        _dst_ptr_arr[P], _dst_pitch_arr[P],
+        pDstShort, _dst_short_pitch,
+        _covered_width >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super
+      );
+    }
   }
   else if (pixelsize_super == 2)
   {
-    Short2Bytes_Int32toWord16(
+    if ((_cpuFlags & CPU_SSE4) != 0)
+    {
+      Short2Bytes_Int32toWord16_sse4(
+        (uint16_t*)_dst_ptr_arr[P], _dst_pitch_arr[P],
+        pDstInt, _dst_int_pitch,
+        _covered_width >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super,
+        bits_per_pixel_super
+      );
+    }
+    else
+      Short2Bytes_Int32toWord16(
       (uint16_t*)_dst_ptr_arr[P], _dst_pitch_arr[P],
-      pDstInt, _dst_int_pitch,
-      _covered_width >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super,
-      bits_per_pixel_super
-    );
+        pDstInt, _dst_int_pitch,
+        _covered_width >> nLogxRatioUV_super, _covered_height >> nLogyRatioUV_super,
+        bits_per_pixel_super
+      );
   }
   else if (pixelsize_super == 4)
   {
@@ -3765,29 +3804,68 @@ MV_FORCEINLINE void MDegrainN::post_overlap_luma_plane(void)
   }
   else if (_out16_flag)
   {
-    Short2Bytes_Int32toWord16(
+    if ((_cpuFlags & CPU_SSE4) != 0)
+    {
+      Short2Bytes_Int32toWord16_sse4(
+        (uint16_t*)_dst_ptr_arr[0], _dst_pitch_arr[0],
+        &_dst_int[0], _dst_int_pitch,
+        _covered_width, _covered_height,
+        bits_per_pixel_output
+      );
+    }
+    else
+      Short2Bytes_Int32toWord16(
       (uint16_t*)_dst_ptr_arr[0], _dst_pitch_arr[0],
-      &_dst_int[0], _dst_int_pitch,
-      _covered_width, _covered_height,
-      bits_per_pixel_output
-    );
+        &_dst_int[0], _dst_int_pitch,
+        _covered_width, _covered_height,
+        bits_per_pixel_output
+      );
   }
   else if (pixelsize_super == 1)
   {
-    Short2Bytes(
-      _dst_ptr_arr[0], _dst_pitch_arr[0],
-      &_dst_short[0], _dst_short_pitch,
-      _covered_width, _covered_height
-    );
+    if ((_cpuFlags & CPUF_AVX2) != 0)
+    {
+      Short2Bytes_avx2(
+        _dst_ptr_arr[0], _dst_pitch_arr[0],
+        &_dst_short[0], _dst_short_pitch,
+        _covered_width, _covered_height
+      );
+    }
+    else if ((_cpuFlags & CPUF_SSE2) != 0)
+    {
+      Short2Bytes_sse2(
+        _dst_ptr_arr[0], _dst_pitch_arr[0],
+        &_dst_short[0], _dst_short_pitch,
+        _covered_width, _covered_height
+      );
+    }
+    else
+    {
+      Short2Bytes(
+        _dst_ptr_arr[0], _dst_pitch_arr[0],
+        &_dst_short[0], _dst_short_pitch,
+        _covered_width, _covered_height
+      );
+    }
   }
   else if (pixelsize_super == 2)
   {
-    Short2Bytes_Int32toWord16(
-      (uint16_t*)_dst_ptr_arr[0], _dst_pitch_arr[0],
-      &_dst_int[0], _dst_int_pitch,
-      _covered_width, _covered_height,
-      bits_per_pixel_super
-    );
+    if ((_cpuFlags & CPU_SSE4) != 0)
+    {
+      Short2Bytes_Int32toWord16_sse4(
+        (uint16_t*)_dst_ptr_arr[0], _dst_pitch_arr[0],
+        &_dst_int[0], _dst_int_pitch,
+        _covered_width, _covered_height,
+        bits_per_pixel_super
+      );
+    }
+    else
+      Short2Bytes_Int32toWord16(
+        (uint16_t*)_dst_ptr_arr[0], _dst_pitch_arr[0],
+        &_dst_int[0], _dst_int_pitch,
+        _covered_width, _covered_height,
+        bits_per_pixel_super
+      );
   }
   else if (pixelsize_super == 4)
   {
@@ -3904,7 +3982,7 @@ void MDegrainN::InterpolateOverlap(VECTOR* pInterpolatedMVs, const VECTOR* pInpu
   // linear interpolate 2x by y of output array
   byInp = 0;
 
-  for (int by = 1; by < nBlkY; by += 2) // output blkY
+  for (int by = 1; by < nBlkY - 1; by += 2) // output blkY
   {
     for (int bx = 0; bx < nBlkX; bx++) // output blkX
     {

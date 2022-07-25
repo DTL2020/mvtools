@@ -23,7 +23,9 @@
 #include "CopyCode.h"
 #include <cstdio>
 #include "def.h"
-#include "emmintrin.h"
+#include <emmintrin.h>
+#include <smmintrin.h> // sse 4.1
+#include <immintrin.h>
 
 // top, middle, bottom and left, middle, right windows
 #define OW_TL 0
@@ -266,6 +268,7 @@ extern "C" void __cdecl  Overlaps2x2_sse2(uint16_t *pDst, int nDstPitch, const u
 #endif
 
 void Short2Bytes_sse2(unsigned char *pDst, int nDstPitch, uint16_t *pDstShort, int dstShortPitch, int nWidth, int nHeight);
+void Short2Bytes_avx2(unsigned char* pDst, int nDstPitch, uint16_t* pDstShort, int dstShortPitch, int nWidth, int nHeight);
 void Short2Bytes(unsigned char *pDst, int nDstPitch, uint16_t *pDstShort, int dstShortPitch, int nWidth, int nHeight);
 void Short2BytesLsb(unsigned char *pDst, unsigned char *pDstLsb, int nDstPitch, int *pDstInt, int dstIntPitch, int nWidth, int nHeight);
 void Short2Bytes_Int32toWord16(uint16_t *pDst, int nDstPitch, int *pDstInt, int dstIntPitch, int nWidth, int nHeight, int bits_per_pixel);

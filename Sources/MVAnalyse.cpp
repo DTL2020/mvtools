@@ -1973,48 +1973,49 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     );
   }
 
-  // Initialize resource and descriptor heaps
-
-  // sampler setup
-  const D3D12_SAMPLER_DESC s_samplerType[] =
+  if (optSearchOption == 5) // do not init compute with SO=6
   {
-    // MinMagMipPointUVWClamp
+    // Initialize resource and descriptor heaps
+    // sampler setup
+    const D3D12_SAMPLER_DESC s_samplerType[] =
     {
-        D3D12_FILTER_MIN_MAG_MIP_POINT,                 // Filter mode
-        D3D12_TEXTURE_ADDRESS_MODE_CLAMP,               // U address clamping
-        D3D12_TEXTURE_ADDRESS_MODE_CLAMP,               // V address clamping
-        D3D12_TEXTURE_ADDRESS_MODE_CLAMP,               // W address clamping
-        0.0F,                                           // Mip LOD bias
-        0,                                              // Max Anisotropy - applies if using ANISOTROPIC filtering only
-        D3D12_COMPARISON_FUNC_ALWAYS,                   // Comparison Func - always pass
-        { 0.0F, 0.0F, 0.0F, 0.0F },                     // BorderColor float values - used if TEXTURE_ADDRESS_BORDER is set.
-        0.0F,                                           // MinLOD
-        D3D12_FLOAT32_MAX                               // MaxLOD
-    },
-  };
-  
-  {
-    const D3D12_DESCRIPTOR_HEAP_DESC samplerDescriptorHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER , 1, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, iHWNodeIndex};
+      // MinMagMipPointUVWClamp
+      {
+          D3D12_FILTER_MIN_MAG_MIP_POINT,                 // Filter mode
+          D3D12_TEXTURE_ADDRESS_MODE_CLAMP,               // U address clamping
+          D3D12_TEXTURE_ADDRESS_MODE_CLAMP,               // V address clamping
+          D3D12_TEXTURE_ADDRESS_MODE_CLAMP,               // W address clamping
+          0.0F,                                           // Mip LOD bias
+          0,                                              // Max Anisotropy - applies if using ANISOTROPIC filtering only
+          D3D12_COMPARISON_FUNC_ALWAYS,                   // Comparison Func - always pass
+          { 0.0F, 0.0F, 0.0F, 0.0F },                     // BorderColor float values - used if TEXTURE_ADDRESS_BORDER is set.
+          0.0F,                                           // MinLOD
+          D3D12_FLOAT32_MAX                               // MaxLOD
+      },
+    };
 
-  /*  m_samplerDescriptorHeap = std::make_unique<DescriptorHeap>(m_D3D12device.Get(),
-      D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
-      D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-      1); */
-    m_samplerDescriptorHeap = std::make_unique<DescriptorHeap>(m_D3D12device.Get(), &samplerDescriptorHeapDesc);
-    m_D3D12device->CreateSampler(s_samplerType, m_samplerDescriptorHeap->GetCpuHandle(0));
-  }
+    {
+      const D3D12_DESCRIPTOR_HEAP_DESC samplerDescriptorHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER , 1, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, iHWNodeIndex };
 
-  const D3D12_DESCRIPTOR_HEAP_DESC SRV_DescriptorHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, e_iHeapEnd, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, iHWNodeIndex};
+      /*  m_samplerDescriptorHeap = std::make_unique<DescriptorHeap>(m_D3D12device.Get(),
+          D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
+          D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
+          1); */
+      m_samplerDescriptorHeap = std::make_unique<DescriptorHeap>(m_D3D12device.Get(), &samplerDescriptorHeapDesc);
+      m_D3D12device->CreateSampler(s_samplerType, m_samplerDescriptorHeap->GetCpuHandle(0));
+    }
 
-//  m_SRVDescriptorHeap = std::make_unique<DescriptorHeap>(m_D3D12device.Get(), e_iHeapEnd);
-  m_SRVDescriptorHeap = std::make_unique<DescriptorHeap>(m_D3D12device.Get(), &SRV_DescriptorHeapDesc);
+    const D3D12_DESCRIPTOR_HEAP_DESC SRV_DescriptorHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, e_iHeapEnd, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, iHWNodeIndex };
 
-  // create SAD texture and views
-  const D3D12_HEAP_PROPERTIES defaultHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-  const D3D12_RESOURCE_DESC texDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R16_UINT, nWidth / iBlkSize, nHeight / iBlkSize, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-  m_resourceStateSADTexture = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    //  m_SRVDescriptorHeap = std::make_unique<DescriptorHeap>(m_D3D12device.Get(), e_iHeapEnd);
+    m_SRVDescriptorHeap = std::make_unique<DescriptorHeap>(m_D3D12device.Get(), &SRV_DescriptorHeapDesc);
 
-  hr = m_D3D12device->CreateCommittedResource(
+    // create SAD texture and views
+    const D3D12_HEAP_PROPERTIES defaultHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+    const D3D12_RESOURCE_DESC texDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R16_UINT, nWidth / iBlkSize, nHeight / iBlkSize, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+    m_resourceStateSADTexture = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+    hr = m_D3D12device->CreateCommittedResource(
       &defaultHeapProperties,
       D3D12_HEAP_FLAG_NONE,
       &texDesc,
@@ -2031,241 +2032,242 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
 
     const uint32_t s_numShaderThreads = 4;		// make sure to update value in shader if this changes
 
-  m_ThreadGroupX = static_cast<uint32_t>(texDesc.Width) / s_numShaderThreads;
-  m_ThreadGroupY = texDesc.Height / s_numShaderThreads;
+    m_ThreadGroupX = static_cast<uint32_t>(texDesc.Width) / s_numShaderThreads;
+    m_ThreadGroupY = texDesc.Height / s_numShaderThreads;
 
-  // create uav
-  m_D3D12device->CreateUnorderedAccessView(m_SADTexture.Get(), nullptr, nullptr, m_SRVDescriptorHeap->GetCpuHandle(e_iUAV));
+    // create uav
+    m_D3D12device->CreateUnorderedAccessView(m_SADTexture.Get(), nullptr, nullptr, m_SRVDescriptorHeap->GetCpuHandle(e_iUAV));
 
-  // create srv
-//  m_D3D12device->CreateShaderResourceView(m_SADTexture.Get(), nullptr, m_SRVDescriptorHeap->GetCpuHandle(e_iSRV)); // required ??
+    // create srv
+  //  m_D3D12device->CreateShaderResourceView(m_SADTexture.Get(), nullptr, m_SRVDescriptorHeap->GetCpuHandle(e_iSRV)); // required ??
 
-  D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc_CurrRef_Y = {};
-  srv_desc_CurrRef_Y.Format = DXGI_FORMAT_R8_UINT;
-  srv_desc_CurrRef_Y.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-  srv_desc_CurrRef_Y.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-  srv_desc_CurrRef_Y.Texture2D.MipLevels = 1;
-  srv_desc_CurrRef_Y.Texture2D.MostDetailedMip = 0;
-  srv_desc_CurrRef_Y.Texture2D.PlaneSlice = 0;
-  srv_desc_CurrRef_Y.Texture2D.ResourceMinLODClamp = 0;
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc_CurrRef_Y = {};
+    srv_desc_CurrRef_Y.Format = DXGI_FORMAT_R8_UINT;
+    srv_desc_CurrRef_Y.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srv_desc_CurrRef_Y.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srv_desc_CurrRef_Y.Texture2D.MipLevels = 1;
+    srv_desc_CurrRef_Y.Texture2D.MostDetailedMip = 0;
+    srv_desc_CurrRef_Y.Texture2D.PlaneSlice = 0;
+    srv_desc_CurrRef_Y.Texture2D.ResourceMinLODClamp = 0;
 
-  D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc_CurrRef_UV = {};
-  srv_desc_CurrRef_UV.Format = DXGI_FORMAT_R8G8_UINT;
-  srv_desc_CurrRef_UV.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-  srv_desc_CurrRef_UV.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-  srv_desc_CurrRef_UV.Texture2D.MipLevels = 1;
-  srv_desc_CurrRef_UV.Texture2D.MostDetailedMip = 0;
-  srv_desc_CurrRef_UV.Texture2D.PlaneSlice = 1;
-  srv_desc_CurrRef_UV.Texture2D.ResourceMinLODClamp = 0;
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc_CurrRef_UV = {};
+    srv_desc_CurrRef_UV.Format = DXGI_FORMAT_R8G8_UINT;
+    srv_desc_CurrRef_UV.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srv_desc_CurrRef_UV.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srv_desc_CurrRef_UV.Texture2D.MipLevels = 1;
+    srv_desc_CurrRef_UV.Texture2D.MostDetailedMip = 0;
+    srv_desc_CurrRef_UV.Texture2D.PlaneSlice = 1;
+    srv_desc_CurrRef_UV.Texture2D.ResourceMinLODClamp = 0;
 
-  D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc_RMVs = {};
-  srv_desc_RMVs.Format = DXGI_FORMAT_R16G16_SINT;
-  srv_desc_RMVs.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-  srv_desc_RMVs.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-  srv_desc_RMVs.Texture2D.MipLevels = 1;
-  srv_desc_RMVs.Texture2D.MostDetailedMip = 0;
-  srv_desc_RMVs.Texture2D.PlaneSlice = 0;
-  srv_desc_RMVs.Texture2D.ResourceMinLODClamp = 0;
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc_RMVs = {};
+    srv_desc_RMVs.Format = DXGI_FORMAT_R16G16_SINT;
+    srv_desc_RMVs.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srv_desc_RMVs.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srv_desc_RMVs.Texture2D.MipLevels = 1;
+    srv_desc_RMVs.Texture2D.MostDetailedMip = 0;
+    srv_desc_RMVs.Texture2D.PlaneSlice = 0;
+    srv_desc_RMVs.Texture2D.ResourceMinLODClamp = 0;
 
-  m_D3D12device->CreateShaderResourceView(spCurrentResource.Get(), &srv_desc_CurrRef_Y, m_SRVDescriptorHeap->GetCpuHandle(e_iSRV + 0));
-  m_D3D12device->CreateShaderResourceView(spCurrentResource.Get(), &srv_desc_CurrRef_UV, m_SRVDescriptorHeap->GetCpuHandle(e_iSRV + 1));
+    m_D3D12device->CreateShaderResourceView(spCurrentResource.Get(), &srv_desc_CurrRef_Y, m_SRVDescriptorHeap->GetCpuHandle(e_iSRV + 0));
+    m_D3D12device->CreateShaderResourceView(spCurrentResource.Get(), &srv_desc_CurrRef_UV, m_SRVDescriptorHeap->GetCpuHandle(e_iSRV + 1));
 
-  m_D3D12device->CreateShaderResourceView(spReferenceResource.Get(), &srv_desc_CurrRef_Y, m_SRVDescriptorHeap->GetCpuHandle(e_iSRV + 2));
-  m_D3D12device->CreateShaderResourceView(spReferenceResource.Get(), &srv_desc_CurrRef_UV, m_SRVDescriptorHeap->GetCpuHandle(e_iSRV + 3));
-  m_D3D12device->CreateShaderResourceView(spResolvedMotionVectors.Get(), &srv_desc_RMVs, m_SRVDescriptorHeap->GetCpuHandle(e_iSRV + 4));
+    m_D3D12device->CreateShaderResourceView(spReferenceResource.Get(), &srv_desc_CurrRef_Y, m_SRVDescriptorHeap->GetCpuHandle(e_iSRV + 2));
+    m_D3D12device->CreateShaderResourceView(spReferenceResource.Get(), &srv_desc_CurrRef_UV, m_SRVDescriptorHeap->GetCpuHandle(e_iSRV + 3));
+    m_D3D12device->CreateShaderResourceView(spResolvedMotionVectors.Get(), &srv_desc_RMVs, m_SRVDescriptorHeap->GetCpuHandle(e_iSRV + 4));
 
-  // load compute shader
-  std::vector<uint8_t> computeShaderBlob;
-  try {
-    computeShaderBlob = DX::ReadData(L"Compute.cso");
-  }
-  catch (std::exception& e)
-  {
-    env->ThrowError(
-      "MAnalyse: Can not load file Compute.cso %s", e.what()
-    ); 
-  }
-  // Define root table layout
-  {
-    CD3DX12_DESCRIPTOR_RANGE descRange[e_numRootParameters];
-    descRange[e_rootParameterSampler].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 1, 0); // s0
-    descRange[e_rootParameterSRV].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 5, 0); // t0
-    descRange[e_rootParameterUAV].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0); // u0
-
-    CD3DX12_ROOT_PARAMETER rootParameters[e_numRootParameters];
-    rootParameters[e_rootParameterCB].InitAsConstantBufferView(0, 0, D3D12_SHADER_VISIBILITY_ALL);
-    rootParameters[e_rootParameterSampler].InitAsDescriptorTable(1, &descRange[e_rootParameterSampler], D3D12_SHADER_VISIBILITY_ALL);
-    rootParameters[e_rootParameterSRV].InitAsDescriptorTable(1, &descRange[e_rootParameterSRV], D3D12_SHADER_VISIBILITY_ALL);
-    rootParameters[e_rootParameterUAV].InitAsDescriptorTable(1, &descRange[e_rootParameterUAV], D3D12_SHADER_VISIBILITY_ALL);
-
-    CD3DX12_ROOT_SIGNATURE_DESC rootSignature(_countof(rootParameters), rootParameters);
-
-    ComPtr<ID3DBlob> serializedSignature;
-    hr = D3D12SerializeRootSignature(&rootSignature, D3D_ROOT_SIGNATURE_VERSION_1, serializedSignature.GetAddressOf(), nullptr);
-    if (hr != S_OK)
+    // load compute shader
+    std::vector<uint8_t> computeShaderBlob;
+    try {
+      computeShaderBlob = DX::ReadData(L"Compute.cso");
+    }
+    catch (std::exception & e)
     {
       env->ThrowError(
-        "MAnalyse: Error D3D12SerializeRootSignature"
+        "MAnalyse: Can not load file Compute.cso %s", e.what()
       );
     }
+    // Define root table layout
+    {
+      CD3DX12_DESCRIPTOR_RANGE descRange[e_numRootParameters];
+      descRange[e_rootParameterSampler].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 1, 0); // s0
+      descRange[e_rootParameterSRV].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 5, 0); // t0
+      descRange[e_rootParameterUAV].Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0); // u0
 
-    // Create the root signature
-    hr = m_D3D12device->CreateRootSignature(
+      CD3DX12_ROOT_PARAMETER rootParameters[e_numRootParameters];
+      rootParameters[e_rootParameterCB].InitAsConstantBufferView(0, 0, D3D12_SHADER_VISIBILITY_ALL);
+      rootParameters[e_rootParameterSampler].InitAsDescriptorTable(1, &descRange[e_rootParameterSampler], D3D12_SHADER_VISIBILITY_ALL);
+      rootParameters[e_rootParameterSRV].InitAsDescriptorTable(1, &descRange[e_rootParameterSRV], D3D12_SHADER_VISIBILITY_ALL);
+      rootParameters[e_rootParameterUAV].InitAsDescriptorTable(1, &descRange[e_rootParameterUAV], D3D12_SHADER_VISIBILITY_ALL);
+
+      CD3DX12_ROOT_SIGNATURE_DESC rootSignature(_countof(rootParameters), rootParameters);
+
+      ComPtr<ID3DBlob> serializedSignature;
+      hr = D3D12SerializeRootSignature(&rootSignature, D3D_ROOT_SIGNATURE_VERSION_1, serializedSignature.GetAddressOf(), nullptr);
+      if (hr != S_OK)
+      {
+        env->ThrowError(
+          "MAnalyse: Error D3D12SerializeRootSignature"
+        );
+      }
+
+      // Create the root signature
+      hr = m_D3D12device->CreateRootSignature(
         iHWNodeIndex,
         serializedSignature->GetBufferPointer(),
         serializedSignature->GetBufferSize(),
         IID_PPV_ARGS(&m_computeRootSignature));
 
+      if (hr != S_OK)
+      {
+        env->ThrowError(
+          "MAnalyse: Error D3D12Device -> CreateRootSignature"
+        );
+      }
+    }
+
+    // Create compute pipeline state
+    D3D12_COMPUTE_PIPELINE_STATE_DESC descComputePSO = {};
+    descComputePSO.pRootSignature = m_computeRootSignature.Get();
+    descComputePSO.CS.pShaderBytecode = computeShaderBlob.data();
+    descComputePSO.CS.BytecodeLength = computeShaderBlob.size();
+    descComputePSO.NodeMask = iHWNodeIndex;
+
+    hr = m_D3D12device->CreateComputePipelineState(&descComputePSO, IID_PPV_ARGS(&m_computePSO));
     if (hr != S_OK)
     {
       env->ThrowError(
-        "MAnalyse: Error D3D12Device -> CreateRootSignature"
+        "MAnalyse: Error CreateComputePipelineState"
       );
     }
-  }
 
-  // Create compute pipeline state
-  D3D12_COMPUTE_PIPELINE_STATE_DESC descComputePSO = {};
-  descComputePSO.pRootSignature = m_computeRootSignature.Get();
-  descComputePSO.CS.pShaderBytecode = computeShaderBlob.data();
-  descComputePSO.CS.BytecodeLength = computeShaderBlob.size();
-  descComputePSO.NodeMask = iHWNodeIndex;
-
-  hr = m_D3D12device->CreateComputePipelineState(&descComputePSO, IID_PPV_ARGS(&m_computePSO));
-  if (hr != S_OK)
-  {
-    env->ThrowError(
-      "MAnalyse: Error CreateComputePipelineState"
-    );
-  }
-
-  // Create compute allocator, command queue and command list
-  D3D12_COMMAND_QUEUE_DESC descCommandQueue = { D3D12_COMMAND_LIST_TYPE_COMPUTE, 0, D3D12_COMMAND_QUEUE_FLAG_NONE, iHWNodeIndex };
-  hr = m_D3D12device->CreateCommandQueue(&descCommandQueue, IID_PPV_ARGS(&m_computeCommandQueue));
-  if (hr != S_OK)
-  {
-    env->ThrowError(
-      "MAnalyse: Error CreateCommandQueue -> D3D12_COMMAND_LIST_TYPE_COMPUTE"
-    );
-  }
-
-  hr = m_D3D12device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COMPUTE, IID_PPV_ARGS(&m_computeAllocator));
-  if (hr != S_OK)
-  {
-    env->ThrowError(
-      "MAnalyse: Error CreateCommandAllocator -> D3D12_COMMAND_LIST_TYPE_COMPUTE"
-    );
-  }
-
-  hr = m_D3D12device->CreateCommandList(
-    iHWNodeIndex,
-    D3D12_COMMAND_LIST_TYPE_COMPUTE,
-    m_computeAllocator.Get(),
-    m_computePSO.Get(),
-    IID_PPV_ARGS(&m_computeCommandList));
-  if (hr != S_OK)
-  {
-    env->ThrowError(
-      "MAnalyse: Error CreateCommandList -> D3D12_COMMAND_LIST_TYPE_COMPUTE"
-    );
-  }
-
-  m_computeCommandList->Close();
-
-  // upload sadCSparams
-  {
-    CD3DX12_HEAP_PROPERTIES uploadCBHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
-    CD3DX12_RESOURCE_DESC bufferCBDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(SAD_CS_PARAMS)); // or 4KB mempage ?
-
-    // Allocate the CB upload heap
-    hr = m_D3D12device->CreateCommittedResource(
-      &uploadCBHeapProperties,
-      D3D12_HEAP_FLAG_NONE,
-      &bufferCBDesc,
-      D3D12_RESOURCE_STATE_GENERIC_READ,
-      nullptr,
-      IID_PPV_ARGS(&spSADCBResource));
+    // Create compute allocator, command queue and command list
+    D3D12_COMMAND_QUEUE_DESC descCommandQueue = { D3D12_COMMAND_LIST_TYPE_COMPUTE, 0, D3D12_COMMAND_QUEUE_FLAG_NONE, iHWNodeIndex };
+    hr = m_D3D12device->CreateCommandQueue(&descCommandQueue, IID_PPV_ARGS(&m_computeCommandQueue));
     if (hr != S_OK)
     {
       env->ThrowError(
-        "MAnalyse: Error CreateCommittedResource -> spSADCBResource"
+        "MAnalyse: Error CreateCommandQueue -> D3D12_COMMAND_LIST_TYPE_COMPUTE"
       );
     }
 
-    // Get a pointer to the memory
-    void* pSADCBMemory = nullptr;
-    hr = spSADCBResource->Map(0, nullptr, &pSADCBMemory);
+    hr = m_D3D12device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COMPUTE, IID_PPV_ARGS(&m_computeAllocator));
     if (hr != S_OK)
     {
       env->ThrowError(
-        "MAnalyse: Error spSADCBResource->Map"
+        "MAnalyse: Error CreateCommandAllocator -> D3D12_COMMAND_LIST_TYPE_COMPUTE"
       );
     }
 
-    sadCBparamsBV.BufferLocation = spSADCBResource->GetGPUVirtualAddress();
-
-    SAD_CS_PARAMS* pCBsadCSparams = reinterpret_cast<SAD_CS_PARAMS*> (pSADCBMemory);
-
-    pCBsadCSparams->blockSizeH = iBlkSize;// srd._analysis_data.GetBlkSizeX();
-    pCBsadCSparams->blockSizeV = iBlkSize;// srd._analysis_data.GetBlkSizeY();
-    pCBsadCSparams->useChroma = bChroma;// (int)((srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION) != 0);
-    // from PlaneofBlocks.cpp:
-    // effective_chromaSADscale = (2 - (nLogxRatioUV + nLogyRatioUV)); = 0 for YV12 - only currently supported
-    // effective_chromaSADscale -= chromaSADscale;
-    pCBsadCSparams->chromaSADscale = 0 - iChromaSADScale;
-    pCBsadCSparams->chromaSADscale_fine = scaleCSADfine;
-    pCBsadCSparams->nPel = _nPel;
-    pCBsadCSparams->iKernelSize = SHIFTKERNELSIZE;
-
-    float fKrn[8]; // max 8
-    // shift 0.25f 10
-    CalcShiftKernel(fKrn, 0.25f, SHIFTKERNELSIZE);
-
-    pCBsadCSparams->fKernelShift_01_0[0] = fKrn[0];
-    pCBsadCSparams->fKernelShift_01_0[1] = fKrn[1];
-    pCBsadCSparams->fKernelShift_01_0[2] = fKrn[2];
-    pCBsadCSparams->fKernelShift_01_0[3] = fKrn[3];
-    pCBsadCSparams->fKernelShift_01_1[0] = fKrn[4];
-    pCBsadCSparams->fKernelShift_01_1[1] = fKrn[5];
-    pCBsadCSparams->fKernelShift_01_1[2] = fKrn[6];
-    pCBsadCSparams->fKernelShift_01_1[3] = fKrn[7];
-
-    // shift 0.5f 10
-    CalcShiftKernel(fKrn, 0.5f, SHIFTKERNELSIZE);
-
-    pCBsadCSparams->fKernelShift_10_0[0] = fKrn[0];
-    pCBsadCSparams->fKernelShift_10_0[1] = fKrn[1];
-    pCBsadCSparams->fKernelShift_10_0[2] = fKrn[2];
-    pCBsadCSparams->fKernelShift_10_0[3] = fKrn[3];
-    pCBsadCSparams->fKernelShift_10_1[0] = fKrn[4];
-    pCBsadCSparams->fKernelShift_10_1[1] = fKrn[5];
-    pCBsadCSparams->fKernelShift_10_1[2] = fKrn[6];
-    pCBsadCSparams->fKernelShift_10_1[3] = fKrn[7];
-
-    // shift 0.75f 11
-    CalcShiftKernel(fKrn, 0.75f, SHIFTKERNELSIZE);
-
-    pCBsadCSparams->fKernelShift_11_0[0] = fKrn[0];
-    pCBsadCSparams->fKernelShift_11_0[1] = fKrn[1];
-    pCBsadCSparams->fKernelShift_11_0[2] = fKrn[2];
-    pCBsadCSparams->fKernelShift_11_0[3] = fKrn[3];
-    pCBsadCSparams->fKernelShift_11_1[0] = fKrn[4];
-    pCBsadCSparams->fKernelShift_11_1[1] = fKrn[5];
-    pCBsadCSparams->fKernelShift_11_1[2] = fKrn[6];
-    pCBsadCSparams->fKernelShift_11_1[3] = fKrn[7];
-
-
-//    if (optSearchOption == 5)
+    hr = m_D3D12device->CreateCommandList(
+      iHWNodeIndex,
+      D3D12_COMMAND_LIST_TYPE_COMPUTE,
+      m_computeAllocator.Get(),
+      m_computePSO.Get(),
+      IID_PPV_ARGS(&m_computeCommandList));
+    if (hr != S_OK)
     {
-      pCBsadCSparams->precisionMVs = 2; // bitshift 2= /4
+      env->ThrowError(
+        "MAnalyse: Error CreateCommandList -> D3D12_COMMAND_LIST_TYPE_COMPUTE"
+      );
     }
-//    else // ==6
-//    {
-//      pCBsadCSparams->precisionMVs = 1; // bitshift 1 = /2
-//    }
 
-    spSADCBResource->Unmap(0, nullptr);
-  }
+    m_computeCommandList->Close();
+
+    // upload sadCSparams
+    {
+      CD3DX12_HEAP_PROPERTIES uploadCBHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
+      CD3DX12_RESOURCE_DESC bufferCBDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(SAD_CS_PARAMS)); // or 4KB mempage ?
+
+      // Allocate the CB upload heap
+      hr = m_D3D12device->CreateCommittedResource(
+        &uploadCBHeapProperties,
+        D3D12_HEAP_FLAG_NONE,
+        &bufferCBDesc,
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        nullptr,
+        IID_PPV_ARGS(&spSADCBResource));
+      if (hr != S_OK)
+      {
+        env->ThrowError(
+          "MAnalyse: Error CreateCommittedResource -> spSADCBResource"
+        );
+      }
+
+      // Get a pointer to the memory
+      void* pSADCBMemory = nullptr;
+      hr = spSADCBResource->Map(0, nullptr, &pSADCBMemory);
+      if (hr != S_OK)
+      {
+        env->ThrowError(
+          "MAnalyse: Error spSADCBResource->Map"
+        );
+      }
+
+      sadCBparamsBV.BufferLocation = spSADCBResource->GetGPUVirtualAddress();
+
+      SAD_CS_PARAMS* pCBsadCSparams = reinterpret_cast<SAD_CS_PARAMS*> (pSADCBMemory);
+
+      pCBsadCSparams->blockSizeH = iBlkSize;// srd._analysis_data.GetBlkSizeX();
+      pCBsadCSparams->blockSizeV = iBlkSize;// srd._analysis_data.GetBlkSizeY();
+      pCBsadCSparams->useChroma = bChroma;// (int)((srd._analysis_data.nFlags & MOTION_USE_CHROMA_MOTION) != 0);
+      // from PlaneofBlocks.cpp:
+      // effective_chromaSADscale = (2 - (nLogxRatioUV + nLogyRatioUV)); = 0 for YV12 - only currently supported
+      // effective_chromaSADscale -= chromaSADscale;
+      pCBsadCSparams->chromaSADscale = 0 - iChromaSADScale;
+      pCBsadCSparams->chromaSADscale_fine = scaleCSADfine;
+      pCBsadCSparams->nPel = _nPel;
+      pCBsadCSparams->iKernelSize = SHIFTKERNELSIZE;
+
+      float fKrn[8]; // max 8
+      // shift 0.25f 10
+      CalcShiftKernel(fKrn, 0.25f, SHIFTKERNELSIZE);
+
+      pCBsadCSparams->fKernelShift_01_0[0] = fKrn[0];
+      pCBsadCSparams->fKernelShift_01_0[1] = fKrn[1];
+      pCBsadCSparams->fKernelShift_01_0[2] = fKrn[2];
+      pCBsadCSparams->fKernelShift_01_0[3] = fKrn[3];
+      pCBsadCSparams->fKernelShift_01_1[0] = fKrn[4];
+      pCBsadCSparams->fKernelShift_01_1[1] = fKrn[5];
+      pCBsadCSparams->fKernelShift_01_1[2] = fKrn[6];
+      pCBsadCSparams->fKernelShift_01_1[3] = fKrn[7];
+
+      // shift 0.5f 10
+      CalcShiftKernel(fKrn, 0.5f, SHIFTKERNELSIZE);
+
+      pCBsadCSparams->fKernelShift_10_0[0] = fKrn[0];
+      pCBsadCSparams->fKernelShift_10_0[1] = fKrn[1];
+      pCBsadCSparams->fKernelShift_10_0[2] = fKrn[2];
+      pCBsadCSparams->fKernelShift_10_0[3] = fKrn[3];
+      pCBsadCSparams->fKernelShift_10_1[0] = fKrn[4];
+      pCBsadCSparams->fKernelShift_10_1[1] = fKrn[5];
+      pCBsadCSparams->fKernelShift_10_1[2] = fKrn[6];
+      pCBsadCSparams->fKernelShift_10_1[3] = fKrn[7];
+
+      // shift 0.75f 11
+      CalcShiftKernel(fKrn, 0.75f, SHIFTKERNELSIZE);
+
+      pCBsadCSparams->fKernelShift_11_0[0] = fKrn[0];
+      pCBsadCSparams->fKernelShift_11_0[1] = fKrn[1];
+      pCBsadCSparams->fKernelShift_11_0[2] = fKrn[2];
+      pCBsadCSparams->fKernelShift_11_0[3] = fKrn[3];
+      pCBsadCSparams->fKernelShift_11_1[0] = fKrn[4];
+      pCBsadCSparams->fKernelShift_11_1[1] = fKrn[5];
+      pCBsadCSparams->fKernelShift_11_1[2] = fKrn[6];
+      pCBsadCSparams->fKernelShift_11_1[3] = fKrn[7];
+
+
+      //    if (optSearchOption == 5)
+      {
+        pCBsadCSparams->precisionMVs = 2; // bitshift 2= /4
+      }
+      //    else // ==6
+      //    {
+      //      pCBsadCSparams->precisionMVs = 1; // bitshift 1 = /2
+      //    }
+
+      spSADCBResource->Unmap(0, nullptr);
+    }
+  } // if (optsearchOption != 5)
 
   hr = m_D3D12device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence));
   if (hr != S_OK)
@@ -2302,30 +2304,33 @@ void MVAnalyse::Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, i
     );
   }
 
-  // wait until CB upload finishes ?
-        // Signal and increment the fence value.
-  const UINT64 fence_Graphics = m_fenceValue;
-  hr = m_computeCommandQueue->Signal(m_fence.Get(), fence_Graphics); // can reuse it ?
-  if (hr != S_OK)
+  if (optSearchOption == 5)
   {
-    env->ThrowError(
-      "MAnalyse: Error m_computeCommandQueue->Signal fence_Graphics"
-    );
-  }
-
-  m_fenceValue++;
-
-  // Wait until the previous op is finished.
-  if (m_fence->GetCompletedValue() < fence_Graphics)
-  {
-    hr = m_fence->SetEventOnCompletion(fence_Graphics, m_computeFenceEvent);
+    // wait until CB upload finishes ?
+          // Signal and increment the fence value.
+    const UINT64 fence_Graphics = m_fenceValue;
+    hr = m_computeCommandQueue->Signal(m_fence.Get(), fence_Graphics); // can reuse it ?
     if (hr != S_OK)
     {
       env->ThrowError(
-        "MAnalyse: Error m_fence->SetEventOnCompletion -> EventGraphics (sadCBparams upload)"
+        "MAnalyse: Error m_computeCommandQueue->Signal fence_Graphics"
       );
     }
-    WaitForSingleObject(m_computeFenceEvent, INFINITE);
+
+    m_fenceValue++;
+
+    // Wait until the previous op is finished.
+    if (m_fence->GetCompletedValue() < fence_Graphics)
+    {
+      hr = m_fence->SetEventOnCompletion(fence_Graphics, m_computeFenceEvent);
+      if (hr != S_OK)
+      {
+        env->ThrowError(
+          "MAnalyse: Error m_fence->SetEventOnCompletion -> EventGraphics (sadCBparams upload)"
+        );
+      }
+      WaitForSingleObject(m_computeFenceEvent, INFINITE);
+    }
   }
 
 }
