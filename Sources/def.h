@@ -154,6 +154,40 @@ static MV_FORCEINLINE sad_t ScaleSadChroma_f(sad_t sad, int effective_scale, flo
   }
 }
 
+#define CACHE_LINE_SIZE 64
+
+MV_FORCEINLINE void SWprefetch(char* p, int iSize)
+{
+  for (int i = 0; i < iSize; i += CACHE_LINE_SIZE)
+  {
+    (void)* (volatile char*)(p + i);
+  }
+}
+
+MV_FORCEINLINE void HWprefetch_NTA(char* p, int iSize)
+{
+  for (int i = 0; i < iSize; i += CACHE_LINE_SIZE)
+  {
+    _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(p + i)), _MM_HINT_NTA);
+  }
+}
+
+MV_FORCEINLINE void HWprefetch_T0(char* p, int iSize)
+{
+  for (int i = 0; i < iSize; i += CACHE_LINE_SIZE)
+  {
+    _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(p + i)), _MM_HINT_T0);
+  }
+}
+
+MV_FORCEINLINE void HWprefetch_T1(char* p, int iSize)
+{
+  for (int i = 0; i < iSize; i += CACHE_LINE_SIZE)
+  {
+    _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(p + i)), _MM_HINT_T1);
+  }
+}
+
 #endif	// def_HEADER_INCLUDED
 
 

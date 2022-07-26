@@ -3969,7 +3969,10 @@ void MDegrainN::InterpolateOverlap(VECTOR* pInterpolatedMVs, const VECTOR* pInpu
         pInterpolatedMVs[i].x = blx;
         pInterpolatedMVs[i].y = bly;
         // update SAD
-        pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly);
+        if (iInterpolateOverlap == 1)
+          pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly); // better quality - slower
+        else
+          pInterpolatedMVs[i].sad = (pInputMVs[j].sad + pInputMVs[j + 1].sad) / 2; // faster mode
 
         bxInp++;
       }
@@ -3994,7 +3997,10 @@ void MDegrainN::InterpolateOverlap(VECTOR* pInterpolatedMVs, const VECTOR* pInpu
       pInterpolatedMVs[i].x = blx;
       pInterpolatedMVs[i].y = bly;
       // update SAD
-      pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly);
+      if (iInterpolateOverlap == 1)
+        pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly); // better quality - slower
+      else
+        pInterpolatedMVs[i].sad = (pInterpolatedMVs[j].sad + pInterpolatedMVs[j + nBlkX * 2].sad) / 2; // faster mode
 
     }// for by
 

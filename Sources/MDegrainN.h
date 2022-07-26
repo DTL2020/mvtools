@@ -94,7 +94,7 @@ private:
   MV_FORCEINLINE int reorder_ref(int index) const;
   template <int P>
   MV_FORCEINLINE void process_chroma(int plane_mask);
-
+/* moved to def.h 
   MV_FORCEINLINE void SWprefetch(char* p, int iSize)
   {
     for (int i = 0; i < iSize; i += CACHE_LINE_SIZE)
@@ -126,7 +126,7 @@ private:
       _mm_prefetch(const_cast<const CHAR*>(reinterpret_cast<const CHAR*>(p + i)), _MM_HINT_T1);
     }
   }
-
+*/
 
   void process_luma_normal_slice(Slicer::TaskData &td);
   void process_luma_overlap_slice(Slicer::TaskData &td);
