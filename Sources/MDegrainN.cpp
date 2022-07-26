@@ -978,17 +978,12 @@ MDegrainN::MDegrainN(
     uint8_t* pTmp_a;
     VECTOR* pTmp;
 #ifdef _WIN32
-    // to prevent cache set overloading when accessing fpob MVs arrays - add random L2L3_CACHE_LINE_SIZE-bytes sized offset to different allocations
-    size_t random = rand();
-    random *= RAND_OFFSET_MAX;
-    random /= RAND_MAX;
-    random *= L2L3_CACHE_LINE_SIZE;
-
-    SIZE_T stSizeToAlloc = nBlkCount * sizeof(VECTOR) + RAND_OFFSET_MAX * L2L3_CACHE_LINE_SIZE;
+    // to prevent cache set overloading when accessing fpob MVs arrays - add linear L2L3_CACHE_LINE_SIZE-bytes sized offset to different allocations
+    SIZE_T stSizeToAlloc = nBlkCount * sizeof(VECTOR) + _trad * 2 * L2L3_CACHE_LINE_SIZE;
 
     pTmp_a = (BYTE*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
     pFilteredMVsPlanesArrays_a[k] = pTmp_a;
-    pTmp = (VECTOR*)(pTmp_a + random);
+    pTmp = (VECTOR*)(pTmp_a + k * L2L3_CACHE_LINE_SIZE);
 #else
     pTmp = new VECTOR[nBlkCount]; // allocate in heap ?
     pFilteredMVsPlanesArrays[k] = pTmp;
@@ -1003,17 +998,12 @@ MDegrainN::MDegrainN(
     uint8_t* pTmp_a;
     VECTOR* pTmp;
 #ifdef _WIN32
-    // to prevent cache set overloading when accessing fpob MVs arrays - add random L2L3_CACHE_LINE_SIZE-bytes sized offset to different allocations
-    size_t random = rand();
-    random *= RAND_OFFSET_MAX;
-    random /= RAND_MAX;
-    random *= L2L3_CACHE_LINE_SIZE;
-
-    SIZE_T stSizeToAlloc = nBlkCount * sizeof(VECTOR) + RAND_OFFSET_MAX * L2L3_CACHE_LINE_SIZE;
+    // to prevent cache set overloading when accessing fpob MVs arrays - add linear L2L3_CACHE_LINE_SIZE-bytes sized offset to different allocations
+    SIZE_T stSizeToAlloc = nBlkCount * sizeof(VECTOR) + _trad * 2 * L2L3_CACHE_LINE_SIZE;
 
     pTmp_a = (BYTE*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
     pMVsIntOvlpPlanesArrays_a[k] = pTmp_a;
-    pTmp = (VECTOR*)(pTmp_a + random);
+    pTmp = (VECTOR*)(pTmp_a + k * L2L3_CACHE_LINE_SIZE);
 #else
     pTmp = new VECTOR[nBlkCount]; // allocate in heap ?
     pMVsIntOvlpPlanesArrays_a[k] = pTmp;
@@ -1026,20 +1016,16 @@ MDegrainN::MDegrainN(
   if (nUseSubShift == 0)
   {
     iMinBlx = -nBlkSizeX * nPel;
-//    iMaxBlx = nBlkSizeX * nBlkX * nPel;
     iMaxBlx = nWidth * nPel;
     iMinBly = -nBlkSizeY * nPel;
-//    iMaxBly = nBlkSizeY * nBlkY * nPel;
     iMaxBly = nHeight * nPel;
   }
   else
   {
     int iKS_sh_d2 = ((SHIFTKERNELSIZE / 2) + 2); // +2 is to prevent run out of buffer for UV planes
     iMinBlx = (-nBlkSizeX + iKS_sh_d2) * nPel;
-//    iMaxBlx = (nBlkSizeX * nBlkX - iKS_sh_d2) * nPel;
     iMaxBlx = (nWidth - iKS_sh_d2) * nPel;
     iMinBly = (-nBlkSizeY + iKS_sh_d2) * nPel;
-//    iMaxBly = (nBlkSizeY * nBlkY - iKS_sh_d2) * nPel;
     iMaxBly = (nHeight - iKS_sh_d2) * nPel;
   }
 
@@ -2991,9 +2977,10 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
      if (nPel != 1 && nUseSubShift != 0)
      {
        MVPlane* p_plane = (MVPlane*)plane_ptr;
-//       p = plane_ptr->GetPointerSubShift(blx, bly, np);
        p = p_plane->GetPointerSubShift(blx, bly, np);
 
+#ifdef _DEBUG
+ // FOR subshifting debug         
        const BYTE* pold = plane_ptr->GetPointer(blx, bly);
        int np_old = plane_ptr->GetPitch();
 
@@ -3045,7 +3032,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
          }
 
        }
-       
+#endif     
      }
      else
      {
