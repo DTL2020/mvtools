@@ -31,7 +31,7 @@ public:
   unsigned char nPel;
   unsigned char nModeYUV;
   unsigned char nLevels;
-  unsigned char param;
+  unsigned char param; // LSB of free-param member = pel_refine true/false (2.7.46)
 };
 
 

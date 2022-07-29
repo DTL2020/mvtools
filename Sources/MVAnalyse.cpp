@@ -155,6 +155,7 @@ MVAnalyse::MVAnalyse(
   const int		nSuperPel = params.nPel;
   const int		nSuperModeYUV = params.nModeYUV;
   const int		nSuperLevels = params.nLevels;
+  const int   nSuperParam = params.param;
 
   if (nHeight <= 0
     || nSuperHPad < 0
@@ -167,6 +168,18 @@ MVAnalyse::MVAnalyse(
     || nSuperLevels < 1)
   {
     env->ThrowError("MAnalyse: wrong super clip (pseudoaudio) parameters");
+  }
+
+  const bool bPelRefine = (nSuperParam & 1); // LSB of free param member
+
+  if (!bPelRefine && (optSearchOption == 6) && (iUseSubShift == 0) && (nSuperPel > 1))
+  {
+    env->ThrowError("MAnalyse: optSearchOption=6 require UseSubShift=1 if no refined planes in super clip");
+  }
+
+  if ( !bPelRefine && (optSearchOption != 5) && (iUseSubShift == 0) && (nSuperPel > 1))
+  {
+    env->ThrowError("MAnalyse: super clip do not have refined planes for pel > 1 and not compatible set of options used");
   }
 
   analysisData.nWidth = vi.width - nSuperHPad * 2;

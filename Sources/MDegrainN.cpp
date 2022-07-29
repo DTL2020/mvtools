@@ -620,11 +620,16 @@ MDegrainN::MDegrainN(
 
   if (iInterpolateOverlap > 0 && (nOverlapX > 0 || nOverlapY > 0))
   {
-    env_ptr->ThrowError("MDegrainN: InterpolateOverlap > 0 but input MVs clip already have overlap.");
+    env_ptr->ThrowError("MDegrainN: IntOvlp > 0 but input MVs clip already have overlap.");
+  }
+
+  if ((iInterpolateOverlap > 4) || (iInterpolateOverlap < 0))
+  {
+    env_ptr->ThrowError("MDegrainN: IntOvlp can be only from 0 to 4.");
   }
 
   // adjust main params of current MVFilter to overlapped, remember source params
-  if (iInterpolateOverlap > 0)
+  if ((iInterpolateOverlap == 1) || (iInterpolateOverlap == 2)) // full 4x blocknum H and V overlap
   {
     // save original input MVFilter params
     nInputBlkX = nBlkX;
@@ -637,6 +642,25 @@ MDegrainN::MDegrainN(
 
     nBlkX = (nWidth - nOverlapX)
       / (nBlkSizeX - nOverlapX);
+    nBlkY = (nHeight - nOverlapY)
+      / (nBlkSizeY - nOverlapY);
+
+    nBlkCount = nBlkX * nBlkY;
+
+  }
+
+  if ((iInterpolateOverlap == 3) || (iInterpolateOverlap == 4)) // diagonal 2x blocknum V +0.5H overlap
+  {
+    // save original input MVFilter params
+    nInputBlkX = nBlkX;
+    nInputBlkY = nBlkY;
+    nInputBlkCount = nBlkCount;
+
+    //assume interpolated overlap is always BlkSize/2
+    nOverlapX = 0;
+    nOverlapY = nBlkSizeY / 2;
+
+//    nBlkX = (nWidth) / (nBlkSizeX); - not changed
     nBlkY = (nHeight - nOverlapY)
       / (nBlkSizeY - nOverlapY);
 
@@ -704,7 +728,15 @@ MDegrainN::MDegrainN(
   const int nSuperVPad = params.nVPad;
   const int nSuperPel = params.nPel;
   const int nSuperLevels = params.nLevels;
+  const int nSuperParam = params.param;
   _nsupermodeyuv = params.nModeYUV;
+
+  const bool bPelRefine = (nSuperParam & 1); // LSB of free param member
+
+  if (!bPelRefine && (UseSubShift == 0) && (nSuperPel > 1))
+  {
+    env_ptr->ThrowError("MDegrainN: super clip do not have refined planes for pel > 1 and no internal subshifting is used");
+  }
 
   // no need for SAD scaling, it is coming from the mv clip analysis. nSCD1 is already scaled in MVClip constructor
   /* must be good from 2.7.13.22
@@ -1244,7 +1276,18 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
   }
 
   // load pMVsArray into temp buf once, 2.7.46
-  if (iInterpolateOverlap == 0)
+  if ((iInterpolateOverlap == 1) || (iInterpolateOverlap == 2))
+  {
+    for (int k = 0; k < _trad * 2; ++k)
+    {
+      if ((iInterpolateOverlap == 1) || (iInterpolateOverlap == 2))
+        InterpolateOverlap_4x(pMVsIntOvlpPlanesArrays[k], _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0), k);
+      else if ((iInterpolateOverlap == 3) || (iInterpolateOverlap == 4))
+        InterpolateOverlap_2x(pMVsIntOvlpPlanesArrays[k], _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0), k);
+      pMVsWorkPlanesArrays[k] = pMVsIntOvlpPlanesArrays[k];
+    }
+  }
+  else
   {
     for (int k = 0; k < _trad * 2; ++k)
     {
@@ -1252,15 +1295,8 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
       pMVsWorkPlanesArrays[k] = (VECTOR*)pMVsPlanesArrays[k];
     }
   }
-  else
-  {
-    for (int k = 0; k < _trad * 2; ++k)
-    {
-      InterpolateOverlap(pMVsIntOvlpPlanesArrays[k], _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0), k);
-      pMVsWorkPlanesArrays[k] = pMVsIntOvlpPlanesArrays[k];
-    }
 
-  }
+
   //call Filter MVs here because it equal for luma and all chroma planes
 //  const BYTE* pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
 
@@ -3929,7 +3965,7 @@ MV_FORCEINLINE void MDegrainN::nlimit_chroma(int P)
   );
 }
 
-void MDegrainN::InterpolateOverlap(VECTOR* pInterpolatedMVs, const VECTOR* pInputMVs, int idx)
+void MDegrainN::InterpolateOverlap_4x(VECTOR* pInterpolatedMVs, const VECTOR* pInputMVs, int idx)
 {
   VECTOR* pInp = (VECTOR*)pInputMVs;
 
@@ -3996,6 +4032,88 @@ void MDegrainN::InterpolateOverlap(VECTOR* pInterpolatedMVs, const VECTOR* pInpu
   }	// for by
 
 }
+
+void MDegrainN::InterpolateOverlap_2x(VECTOR* pInterpolatedMVs, const VECTOR* pInputMVs, int idx)
+{
+  VECTOR* pInp = (VECTOR*)pInputMVs;
+
+  // use linear interpolate 2x of x first
+  int i;
+  int bxInp = 0;
+  int byInp = 0;
+  int j;
+
+/*  for (int by = 0; by < nBlkY; by += 2) // output blkY
+  {
+    bxInp = 0;
+    for (int bx = 0; bx < nBlkX; bx++) // output blkX
+    {
+      i = by * nBlkX + bx;
+      j = byInp * nInputBlkX + bxInp;
+      // original MVs in each 2nd MV
+      if ((bx % 2) == 0)
+        pInterpolatedMVs[i] = pInputMVs[j];
+      else
+      {
+        const int blx = (pInputMVs[j].x + pInputMVs[j + 1].x) / 2;
+        const int bly = (pInputMVs[j].y + pInputMVs[j + 1].y) / 2;
+        pInterpolatedMVs[i].x = blx;
+        pInterpolatedMVs[i].y = bly;
+        // update SAD
+        if (iInterpolateOverlap == 1)
+          pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly); // better quality - slower
+        else
+          pInterpolatedMVs[i].sad = (pInputMVs[j].sad + pInputMVs[j + 1].sad) / 2; // faster mode
+
+        bxInp++;
+      }
+    }// for bx
+
+    byInp++;
+
+  }	// for by
+  */
+  // linear interpolate 2x by y of output array using average of 4 neibour MVs
+  byInp = 0;
+
+  for (int by = 0; by < nBlkY; by ++) // output blkY, each line
+  {
+    for (int bx = 0; bx < nBlkX; bx++) // output blkX
+    {
+      i = by * nBlkX + bx;
+      j = byInp * nBlkX + bx;
+
+      if ((by % 2) == 0) // even lines 0,2,4,.. simply copy MV
+      {
+        pInterpolatedMVs[i] = pInputMVs[j];
+        continue;
+      }
+
+      // odd lines - write interpolated MV of 4 neibour
+      // skip last odd line
+      if (byInp == nInputBlkY) continue;
+
+      // skip last block in the interpolated row
+      if (bx == nInputBlkX - 1) continue;
+
+      const int blx = (pInputMVs[j].x + pInputMVs[j+1].x + pInputMVs[j + nInputBlkX * 2].x + pInputMVs[j + nInputBlkX * 2 + 1].x) / 4;
+      const int bly = (pInputMVs[j].y + pInputMVs[j + 1].y + pInputMVs[j + nInputBlkX * 2].y + pInputMVs[j + nInputBlkX * 2 + 1].y) / 4;
+      pInterpolatedMVs[i].x = blx;
+      pInterpolatedMVs[i].y = bly;
+      // update SAD
+      if (iInterpolateOverlap == 3)
+        pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly); // better quality - slower
+      else // == 4
+        pInterpolatedMVs[i].sad = (pInputMVs[j].sad + pInputMVs[j + 1].sad + pInputMVs[j + nInputBlkX * 2].sad + pInputMVs[j + nInputBlkX * 2 + 1].sad) / 4; // faster mode
+
+    }// for by
+
+    byInp ++;
+
+  }	// for by
+
+}
+
 
 MV_FORCEINLINE sad_t MDegrainN::CheckSAD(int bx_src, int by_src, int ref_idx, int dx_ref, int dy_ref)
 {

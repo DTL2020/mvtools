@@ -162,6 +162,10 @@ MVSuper::MVSuper(
   params.nPel = nPel;
   params.nModeYUV = nModeYUV;
   params.nLevels = nLevels;
+  if (pel_refine)
+    params.param |= 1; // set LSB
+  else
+    params.param &= 254; // clear LSB
 
 
   // pack parameters to fake audio properties
