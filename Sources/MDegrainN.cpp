@@ -2918,21 +2918,6 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
 
       for (int k = 0; k < _trad * 2; ++k)
       {
-/*        (this->*use_block_uv_func)(
-          ref_data_ptr_arr[k],
-          pitch_arr[k],
-          weight_arr[k + 1], // from 1st
-          _usable_flag_arr[k],
-          _mv_clip_arr[k],
-          i,
-          _planes_ptr[k][P],
-          pSrcCur,
-          xx << pixelsize_super_shift, //  the pointer increment inside knows that xx later here is incremented with nBlkSize and not nBlkSize>>_xRatioUV
-          _src_pitch_arr[P],
-          bx,
-          by,
-          pMVsPlanesArrays[k]
-        );*/
         if (!bMVsAddProc)
         {
           (this->*use_block_uv_func)(
@@ -4189,36 +4174,6 @@ void MDegrainN::InterpolateOverlap_2x(VECTOR* pInterpolatedMVs, const VECTOR* pI
   int byInp = 0;
   int j;
 
-/*  for (int by = 0; by < nBlkY; by += 2) // output blkY
-  {
-    bxInp = 0;
-    for (int bx = 0; bx < nBlkX; bx++) // output blkX
-    {
-      i = by * nBlkX + bx;
-      j = byInp * nInputBlkX + bxInp;
-      // original MVs in each 2nd MV
-      if ((bx % 2) == 0)
-        pInterpolatedMVs[i] = pInputMVs[j];
-      else
-      {
-        const int blx = (pInputMVs[j].x + pInputMVs[j + 1].x) / 2;
-        const int bly = (pInputMVs[j].y + pInputMVs[j + 1].y) / 2;
-        pInterpolatedMVs[i].x = blx;
-        pInterpolatedMVs[i].y = bly;
-        // update SAD
-        if (iInterpolateOverlap == 1)
-          pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly); // better quality - slower
-        else
-          pInterpolatedMVs[i].sad = (pInputMVs[j].sad + pInputMVs[j + 1].sad) / 2; // faster mode
-
-        bxInp++;
-      }
-    }// for bx
-
-    byInp++;
-
-  }	// for by
-  */
   // linear interpolate 2x by y of output array using average of 4 neibour MVs
   byInp = 0;
 
