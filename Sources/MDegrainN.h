@@ -221,6 +221,7 @@ private:
   int nInputBlkCount;
   void InterpolateOverlap_4x(VECTOR* pInterpolatedMVs, const VECTOR* pInputMVs, int idx);
   void InterpolateOverlap_2x(VECTOR* pInterpolatedMVs, const VECTOR* pInputMVs, int idx);
+  bool bDiagOvlp;
   VECTOR* pMVsWorkPlanesArrays[MAX_TEMP_RAD * 2]; // curernt working MVs
   sad_t veryBigSAD;
   MV_FORCEINLINE sad_t CheckSAD(int bx_src, int by_src, int ref_idx, int dx_ref, int dy_ref);

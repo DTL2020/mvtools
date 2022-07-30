@@ -665,7 +665,12 @@ MDegrainN::MDegrainN(
       / (nBlkSizeY - nOverlapY);
 
     nBlkCount = nBlkX * nBlkY;
+    bDiagOvlp = true;
 
+  }
+  else
+  {
+    bDiagOvlp = false;
   }
 
   _wpow = wpow;
@@ -831,13 +836,27 @@ MDegrainN::MDegrainN(
 
   if (nOverlapX > 0 || nOverlapY > 0)
   {
-    _overwins = std::unique_ptr <OverlapWindows>(
-      new OverlapWindows(nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY)
-      );
-    _overwins_uv = std::unique_ptr <OverlapWindows>(new OverlapWindows(
-      nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super,
-      nOverlapX >> nLogxRatioUV_super, nOverlapY >> nLogyRatioUV_super
-    ));
+    if (!bDiagOvlp)
+    {
+      _overwins = std::unique_ptr <OverlapWindows>(
+        new OverlapWindows(nBlkSizeX, nBlkSizeY, nOverlapX, nOverlapY)
+        );
+      _overwins_uv = std::unique_ptr <OverlapWindows>(new OverlapWindows(
+        nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super,
+        nOverlapX >> nLogxRatioUV_super, nOverlapY >> nLogyRatioUV_super
+      ));
+    }
+    else // interpolated diagonal overlap
+    {
+      _overwins = std::unique_ptr <OverlapWindows>(
+        new OverlapWindows(nBlkSizeX, nBlkSizeY, nBlkSizeX / 2, nOverlapY, true)
+        );
+      _overwins_uv = std::unique_ptr <OverlapWindows>(new OverlapWindows(
+        nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super,
+        (nBlkSizeX / 2) >> nLogxRatioUV_super, nOverlapY >> nLogyRatioUV_super, true
+      ));
+    }
+
     if (_lsb_flag || pixelsize_output > 1)
     {
       _dst_int.resize(_dst_int_pitch * nHeight);
@@ -1276,7 +1295,7 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
   }
 
   // load pMVsArray into temp buf once, 2.7.46
-  if ((iInterpolateOverlap == 1) || (iInterpolateOverlap == 2))
+  if (iInterpolateOverlap > 0)
   {
     for (int k = 0; k < _trad * 2; ++k)
     {
@@ -1886,7 +1905,7 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
 {
   TmpBlock       tmp_block;
 
-  int iDivCL = CACHE_LINE_SIZE / nBlkSizeX;
+//  int iDivCL = CACHE_LINE_SIZE / nBlkSizeX;
 
   const int      rowsize = nBlkSizeY - nOverlapY;
   const BYTE *   pSrcCur = _src_ptr_arr[0] + y_beg * rowsize * _src_pitch_arr[0];
@@ -1907,7 +1926,11 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
 
     int wby = (by == 0) ? 0 * 3 : (by == nBlkY - 1) ? 2 * 3 : 1 * 3; // 0 for very first, 2*3 for very last, 1*3 for all others in the middle
     int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
-
+    if (bDiagOvlp)
+    {
+      if ((by % 2) != 0) xx += nBlkSizeX / 2; // shift src start at odd lines
+    }
+    
     // prefetch source full row in linear lines reading
     for (int iH = 0; iH < nBlkSizeY; ++iH)
     {
@@ -2370,6 +2393,15 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
 
     int xx_uv = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
 
+    if (bDiagOvlp)
+    {
+      if ((by % 2) != 0)
+      {
+        xx += nBlkSizeX / 2; // shift src start at odd lines
+        xx_uv += ((nBlkSizeX / 2) >> nLogxRatioUV_super);
+      }
+    }
+
     // prefetch source full row in linear lines reading
     for (int iH = 0; iH < nBlkSizeY; ++iH)
     {
@@ -2662,6 +2694,11 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
   {
     int xx = 0; // index
 
+    if (bDiagOvlp)
+    {
+      if ((by % 2) != 0) xx += ((nBlkSizeX / 2) >> nLogxRatioUV_super);
+    }
+
     // prefetch source full row in linear lines reading
     for (int iH = 0; iH < (nBlkSizeY >> nLogyRatioUV_super); ++iH)
     {
@@ -2856,6 +2893,11 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
     int wby = (by == 0) ? 0 * 3 : (by == nBlkY - 1) ? 2 * 3 : 1 * 3; // 0 for very first, 2*3 for very last, 1*3 for all others in the middle
     int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
 
+    if (bDiagOvlp)
+    {
+      if ((by % 2) != 0) xx += ((nBlkSizeX / 2) >> nLogxRatioUV_super);
+    }
+
     // prefetch source full row in linear lines reading
     for (int iH = 0; iH < (nBlkSizeY >> nLogyRatioUV_super); ++iH)
     {
@@ -2996,6 +3038,18 @@ if (bly < iMinBly) bly = iMinBly; \
 if (blx > iMaxBlx) blx = iMaxBlx; \
 if (bly > iMaxBly) bly = iMaxBly; 
 
+#define Getblxbly \
+if (!bDiagOvlp)\
+ blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;\
+else\
+{\
+ if ((iby % 2) != 0)\
+   blx = (ibx * nBlkSizeX + nBlkSizeX / 2) * nPel + pMVsArray[i].x;\
+  else\
+   blx = (ibx * nBlkSizeX) * nPel + pMVsArray[i].x;\
+}\
+bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
+
 
 MV_FORCEINLINE void	MDegrainN::use_block_y(
   const BYTE * &p, int &np, int &wref, bool usable_flag, const MvClipInfo &c_info,
@@ -3004,8 +3058,27 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
 {
   if (usable_flag)
   {
-     int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
-     int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
+    int blx;
+    int bly;
+
+/*    if (!bDiagOvlp)
+    {
+      blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+    }
+    else
+    {
+      if ((iby % 2) != 0)
+      {
+        blx = (ibx * nBlkSizeX + nBlkSizeX / 2) * nPel + pMVsArray[i].x;
+      }
+      else
+      {
+        blx = (ibx * nBlkSizeX) * nPel + pMVsArray[i].x;
+      }
+    }
+    bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
+    */
+    Getblxbly
 
   // temp check - DX12_ME return invalid vectors sometime
      ClipBlxBly
@@ -3093,8 +3166,26 @@ MV_FORCEINLINE void MDegrainN::use_block_yuv(const BYTE*& pY, int& npY, const BY
 {
   if (usable_flag)
   {
-    int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
-    int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
+    int blx;
+    int bly;
+/*    int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+    if (!bDiagOvlp)
+    {
+      blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+    }
+    else
+    {
+      if ((iby % 2) != 0)
+      {
+        blx = (ibx * nBlkSizeX + nBlkSizeX / 2) * nPel + pMVsArray[i].x;
+      }
+      else
+      {
+        blx = (ibx * nBlkSizeX) * nPel + pMVsArray[i].x;
+      }
+    }
+    bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y; */
+    Getblxbly
 
     // temp check - DX12_ME return invalid vectors sometime
     ClipBlxBly
@@ -3196,8 +3287,27 @@ MV_FORCEINLINE void	MDegrainN::use_block_y_thSADzeromv_thSADcohmv(
 {
   if (usable_flag)
   {
-    int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
-    int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
+    int blx;
+    int bly;
+
+/*    if (!bDiagOvlp)
+    {
+      blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+    }
+    else
+    {
+      if ((iby % 2) != 0)
+      {
+        blx = (ibx * nBlkSizeX + nBlkSizeX / 2) * nPel + pMVsArray[i].x;
+      }
+      else
+      {
+        blx = (ibx * nBlkSizeX) * nPel + pMVsArray[i].x;
+      }
+    }
+//    int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+    bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;*/
+    Getblxbly
 
     // temp check - DX12_ME return invalid vectors sometime
     ClipBlxBly
@@ -3272,8 +3382,27 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv(
 {
   if (usable_flag)
   {
-     int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
-     int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
+    int blx;
+    int bly;
+
+/*    if (!bDiagOvlp)
+    {
+      blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+    }
+    else
+    {
+      if ((iby % 2) != 0)
+      {
+        blx = (ibx * nBlkSizeX + nBlkSizeX / 2) * nPel + pMVsArray[i].x;
+      }
+      else
+      {
+        blx = (ibx * nBlkSizeX) * nPel + pMVsArray[i].x;
+      }
+    }
+//     int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+     bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y; */
+    Getblxbly
 
      // temp check - DX12_ME return invalid vectors sometime
      ClipBlxBly
@@ -3309,8 +3438,27 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv_thSADzeromv_thSADcohmv(
 {
   if (usable_flag)
   {
-    int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
-    int bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;
+    int blx;
+    int bly;
+
+/*    if (!bDiagOvlp)
+    {
+      blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+    }
+    else
+    {
+      if ((iby % 2) != 0)
+      {
+        blx = (ibx * nBlkSizeX + nBlkSizeX / 2) * nPel + pMVsArray[i].x;
+      }
+      else
+      {
+        blx = (ibx * nBlkSizeX) * nPel + pMVsArray[i].x;
+      }
+    }
+//    int blx = ibx * (nBlkSizeX - nOverlapX) * nPel + pMVsArray[i].x;
+    bly = iby * (nBlkSizeY - nOverlapY) * nPel + pMVsArray[i].y;*/
+    Getblxbly
 
     // temp check - DX12_ME return invalid vectors sometime
     ClipBlxBly
@@ -3377,8 +3525,6 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv_thSADzeromv_thSADcohmv(
     wref = 0;
   }
 }
-
-
 
 void MDegrainN::norm_weights(int wref_arr[], int trad)
 {
@@ -4091,24 +4237,37 @@ void MDegrainN::InterpolateOverlap_2x(VECTOR* pInterpolatedMVs, const VECTOR* pI
 
       // odd lines - write interpolated MV of 4 neibour
       // skip last odd line
-      if (byInp == nInputBlkY) continue;
+      if (byInp == nInputBlkY - 1) continue;
 
-      // skip last block in the interpolated row
-      if (bx == nInputBlkX - 1) continue;
+      // last block in the interpolated row
+      if (bx == nInputBlkX - 1)
+      {
+        const int blx = (pInputMVs[j].x + pInputMVs[j + nInputBlkX].x ) / 2;
+        const int bly = (pInputMVs[j].y + pInputMVs[j + nInputBlkX].y ) / 2;
+        pInterpolatedMVs[i].x = blx;
+        pInterpolatedMVs[i].y = bly;
+        // update SAD
+        if (iInterpolateOverlap == 3)
+          pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly); // better quality - slower
+        else // == 4
+          pInterpolatedMVs[i].sad = (pInputMVs[j].sad + pInputMVs[j + nInputBlkX].sad ) / 2; // faster mode
 
-      const int blx = (pInputMVs[j].x + pInputMVs[j+1].x + pInputMVs[j + nInputBlkX * 2].x + pInputMVs[j + nInputBlkX * 2 + 1].x) / 4;
-      const int bly = (pInputMVs[j].y + pInputMVs[j + 1].y + pInputMVs[j + nInputBlkX * 2].y + pInputMVs[j + nInputBlkX * 2 + 1].y) / 4;
+        continue;
+      }
+
+      const int blx = (pInputMVs[j].x + pInputMVs[j + 1].x + pInputMVs[j + nInputBlkX].x + pInputMVs[j + nInputBlkX + 1].x) / 4;
+      const int bly = (pInputMVs[j].y + pInputMVs[j + 1].y + pInputMVs[j + nInputBlkX].y + pInputMVs[j + nInputBlkX + 1].y) / 4;
       pInterpolatedMVs[i].x = blx;
       pInterpolatedMVs[i].y = bly;
       // update SAD
       if (iInterpolateOverlap == 3)
         pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly); // better quality - slower
       else // == 4
-        pInterpolatedMVs[i].sad = (pInputMVs[j].sad + pInputMVs[j + 1].sad + pInputMVs[j + nInputBlkX * 2].sad + pInputMVs[j + nInputBlkX * 2 + 1].sad) / 4; // faster mode
+        pInterpolatedMVs[i].sad = (pInputMVs[j].sad + pInputMVs[j + 1].sad + pInputMVs[j + nInputBlkX].sad + pInputMVs[j + nInputBlkX + 1].sad) / 4; // faster mode
 
     }// for by
 
-    byInp ++;
+    if ((by % 2) != 0) byInp ++;
 
   }	// for by
 

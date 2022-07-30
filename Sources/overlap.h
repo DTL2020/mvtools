@@ -45,6 +45,7 @@ class OverlapWindows
   int ox; // overap sizes
   int oy;
   int size; // full window size= nx*ny
+  bool bDiagOvlp;
 
   short * Overlap9Windows;
   float * Overlap9WindowsF;
@@ -57,7 +58,7 @@ class OverlapWindows
   float *fWin1UVylast;
 public :
 
-  OverlapWindows(int _nx, int _ny, int _ox, int _oy);
+  OverlapWindows(int _nx, int _ny, int _ox, int _oy, bool _bDiagOvlp=false);
    ~OverlapWindows();
 
    MV_FORCEINLINE int Getnx() const { return nx; }

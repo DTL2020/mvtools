@@ -92,13 +92,14 @@
 // ny: blocksize vertical
 // ox: overlap horizontal
 // oy: overlap vertical
-OverlapWindows::OverlapWindows(int _nx, int _ny, int _ox, int _oy)
+OverlapWindows::OverlapWindows(int _nx, int _ny, int _ox, int _oy, bool _bDiagOvlp)
 {
   nx = _nx;
   ny = _ny;
   ox = _ox;
   oy = _oy;
   size = nx*ny;
+  bDiagOvlp = _bDiagOvlp;
 
      //  windows
      fWin1UVx = new float[nx];
@@ -189,30 +190,77 @@ OverlapWindows::OverlapWindows(int _nx, int _ny, int _ox, int _oy)
       // a2+a3  a2+a3| a2+a3+b2+b3   a2+a3+b2+b3 | b2+b3   b2+b3 | b2+b3+c2+c3   b2+b3+c2+c3 | c2+c3   c2+c3
       // ...
 
-      // Combine precomputed horizontal and vertical weights for 3x3 special areas
-      for (int j = 0; j < ny; j++)
+      if (!bDiagOvlp)
       {
-        for (int i = 0; i < nx; i++)
+        // Combine precomputed horizontal and vertical weights for 3x3 special areas
+        for (int j = 0; j < ny; j++)
         {
-          winOverUVTL[i] = (int)(fWin1UVyfirst[j] * fWin1UVxfirst[i] * 2048 + 0.5f); // Top Left
-          winOverUVTM[i] = (int)(fWin1UVyfirst[j] * fWin1UVx[i] * 2048 + 0.5f);      // Top Middle
-          winOverUVTR[i] = (int)(fWin1UVyfirst[j] * fWin1UVxlast[i] * 2048 + 0.5f);  // Top Right
-          winOverUVML[i] = (int)(fWin1UVy[j] * fWin1UVxfirst[i] * 2048 + 0.5f);      // Middle Left
-          winOverUVMM[i] = (int)(fWin1UVy[j] * fWin1UVx[i] * 2048 + 0.5f);           // Middle Middle
-          winOverUVMR[i] = (int)(fWin1UVy[j] * fWin1UVxlast[i] * 2048 + 0.5f);       // Middle Right
-          winOverUVBL[i] = (int)(fWin1UVylast[j] * fWin1UVxfirst[i] * 2048 + 0.5f);  // Bottom Left
-          winOverUVBM[i] = (int)(fWin1UVylast[j] * fWin1UVx[i] * 2048 + 0.5f);       // Bottom Middle
-          winOverUVBR[i] = (int)(fWin1UVylast[j] * fWin1UVxlast[i] * 2048 + 0.5f);   // Bottom Right
+          for (int i = 0; i < nx; i++)
+          {
+            winOverUVTL[i] = (int)(fWin1UVyfirst[j] * fWin1UVxfirst[i] * 2048 + 0.5f); // Top Left
+            winOverUVTM[i] = (int)(fWin1UVyfirst[j] * fWin1UVx[i] * 2048 + 0.5f);      // Top Middle
+            winOverUVTR[i] = (int)(fWin1UVyfirst[j] * fWin1UVxlast[i] * 2048 + 0.5f);  // Top Right
+            winOverUVML[i] = (int)(fWin1UVy[j] * fWin1UVxfirst[i] * 2048 + 0.5f);      // Middle Left
+            winOverUVMM[i] = (int)(fWin1UVy[j] * fWin1UVx[i] * 2048 + 0.5f);           // Middle Middle
+            winOverUVMR[i] = (int)(fWin1UVy[j] * fWin1UVxlast[i] * 2048 + 0.5f);       // Middle Right
+            winOverUVBL[i] = (int)(fWin1UVylast[j] * fWin1UVxfirst[i] * 2048 + 0.5f);  // Bottom Left
+            winOverUVBM[i] = (int)(fWin1UVylast[j] * fWin1UVx[i] * 2048 + 0.5f);       // Bottom Middle
+            winOverUVBR[i] = (int)(fWin1UVylast[j] * fWin1UVxlast[i] * 2048 + 0.5f);   // Bottom Right
+          }
+          winOverUVTL += nx;
+          winOverUVTM += nx;
+          winOverUVTR += nx;
+          winOverUVML += nx;
+          winOverUVMM += nx;
+          winOverUVMR += nx;
+          winOverUVBL += nx;
+          winOverUVBM += nx;
+          winOverUVBR += nx;
         }
-        winOverUVTL += nx;
-        winOverUVTM += nx;
-        winOverUVTR += nx;
-        winOverUVML += nx;
-        winOverUVMM += nx;
-        winOverUVMR += nx;
-        winOverUVBL += nx;
-        winOverUVBM += nx;
-        winOverUVBR += nx;
+      }
+      else // bDiagOvlp
+      {
+        // Combine precomputed horizontal and vertical weights for 3x3 special areas
+        for (int j = 0; j < ny; j++)
+        {
+          for (int i = 0; i < nx; i++)
+          {
+//            winOverUVTL[i] = (int)(fWin1UVyfirst[j] * fWin1UVxfirst[i] * 2048 + 0.5f); // Top Left
+            winOverUVTL[i] = (int)((fWin1UVyfirst[j] + fWin1UVxfirst[i]) * 1024 + 0.5f); // Top Left
+
+//            winOverUVTM[i] = (int)(fWin1UVyfirst[j] * fWin1UVx[i] * 2048 + 0.5f);      // Top Middle
+            winOverUVTM[i] = (int)((fWin1UVyfirst[j] + fWin1UVx[i]) * 1024 + 0.5f);      // Top Middle
+
+//            winOverUVTR[i] = (int)(fWin1UVyfirst[j] * fWin1UVxlast[i] * 2048 + 0.5f);  // Top Right
+            winOverUVTR[i] = (int)((fWin1UVyfirst[j] + fWin1UVxlast[i]) * 1024 + 0.5f);  // Top Right
+
+//            winOverUVML[i] = (int)(fWin1UVy[j] * fWin1UVxfirst[i] * 2048 + 0.5f);      // Middle Left
+            winOverUVML[i] = (int)((fWin1UVy[j] + fWin1UVxfirst[i]) * 1024 + 0.5f);      // Middle Left
+
+            winOverUVMM[i] = (int)((fWin1UVy[j] + fWin1UVx[i]) * 1024 + 0.5f);           // Middle Middle
+
+//            winOverUVMR[i] = (int)(fWin1UVy[j] * fWin1UVxlast[i] * 2048 + 0.5f);       // Middle Right
+            winOverUVMR[i] = (int)((fWin1UVy[j] + fWin1UVxlast[i]) * 1024 + 0.5f);       // Middle Right
+
+//            winOverUVBL[i] = (int)(fWin1UVylast[j] * fWin1UVxfirst[i] * 2048 + 0.5f);  // Bottom Left
+            winOverUVBL[i] = (int)((fWin1UVylast[j] + fWin1UVxfirst[i]) * 1024 + 0.5f);  // Bottom Left
+
+//            winOverUVBM[i] = (int)(fWin1UVylast[j] * fWin1UVx[i] * 2048 + 0.5f);       // Bottom Middle
+            winOverUVBM[i] = (int)((fWin1UVylast[j] + fWin1UVx[i]) * 1024 + 0.5f);       // Bottom Middle
+
+//            winOverUVBR[i] = (int)(fWin1UVylast[j] * fWin1UVxlast[i] * 2048 + 0.5f);   // Bottom Right
+            winOverUVBR[i] = (int)((fWin1UVylast[j] + fWin1UVxlast[i]) * 1024 + 0.5f);   // Bottom Right
+          }
+          winOverUVTL += nx;
+          winOverUVTM += nx;
+          winOverUVTR += nx;
+          winOverUVML += nx;
+          winOverUVMM += nx;
+          winOverUVMR += nx;
+          winOverUVBL += nx;
+          winOverUVBM += nx;
+          winOverUVBR += nx;
+        }
       }
     } // end of short coeffs
 
