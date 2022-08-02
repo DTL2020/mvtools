@@ -226,7 +226,6 @@ private:
   sad_t veryBigSAD;
   MV_FORCEINLINE sad_t CheckSAD(int bx_src, int by_src, int ref_idx, int dx_ref, int dy_ref);
 
-
   int nUseSubShift;
   int iMaxBlx; // max blx for GetPointer*()
   int iMinBlx; // min blx for GetPointer*()

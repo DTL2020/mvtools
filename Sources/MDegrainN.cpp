@@ -2068,6 +2068,7 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
   int effective_nSrcPitchUV2 = (nBlkSizeY >> nLogyRatioUV_super)* _src_pitch_arr[2]; // pitch is byte granularity
   int effective_nDstPitchUV2 = (nBlkSizeY >> nLogyRatioUV_super)* _dst_pitch_arr[2]; // pitch is short granularity
 
+
   for (int by = td._y_beg; by < td._y_end; ++by)
   {
     int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
@@ -2375,9 +2376,6 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
   uint16_t* pDstShortUV2 = (_dst_shortUV2.empty()) ? 0 : &_dst_shortUV2[0] + y_beg * rowsizeUV * _dst_short_pitch;
   int* pDstIntUV2 = (_dst_intUV2.empty()) ? 0 : &_dst_intUV2[0] + y_beg * rowsizeUV * _dst_int_pitch;
 
-//  const int tmpPitch = nBlkSizeX;
-//  assert(tmpPitch <= TmpBlock::MAX_SIZE);
-
   int effective_nSrcPitchUV1 = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _src_pitch_arr[1]; // pitch is byte granularity
   int effective_dstShortPitchUV1 = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _dst_short_pitch; // pitch is short granularity
   int effective_dstIntPitchUV1 = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _dst_int_pitch; // pitch is int granularity
@@ -2385,7 +2383,9 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
   int effective_nSrcPitchUV2 = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _src_pitch_arr[2]; // pitch is byte granularity
   int effective_dstShortPitchUV2 = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _dst_short_pitch; // pitch is short granularity
   int effective_dstIntPitchUV2 = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _dst_int_pitch; // pitch is int granularity
- 
+
+  int iBlkScanDir;
+  int iBlkxStart;
 
   for (int by = y_beg; by < y_end; ++by)
   {
@@ -2412,6 +2412,19 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
       }
     }
 
+    if (by % 2 == 0) // meander scan - left to right
+    {
+      iBlkScanDir = 1;
+      iBlkxStart = 0;
+    }
+    else // right to left scan
+    {
+      iBlkScanDir = -1;
+      iBlkxStart = ibxLast - 1;
+      xx += (nBlkSizeX - nOverlapX) * iBlkxStart;
+      xx_uv += ((nBlkSizeX - nOverlapX) >> nLogxRatioUV_super) * iBlkxStart;
+    }
+    
     // prefetch source full row in linear lines reading
     for (int iH = 0; iH < nBlkSizeY; ++iH)
     {
@@ -2424,8 +2437,11 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
       HWprefetch_T1((char*)pSrcCurUV2 + _src_pitch_arr[2] * iH, nBlkX * (nBlkSizeX >> nLogxRatioUV_super));
     }
 
-    for (int bx = 0; bx < ibxLast; ++bx)
+//    for (int bx = 0; bx < ibxLast; ++bx)
+    for (int ibx = 0; ibx < ibxLast; ++ibx)
     {
+      int bx = iBlkxStart + ibx * iBlkScanDir;
+
       // select window
       int wbx;
       // indexing overlap windows weighting table: left=+0 middle=+1 rightmost=+2
@@ -2672,8 +2688,10 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
           winOverUV, nBlkSizeX >> nLogxRatioUV_super);
       }
       
-      xx += nBlkSizeX - nOverlapX;
-      xx_uv += ((nBlkSizeX - nOverlapX) >> nLogxRatioUV_super); // no pixelsize here
+//      xx += nBlkSizeX - nOverlapX;
+//      xx_uv += ((nBlkSizeX - nOverlapX) >> nLogxRatioUV_super); // no pixelsize here
+      xx += (nBlkSizeX - nOverlapX) * iBlkScanDir;
+      xx_uv += ((nBlkSizeX - nOverlapX) >> nLogxRatioUV_super) * iBlkScanDir; // no pixelsize here
 
     } // for bx
 
