@@ -775,6 +775,60 @@
         1: 4:4<br />
         2: 4:8<br />
     </p>
+    <p class="var">optSearchOption</p>
+    <p>
+        Enables different optimizations or special processing modes after version 2.7.45.
+        May cause different result from value 0.
+        <table>
+            <tr><td><b>0</b></td><td>Default compatible with versions to 2.7.45 processing.</td></tr>
+            <tr><td><b>1</b></td><td>Partial SIMD optimizations - should be compatible with most onCPU processing modes.</td></tr>
+            <tr><td><b>2</b></td><td>Special 'fast' set of settings and optimizations, require AVX2 CPU minumum.</td></tr>
+            <tr><td><b>3</b></td><td>New experimental multi-block processing if local vectors are coherent, require AVX2 CPU minumum.</td></tr>
+            <tr><td><b>4</b></td><td>New experimental multi-block processing if local vectors are coherent, require AVX512 CPU minumum.</td></tr>
+            <tr>
+                <td><b>5</b></td>
+                <td>
+                    Use DirectX 12 Motion Estimation API and hardware accelerator (require Windows 10 and compatible hardware).
+                    Do not use refined planes and do not use levels > 1 from super clip. Perform SAD computing using Compute Shader (file Compute.cso need to be in current working directory).
+                </td>
+            </tr>
+            <tr>
+                <td><b>6</b></td>
+                <td>
+                    Use DirectX 12 Motion Estimation API and hardware accelerator (require Windows 10 and compatible hardware), only limited block sizes available. Typically only 8x8 and 16x16.
+                    May not use refined planes and do not use levels > 1 from super clip. Perform SAD computing using onCPU processing, can use internal sub-sample shifting to
+                    decrease memory usage (with UseSubShift=1).
+                </td>
+            </tr>
+        </table>
+        Notes on DX12 search modes: Only 8x8 and 16x16 block sizes typically supported, only YV12 input format. Most of other search options are not used.
+
+    </p>
+    <p class="var">optPredictorType</p>
+    <p>
+        Enables using of reduced number of predictors or other special processing modes to increase processing speed (may more or less decrease quality) for onCPU search modes.
+        <table>
+            <tr><td><b>0</b></td><td>Default compatible with versions to 2.7.45 processing. All predictors.</td></tr>
+            <tr><td><b>1</b></td><td>Use only zero, global and median predictors.</td></tr>
+            <tr><td><b>2</b></td><td>Use no new predictors. Only interpolated from previous level.</td></tr>
+            <tr><td><b>3</b></td><td>Same as 2 and do not refine. Only check SAD of interpolated predictor.</td></tr>
+            <tr><td><b>4</b></td><td>Output interpolated prediction from previous level. No SAD check at last level.</td></tr>
+        </table>
+    </p>
+    <p class="var">scaleCSADfine</p>
+    <p>
+        Additional float multiplier to chroma SAD in total sum with luma SAD. Allow to fine tune chroma SAD weight.
+    </p>
+    <p class="var">accnum</p>
+    <p>
+        Number of hardware accelerator to use. Numbered from 0.
+    </p>
+    <p class="var">UseSubShift</p>
+    <p>
+        Do not read refined planes from super clip with pel > 1. Use runtime calculated sub shifted block data. Interpolation is most close to sharp=2 of MSuper but not equal.
+        Currently only valid for optSearchOption=6 and optPredictorType=2 (most of other onCPU modes typically much slower).
+    </p>
+
     <h4>Truemotion parameters</h4>
     <p>
         There are few advanced parameters which set coherence of motion vectors
@@ -855,59 +909,6 @@
         Only pan shift is estimated (no zoom and rotation).
         Use false to disable, use true to enable.
         Default is like <var>truemotion</var>.
-    </p>
-    <p class="var">optSearchOption</p>
-    <p>
-        Enables different optimizations or special processing modes after version 2.7.45.
-        May cause different result from value 0.
-        <table>
-            <tr><td><b>0</b></td><td>Default compatible with versions to 2.7.45 processing.</td></tr>
-            <tr><td><b>1</b></td><td>Partial SIMD optimizations - should be compatible with most onCPU processing modes.</td></tr>
-            <tr><td><b>2</b></td><td>Special 'fast' set of settings and optimizations, require AVX2 CPU minumum.</td></tr>
-            <tr><td><b>3</b></td><td>New experimental multi-block processing if local vectors are coherent, require AVX2 CPU minumum.</td></tr>
-            <tr><td><b>4</b></td><td>New experimental multi-block processing if local vectors are coherent, require AVX512 CPU minumum.</td></tr>
-            <tr>
-                <td><b>5</b></td>
-                <td>
-                    Use DirectX 12 Motion Estimation API and hardware accelerator (require Windows 10 and compatible hardware).
-                    Do not use refined planes and do not use levels > 1 from super clip. Perform SAD computing using Compute Shader (file Compute.cso need to be in current working directory).
-                </td>
-            </tr>
-            <tr>
-                <td><b>6</b></td>
-                <td>
-                    Use DirectX 12 Motion Estimation API and hardware accelerator (require Windows 10 and compatible hardware), only limited block sizes available. Typically only 8x8 and 16x16.
-                    May not use refined planes and do not use levels > 1 from super clip. Perform SAD computing using onCPU processing, can use internal sub-sample shifting to
-                    decrease memory usage (with UseSubShift=1).
-                </td>
-            </tr>
-        </table>
-        Notes on DX12 search modes: Only 8x8 and 16x16 block sizes typically supported, only YV12 input format. Most of other search options are not used.
-
-    </p>
-    <p class="var">optPredictorType</p>
-    <p>
-        Enables using of reduced number of predictors or other special processing modes to increase processing speed (may more or less decrease quality) for onCPU search modes.
-        <table>
-            <tr><td><b>0</b></td><td>Default compatible with versions to 2.7.45 processing. All predictors.</td></tr>
-            <tr><td><b>1</b></td><td>Use only zero, global and median predictors.</td></tr>
-            <tr><td><b>2</b></td><td>Use no new predictors. Only interpolated from previous level.</td></tr>
-            <tr><td><b>3</b></td><td>Same as 2 and do not refine. Only check SAD of interpolated predictor.</td></tr>
-            <tr><td><b>4</b></td><td>Output interpolated prediction from previous level. No SAD check at last level.</td></tr>
-        </table>
-    </p>
-    <p class="var">scaleCSADfine</p>
-    <p>
-        Additional float multiplier to chroma SAD in total sum with luma SAD. Allow to fine tune chroma SAD weight.
-    </p>
-    <p class="var">accnum</p>
-    <p>
-        Number of hardware accelerator to use. Numbered from 0.
-    </p>
-    <p class="var">UseSubShift</p>
-    <p>
-        Do not read refined planes from super clip with pel > 1. Use runtime calculated sub shifted block data. Interpolation is most close to sharp=2 of MSuper but not equal.
-        Currently only valid for optSearchOption=6 and optPredictorType=2 (most of other onCPU modes typically much slower).
     </p>
 
     <h3>MCompensate</h3>
@@ -1799,7 +1800,7 @@
     </p>
     <p class="var">wpow</p>
     <p>
-        Control weighting curve of block inside 0..thSAD range. Default 2. Increases weighting from 1 to 6.
+        Control weighting curve of block inside 0..thSAD range. Default 2 as in old versions internally. Increases weighting from 1 to 6.
         7 - equal weighting.
     </p>
     <p class="var">adjSADzeromv</p>
@@ -1827,7 +1828,7 @@
     </p>
     <p class="var">MVLPFSlope</p>
     <p>
-        Slope of MVs LPF in pass-band area. Not still implemented.
+        Slope of MVs LPF in pass-band area. Not yet implemented. Placeholder.
         Default 1.0 - disabled. For compatibility with old versions.
     </p>
     <p class="var">MVLPFGauss</p>
@@ -1851,12 +1852,14 @@
     </p>
     <p class="var">IntOvlp</p>
     <p>
-        Interpolate incoming MVs from motion data clip to have overlap of blocksize/2 in both V and H directions (so 4x more MVs) and perform overlapped processing to
-        decrease blockiness at some scenes.
+        Interpolate MVs from motion data clip to have overlap of blocksize/2 in 2x (diagonally blocksize/2 shifted as in BlockOverlap plugin) or 4x more MVs
+        (as in mvtools with overlapH=overlapV=blocksize/2) and perform overlapped processing to decrease blockiness at some scenes.
         <table>
             <tr><td><b>0</b></td><td>Disabled - use standard processinng.</td></tr>
-            <tr><td><b>1</b></td><td>Enabled with SAD re-checkng of interpolated MVs, better quality, slower.</td></tr>
-            <tr><td><b>2</b></td><td>Enabled with interpolated SAD, may be lower in quality, faster.</td></tr></td></tr>
+            <tr><td><b>1</b></td><td>Enabled 4x mode with SAD re-checkng of interpolated MVs, better quality, slower.</td></tr>
+            <tr><td><b>2</b></td><td>Enabled 4x mode with interpolated SAD, may be lower in quality, faster.</td></tr>
+            <tr><td><b>3</b></td><td>Enabled 2x mode with SAD re-checkng of interpolated MVs, better quality, faster.</td></tr>
+            <tr><td><b>4</b></td><td>Enabled 2x mode with interpolated SAD, may be lower in quality, fastest.</td></tr>
         </table>
         Default 0 - disabled. For compatibility with old versions.
     </p>
