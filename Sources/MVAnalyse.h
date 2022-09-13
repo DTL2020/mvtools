@@ -31,7 +31,7 @@
 #include <memory>
 #include <vector>
 
-#if defined _WIN32 // && defined DX_12ME
+#if defined _WIN32 && defined DX_12ME
 
 #include <initguid.h>
 #include <d3d12.h>
@@ -150,7 +150,7 @@ public:
     int _divide, int _sadx264, sad_t _badSAD, int _badrange, bool _isse,
     bool _meander, bool temporal_flag, bool _tryMany, bool multi_flag,
     bool mt_flag, int _chromaSADScale, int _optSearchOption, int _predictorType,
-    float _scaleCSADfine, int _accnum, int _iUseSubShift, IScriptEnvironment* env);
+    float _scaleCSADfine, int _accnum, int _iUseSubShift, PClip _child_cur, IScriptEnvironment* env);
   ~MVAnalyse();
 
   ::PVideoFrame __stdcall	GetFrame(int n, ::IScriptEnvironment* env) override;
@@ -164,6 +164,8 @@ public:
 private:
 
   void load_src_frame(MVGroupOfFrames &gof, ::PVideoFrame &src, const MVAnalysisData &ana_data);
+
+  PClip child_cur;
 
 #if defined _WIN32 && defined DX12_ME
 
