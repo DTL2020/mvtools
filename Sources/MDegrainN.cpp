@@ -536,7 +536,7 @@ MDegrainN::MDegrainN(
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
   sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
   float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
-  int UseSubShift, int InterpolateOverlap,
+  int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -595,6 +595,8 @@ MDegrainN::MDegrainN(
   , ithMVLPFCorr(thMVLPFCorr)
   , nUseSubShift(UseSubShift)
   , iInterpolateOverlap(InterpolateOverlap)
+  , mvmultirs(_mvmultirs)
+  , thFWBWmvpos(_thFWBWmvpos)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -629,6 +631,11 @@ MDegrainN::MDegrainN(
   }
 
   // adjust main params of current MVFilter to overlapped, remember source params
+      // save original input MVFilter params
+  nInputBlkX = nBlkX;
+  nInputBlkY = nBlkY;
+  nInputBlkCount = nBlkCount;
+
   if ((iInterpolateOverlap == 1) || (iInterpolateOverlap == 2)) // full 4x blocknum H and V overlap
   {
     // save original input MVFilter params
@@ -691,6 +698,25 @@ MDegrainN::MDegrainN(
     else
       CheckSimilarityEO(*(_mv_clip_arr[k]._clip_sptr), txt_0, env_ptr);
 
+  }
+
+  if (mvmultirs != 0) // separate reverse search MVclip provided
+  {
+    for (int k = 0; k < _trad * 2; ++k)
+    {
+      _mv_clip_arr[k]._cliprs_sptr = SharedPtr <MVClip>(
+        new MVClip(mvmultirs, nscd1, nscd2, env_ptr, _trad * 2, k, true) // use MVsArray only, not blocks[]
+        );
+
+      static const char* name_0[2] = { "mvbw", "mvfw" };
+      char txt_0[127 + 1];
+      sprintf(txt_0, "%s%d", name_0[k & 1], 1 + k / 2);
+      //    CheckSimilarity(*(_mv_clip_arr[k]._clip_sptr), txt_0, env_ptr);
+      if (iInterpolateOverlap == 0)
+        CheckSimilarity(*(_mv_clip_arr[k]._cliprs_sptr), txt_0, env_ptr);
+      else
+        CheckSimilarityEO(*(_mv_clip_arr[k]._cliprs_sptr), txt_0, env_ptr);
+    }
   }
 
   const sad_t mv_thscd1 = _mv_clip_arr[0]._clip_sptr->GetThSCD1();
@@ -1134,6 +1160,13 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
     ::PVideoFrame mv = mv_clip.GetFrame(n, env_ptr);
     mv_clip.Update(mv, env_ptr);
     _usable_flag_arr[k] = mv_clip.IsUsable();
+
+    if (mvmultirs != 0) // get and update reverse search MVs
+    {
+      MVClip& mv_clip_rs = *(_mv_clip_arr[k]._cliprs_sptr);
+      ::PVideoFrame mv_rs = mv_clip_rs.GetFrame(n, env_ptr);
+      mv_clip_rs.Update(mv_rs, env_ptr);
+    }
   }
 
   PVideoFrame src = child->GetFrame(n, env_ptr);
@@ -1294,6 +1327,10 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
     }
   }
 
+  // process reverse search MVs data to update SAD of std search to mark too bad MVs
+  if (mvmultirs)
+    ProcessRSMVdata();
+
   // load pMVsArray into temp buf once, 2.7.46
   if (iInterpolateOverlap > 0)
   {
@@ -1310,11 +1347,11 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
   {
     for (int k = 0; k < _trad * 2; ++k)
     {
-      pMVsPlanesArrays[k] = _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0);
-      pMVsWorkPlanesArrays[k] = (VECTOR*)pMVsPlanesArrays[k];
+//      pMVsPlanesArrays[k] = _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0);
+//      pMVsWorkPlanesArrays[k] = (VECTOR*)pMVsPlanesArrays[k];
+      pMVsWorkPlanesArrays[k] = (VECTOR*)_mv_clip_arr[k]._clip_sptr->GetpMVsArray(0);
     }
   }
-
 
   //call Filter MVs here because it equal for luma and all chroma planes
 //  const BYTE* pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
@@ -3179,6 +3216,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
     sad_t block_sad = pMVsArray[i].sad;
 
     wref = DegrainWeightN(c_info._thsad, c_info._thsad_sq, block_sad, _wpow);
+
   }
   else
   {
@@ -4286,4 +4324,54 @@ MV_FORCEINLINE sad_t MDegrainN::CheckSAD(int bx_src, int by_src, int ref_idx, in
   }
 
   return sad_out;
+}
+
+MV_FORCEINLINE void MDegrainN::ProcessRSMVdata(void)
+{
+  int iFailedMVs = 0;
+
+  for (int k = 0; k < _trad * 2; ++k)
+  {
+    VECTOR* fwMVs = (VECTOR*)_mv_clip_arr[k]._clip_sptr->GetpMVsArray(0);
+    VECTOR* bwMVs = (VECTOR*)_mv_clip_arr[k]._cliprs_sptr->GetpMVsArray(0);
+ 
+    for (int by = 0; by < nInputBlkY; by++) // not interpolated overlap count
+    {
+      for (int bx = 0; bx < nInputBlkX; bx++) // not interpolated overlap count
+      {
+        int i = by * nBlkX + bx;
+
+        VECTOR fwMV = fwMVs[i];
+
+        // check SAD - if it > thSAD - skip it
+        if (fwMV.sad > _mv_clip_arr[k]._thsad) continue;
+
+        int blx = bx * (nBlkSizeX - nOverlapX) * nPel + fwMV.x;
+        int bly = by * (nBlkSizeY - nOverlapY) * nPel + fwMV.y;
+
+        ClipBlxBly
+
+        int bx_bw = blx / (nBlkSizeX * nPel);
+        int by_bw = bly / (nBlkSizeY * nPel);
+
+        // do number clipping required also ???
+
+        VECTOR bwMV = bwMVs[by_bw * nBlkX + bx_bw];
+
+        int iLengthSQ_FWMV = fwMV.x * fwMV.x + fwMV.y * fwMV.y;
+        int iLengthSQ_BWMV = bwMV.x * bwMV.x + bwMV.y * bwMV.y;
+
+        if (abs(iLengthSQ_BWMV - iLengthSQ_FWMV) > thFWBWmvpos) 
+        {
+          // fail SAD of bad fw block
+          fwMVs[i].sad = veryBigSAD;
+          iFailedMVs++;
+        }
+        
+      } // bx
+    } // by
+  } // k
+
+  float fPrcFailedMVs = (float)iFailedMVs / float(nInputBlkX * nInputBlkY);
+  int idbr = 0;
 }

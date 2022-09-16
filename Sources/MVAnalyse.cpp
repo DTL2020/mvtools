@@ -49,7 +49,7 @@ MVAnalyse::MVAnalyse(
   int _divide, int _sadx264, sad_t _badSAD, int _badrange, bool _isse,
   bool _meander, bool temporal_flag, bool _tryMany, bool multi_flag,
   bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType,
-  float _scaleCSADfine, int _accnum, int _iUseSubShift, PClip _child_cur, IScriptEnvironment* env
+  float _scaleCSADfine, int _accnum, int _iUseSubShift, PClip _child_cur, int _iSearchDirMode, IScriptEnvironment* env
 )
   : ::GenericVideoFilter(_child)
   , _srd_arr(1)
@@ -65,6 +65,7 @@ MVAnalyse::MVAnalyse(
   , scaleCSADfine(_scaleCSADfine)
   , iUseSubShift(_iUseSubShift)
   , child_cur(_child_cur)
+  , iSearchDirMode(_iSearchDirMode)
 {
   has_at_least_v8 = true;
   try { env->CheckVersion(8); }
@@ -752,12 +753,28 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
                                             // if(has_at_least_v8) env->copyFrameProps(src, dst); // frame property support
     // The result clip is a special MV clip. It does not need to inherit the frame props of source
 
-    load_src_frame(*pSrcGOF, src, srd._analysis_data);
-
-//		DebugPrintf ("MVAnalyse: Get ref frame %d", nref);
-//		DebugPrintf ("MVAnalyse frame %i backward=%i", nsrc, srd._analysis_data.isBackward);
     ::PVideoFrame	ref = child->GetFrame(nref, env); // v2.0
-    load_src_frame(*pRefGOF, ref, srd._analysis_data);
+
+    if (iSearchDirMode == 0 || iSearchDirMode == 2) // standard current to ref search or first standard search of 2 searches
+    {
+      load_src_frame(*pSrcGOF, src, srd._analysis_data);
+
+      //		DebugPrintf ("MVAnalyse: Get ref frame %d", nref);
+      //		DebugPrintf ("MVAnalyse frame %i backward=%i", nsrc, srd._analysis_data.isBackward);
+
+      load_src_frame(*pRefGOF, ref, srd._analysis_data);
+    }
+    else if (iSearchDirMode == 1) // reverse search from ref to current
+    {
+      load_src_frame(*pSrcGOF, ref, srd._analysis_data);
+      load_src_frame(*pRefGOF, src, srd._analysis_data);
+    }
+    else // error !
+    {
+      env->ThrowError(
+        "MAnalyse: SearchDirMode may be only from 0 to 2."
+      );
+    }
 
     const int		fieldShift = ClipFnc::compute_fieldshift(
       child,

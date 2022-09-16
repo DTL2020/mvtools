@@ -31,7 +31,7 @@
 #include <memory>
 #include <vector>
 
-#if defined _WIN32 && defined DX_12ME
+#if defined _WIN32 && defined DX12_ME
 
 #include <initguid.h>
 #include <d3d12.h>
@@ -117,6 +117,7 @@ protected:
   float scaleCSADfine;// DTL test
   int iUseSubShift; // DTL test
   int _cpuFlags; // DTL test
+  int iSearchDirMode; // DTL test, 0 - standard search from current to ref (default), 1 - reverse search from ref to current, 2 - two searches to single output MVClip
 
   int pixelsize; // PF
   int bits_per_pixel;
@@ -150,7 +151,7 @@ public:
     int _divide, int _sadx264, sad_t _badSAD, int _badrange, bool _isse,
     bool _meander, bool temporal_flag, bool _tryMany, bool multi_flag,
     bool mt_flag, int _chromaSADScale, int _optSearchOption, int _predictorType,
-    float _scaleCSADfine, int _accnum, int _iUseSubShift, PClip _child_cur, IScriptEnvironment* env);
+    float _scaleCSADfine, int _accnum, int _iUseSubShift, PClip _child_cur, int _iSearchDirMode, IScriptEnvironment* env);
   ~MVAnalyse();
 
   ::PVideoFrame __stdcall	GetFrame(int n, ::IScriptEnvironment* env) override;

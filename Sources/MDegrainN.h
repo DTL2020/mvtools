@@ -39,7 +39,7 @@ public:
     sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow,
     float adjSADzeromv, float adjSADcohmv, int thCohMV,
     float fMVLPFCutoff, float fMVLPFSlope, float fMVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
-    int UseSubShift, int InterpolateOverlap,
+    int UseSubShift, int InterpolateOverlap, ::PClip _mvmultirs, int _thFWBWmvpos,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -71,6 +71,7 @@ private:
   {
   public:
     SharedPtr <MVClip> _clip_sptr;
+    SharedPtr <MVClip> _cliprs_sptr; // separate MVclip reverse search provided
     SharedPtr <MVGroupOfFrames> _gof_sptr;
     sad_t _thsad;
     sad_t _thsadc;
@@ -162,9 +163,7 @@ private:
   MV_FORCEINLINE void PrefetchMVs(int i);
 
   MvClipArray _mv_clip_arr;
-
-
-
+  
   int _trad;// Temporal radius (nbr frames == _trad * 2 + 1)
   int _yuvplanes;
   float _nlimit;
@@ -193,7 +192,8 @@ private:
 
   // 2.7.46
   int _wpow;
-  const VECTOR* pMVsPlanesArrays[MAX_TEMP_RAD * 2];
+//  const VECTOR* pMVsPlanesArrays[MAX_TEMP_RAD * 2];
+//  const VECTOR* pMVsPlanesArraysRS[MAX_TEMP_RAD * 2]; // reverse search
 
   float fadjSADzeromv;
   float fadjSADcohmv;
@@ -223,6 +223,7 @@ private:
   void InterpolateOverlap_2x(VECTOR* pInterpolatedMVs, const VECTOR* pInputMVs, int idx);
   bool bDiagOvlp;
   VECTOR* pMVsWorkPlanesArrays[MAX_TEMP_RAD * 2]; // curernt working MVs
+  VECTOR* pMVsWorkPlanesArraysRS[MAX_TEMP_RAD * 2]; // curernt working MVs reverse search
   sad_t veryBigSAD;
   MV_FORCEINLINE sad_t CheckSAD(int bx_src, int by_src, int ref_idx, int dx_ref, int dy_ref);
 
@@ -233,6 +234,10 @@ private:
   int iMinBly; // min bly for GetPointer*()
 
   float fSinc(float x);
+
+  PClip mvmultirs;
+  MV_FORCEINLINE void ProcessRSMVdata(void);
+  int thFWBWmvpos;
 
   std::unique_ptr <YUY2Planes> _dst_planes;
   std::unique_ptr <YUY2Planes> _src_planes;
