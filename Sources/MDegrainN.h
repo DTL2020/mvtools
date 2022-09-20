@@ -39,7 +39,7 @@ public:
     sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow,
     float adjSADzeromv, float adjSADcohmv, int thCohMV,
     float fMVLPFCutoff, float fMVLPFSlope, float fMVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
-    int UseSubShift, int InterpolateOverlap, ::PClip _mvmultirs, int _thFWBWmvpos, int _thPostProc1,
+    int UseSubShift, int InterpolateOverlap, ::PClip _mvmultirs, int _thFWBWmvpos, int _thPostProc1, int _iPP1NumSkip,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -240,6 +240,7 @@ private:
   int thFWBWmvpos;
 
   int thPostProc1;
+  int iPP1NumSkip;
   uint8_t* pSubtrTempBlocks; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
   MV_FORCEINLINE uint8_t* PostProc1(const BYTE* pRef[], int Pitch[], int Wall[], int iBlkWidth, int iBlkHeight);
   MV_FORCEINLINE void CopyBlock(uint8_t* pDst, int iDstPitch, uint8_t* pSrc, int iBlkWidth, int iBlkHeight);

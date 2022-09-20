@@ -182,30 +182,25 @@ void SubtractBlockN_C_uint8(
 //  int mul = (int)(1.0f / ((1 << DEGRAIN_WEIGHT_BITS) - (int)wN));
   int mul = (int)((1 << DEGRAIN_WEIGHT_BITS)*((float)(1 << DEGRAIN_WEIGHT_BITS) / (float)((1 << DEGRAIN_WEIGHT_BITS) - (int)wN)));
 
-  uint8_t* pRefBlock = (uint8_t*)pRef[iN-1]; // +-1 ?
-  const int PitchRef = Pitch[iN-1]; // +-1 ?
+  uint8_t* pRefBlock = (uint8_t*)pRef[iN-1]; 
+  const int PitchRef = Pitch[iN-1]; 
 
-  // Wall: 8 bit. rounding: 128
+  // Wall: 8 bit. 
   for (int h = 0; h < blockHeight; ++h)
   {
     for (int x = 0; x < blockWidth; ++x)
     {
       //      target_t val = reinterpret_cast<const pixel_t*>(pSrc)[x] * (target_t)Wall[0] + rounder;
       int val = reinterpret_cast<const uint8_t*>(pSrc)[x];
-      /*      for (int k = 0; k < trad; ++k)
-            {
-              val += reinterpret_cast<const pixel_t*>(pRef[k * 2])[x] * (target_t)Wall[k * 2 + 1]
-                + reinterpret_cast<const pixel_t*>(pRef[k * 2 + 1])[x] * (target_t)Wall[k * 2 + 2]; // do it compatible with 2x16bit weight ?
-            }*/
 
-        val = ((val << 8) - (reinterpret_cast<const uint8_t*>(pRefBlock)[x] * (uint8_t)Wall[iN]));
-        val = val >> 8;
-        val *= mul;
+      val = ((val << 8) - (reinterpret_cast<const uint8_t*>(pRefBlock)[x] * (uint8_t)Wall[iN]));
+      val = val >> 8;
+      val *= mul;
 /*
         if (val < 0) val = 0;
         if (val > 65535) val = 65535;
-        */
-        reinterpret_cast<uint8_t*>(pDst)[x] = (uint8_t)(val >> 8); // 8-16bit
+        */ // hope limiting is never needed ?
+        reinterpret_cast<uint8_t*>(pDst)[x] = (uint8_t)(val >> 8); // 8bit
     }
 
     pDst += nDstPitch;
@@ -646,7 +641,7 @@ MDegrainN::MDegrainN(
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
   sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
   float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
-  int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos, int _thPostProc1,
+  int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos, int _thPostProc1, int _iPP1NumSkip,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -708,6 +703,7 @@ MDegrainN::MDegrainN(
   , mvmultirs(_mvmultirs)
   , thFWBWmvpos(_thFWBWmvpos)
   , thPostProc1(_thPostProc1)
+  , iPP1NumSkip(_iPP1NumSkip)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -1919,7 +1915,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       norm_weights(weight_arr, _trad);
 
       // luma
-      if (thPostProc1 == 0)
+      if ((thPostProc1 == 0) || (iPP1NumSkip == 0))
       _degrainluma_ptr(
         pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
@@ -2336,7 +2332,6 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
       }
 
       norm_weights(weight_arr, _trad);
-
       if (bthLC_diff) norm_weights(weight_arrUV, _trad);
 
       // luma
@@ -2347,45 +2342,30 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
       );
 
-      if (!bthLC_diff)
-      {
-        // single weight for luma and chroma
-        // chroma first plane
-        _degrainchroma_ptr(
-          pDstCurUV1 + (xx_uv << pixelsize_output_shift),
-          pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
-          pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-          ref_data_ptr_arrUV1, pitch_arrUV1, weight_arr, _trad
-        );
-
-        // chroma second plane
-        _degrainchroma_ptr(
-          pDstCurUV2 + (xx_uv << pixelsize_output_shift),
-          pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
-          pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-          ref_data_ptr_arrUV2, pitch_arrUV2, weight_arr, _trad
-        );
-      }
+      // chroma
+      int* pChromaWA;
+      if (bthLC_diff)
+        pChromaWA = &weight_arrUV[0];
       else
-      {
-        // different weight for chroma
-        // chroma first plane
-        _degrainchroma_ptr(
-          pDstCurUV1 + (xx_uv << pixelsize_output_shift),
-          pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
-          pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-          ref_data_ptr_arrUV1, pitch_arrUV1, weight_arrUV, _trad
-        );
+        pChromaWA = &weight_arr[0];
 
-        // chroma second plane
-        _degrainchroma_ptr(
-          pDstCurUV2 + (xx_uv << pixelsize_output_shift),
-          pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
-          pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-          ref_data_ptr_arrUV2, pitch_arrUV2, weight_arrUV, _trad
-        );
+      // single weight for luma and chroma
+      // chroma first plane
+      _degrainchroma_ptr(
+        pDstCurUV1 + (xx_uv << pixelsize_output_shift),
+        pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
+        pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+        ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA/*weight_arr*/, _trad
+      );
 
-      }
+      // chroma second plane
+      _degrainchroma_ptr(
+        pDstCurUV2 + (xx_uv << pixelsize_output_shift),
+        pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
+        pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+        ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA/*weight_arr*/, _trad
+      );
+
       xx += (nBlkSizeX); // xx: indexing offset
       xx_uv += (nBlkSizeX >> nLogxRatioUV_super); // xx: indexing offset
 
@@ -2712,42 +2692,79 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
       if (bthLC_diff) norm_weights(weight_arrUV, _trad);
 
       // luma
-      _degrainluma_ptr(
+/*      _degrainluma_ptr(
         &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-      );
-
-      // chroma
-      if (!bthLC_diff)
-      {
-        // luma and chroma equal weights
-        _degrainchroma_ptr(
-          &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
-          pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-          ref_data_ptr_arrUV1, pitch_arrUV1, weight_arr, _trad
+      );*/
+      if ((thPostProc1 == 0) || (iPP1NumSkip == 0))
+        _degrainluma_ptr(
+          &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
+          pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+          ref_data_ptr_arr, pitch_arr, weight_arr, _trad
         );
-
-        _degrainchroma_ptr(
-          &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch << pixelsize_output_shift,
-          pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-          ref_data_ptr_arrUV2, pitch_arrUV2, weight_arr, _trad
-        );
-      }
       else
       {
-        // chroma different weight
+        _degrainluma_ptr(
+          pSubtrTempBlocks, 0, (nBlkSizeX * pixelsize),
+          pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+          ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+        );
+        uint8_t* pOut = PostProc1(ref_data_ptr_arr, pitch_arr, weight_arr, nBlkSizeX, nBlkSizeY);
+        CopyBlock(&tmp_block._d[0], tmpPitch << pixelsize_output_shift, pOut, nBlkSizeX, nBlkSizeY);
+      }
+
+      // chroma
+      int* pChromaWA;
+      if (bthLC_diff)
+        pChromaWA = &weight_arrUV[0];
+      else
+        pChromaWA = &weight_arr[0];
+
+/*        _degrainchroma_ptr(
+        &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
+        pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+        ref_data_ptr_arrUV1, pitch_arrUV1, weight_arr, _trad
+      );*/
+      if ((thPostProc1 == 0) || (iPP1NumSkip == 0))
         _degrainchroma_ptr(
           &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
           pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-          ref_data_ptr_arrUV1, pitch_arrUV1, weight_arrUV, _trad
+          ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA/*weight_arr*/, _trad
         );
+      else
+      {
+        _degrainchroma_ptr(
+          pSubtrTempBlocks,
+          0, ((nBlkSizeX >> nLogxRatioUV_super)* pixelsize),
+          pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+          ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA/*weight_arr*/, _trad
+        );
+        uint8_t* pOut = PostProc1(ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA/*weight_arr*/, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super);
+        CopyBlock(&tmp_blockUV1._d[0], tmpPitch << pixelsize_output_shift, pOut, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super);
+      }
 
+/*        _degrainchroma_ptr(
+        &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch << pixelsize_output_shift,
+        pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+        ref_data_ptr_arrUV2, pitch_arrUV2, weight_arr, _trad
+      );*/
+      if ((thPostProc1 == 0) || (iPP1NumSkip == 0))
         _degrainchroma_ptr(
           &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch << pixelsize_output_shift,
-          pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-          ref_data_ptr_arrUV2, pitch_arrUV2, weight_arrUV, _trad
+          pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+          ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA/*weight_arr*/, _trad
         );
+      else
+      {
+        _degrainchroma_ptr(
+          pSubtrTempBlocks,
+          0, ((nBlkSizeX >> nLogxRatioUV_super)* pixelsize),
+          pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+          ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA/*weight_arr*/, _trad
+        );
+        uint8_t* pOut = PostProc1(ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA/*weight_arr*/, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super);
+        CopyBlock(&tmp_blockUV2._d[0], tmpPitch << pixelsize_output_shift, pOut, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super);
       }
 
       // luma
@@ -2896,10 +2913,11 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
   {
     int xx = 0; // index
 
+    /* error ?
     if (bDiagOvlp)
     {
       if ((by % 2) != 0) xx += ((nBlkSizeX / 2) >> nLogxRatioUV_super);
-    }
+    }*/
 
     // prefetch source full row in linear lines reading
     for (int iH = 0; iH < (nBlkSizeY >> nLogyRatioUV_super); ++iH)
@@ -2961,12 +2979,33 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
 
 
       // chroma
-      _degrainchroma_ptr(
+/*      _degrainchroma_ptr(
         pDstCur + (xx << pixelsize_output_shift),
         pDstCur + (xx << pixelsize_super_shift) + _lsb_offset_arr[P], _dst_pitch_arr[P],
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
       );
+      */
+      // postproc
+      if ((thPostProc1 == 0) || (iPP1NumSkip == 0))
+        _degrainchroma_ptr(
+          pDstCur + (xx << pixelsize_output_shift),
+          pDstCur + (xx << pixelsize_super_shift) + _lsb_offset_arr[P], _dst_pitch_arr[P],
+          pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
+          ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+        );
+      else
+      {
+        _degrainchroma_ptr(
+          pSubtrTempBlocks,
+          0, ((nBlkSizeX >> nLogxRatioUV_super) * pixelsize),
+          pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
+          ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+        );
+
+        uint8_t* pOut = PostProc1(ref_data_ptr_arr, pitch_arr, weight_arr, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super);
+        CopyBlock(pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[P], pOut, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super);
+      }
 
       //if (nLogxRatioUV != nLogxRatioUV_super) // orphaned if. chroma processing failed between 2.7.1-2.7.20
       //xx += nBlkSizeX; // blksize of Y plane, that's why there is xx >> xRatioUVlog above
@@ -4529,7 +4568,7 @@ MV_FORCEINLINE uint8_t* MDegrainN::PostProc1(const BYTE* pRef[], int Pitch[], in
   }
   else
   {
-    for (int k = 1; k < _trad * 2; k++)
+    for (int k = 0; k < _trad * 2; k++)
       sad_array[k] = veryBigSAD;
 
     // rewind pRef pointers after full blending
