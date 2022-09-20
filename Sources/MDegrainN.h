@@ -243,6 +243,7 @@ private:
   int iPP1NumSkip;
   uint8_t* pSubtrTempBlocks; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
   MV_FORCEINLINE uint8_t* PostProc1(const BYTE* pRef[], int Pitch[], int Wall[], int iBlkWidth, int iBlkHeight);
+  MV_FORCEINLINE int FindBadBlock(const BYTE* pRef[], int Pitch[], int Wall[], int iBlkWidth, int iBlkHeight);
   MV_FORCEINLINE void CopyBlock(uint8_t* pDst, int iDstPitch, uint8_t* pSrc, int iBlkWidth, int iBlkHeight);
 
   std::unique_ptr <YUY2Planes> _dst_planes;
