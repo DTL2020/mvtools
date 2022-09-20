@@ -107,6 +107,116 @@ void DegrainN_C(
   }
 }
 
+template <typename pixel_t, int blockWidth, int blockHeight>
+void SubtractBlockN_C(
+  BYTE* pDst, /*BYTE* pDstLsb,*/ int nDstPitch,
+  const BYTE* pSrc, int nSrcPitch,
+  const BYTE* pRef[], int Pitch[],
+  int Wall[], int trad, int iN
+)
+{
+    typedef typename std::conditional < sizeof(pixel_t) <= 2, int, float>::type target_t;
+    constexpr target_t rounder = (sizeof(pixel_t) <= 2) ? 128 : 0;
+    constexpr float scaleback = 1.0f / (1 << DEGRAIN_WEIGHT_BITS);
+
+    // subtract block N = (Src - BlockN*wN) * (1/(1-wN))
+    target_t wN = Wall[iN]; // weight of block N
+    target_t mul = (target_t)(1.0f / ((1 << DEGRAIN_WEIGHT_BITS) - (target_t)wN));
+
+  // Wall: 8 bit. rounding: 128
+  for (int h = 0; h < blockHeight; ++h)
+  {
+    for (int x = 0; x < blockWidth; ++x)
+    {
+//      target_t val = reinterpret_cast<const pixel_t*>(pSrc)[x] * (target_t)Wall[0] + rounder;
+      target_t val = reinterpret_cast<const pixel_t*>(pSrc)[x] + rounder;
+/*      for (int k = 0; k < trad; ++k)
+      {
+        val += reinterpret_cast<const pixel_t*>(pRef[k * 2])[x] * (target_t)Wall[k * 2 + 1]
+          + reinterpret_cast<const pixel_t*>(pRef[k * 2 + 1])[x] * (target_t)Wall[k * 2 + 2]; // do it compatible with 2x16bit weight ?
+      }*/
+      if constexpr (sizeof(pixel_t) <= 2)
+      {
+        val = ((val << 8) - (reinterpret_cast<const pixel_t*>(pRef[iN])[x] * (target_t)Wall[iN + 1]));
+        val = val >> 8;
+        val *= mul;
+      }
+      else
+      {
+        val = (val - (reinterpret_cast<const pixel_t*>(pRef[iN])[x] * (target_t)Wall[iN + 1]));
+        val = val * scaleback;
+        val *= mul;
+      }
+
+      if constexpr (sizeof(pixel_t) <= 2)
+        reinterpret_cast<pixel_t*>(pDst)[x] = (pixel_t)(val >> 8); // 8-16bit
+      else
+        reinterpret_cast<pixel_t*>(pDst)[x] = val * scaleback; // 32bit float
+    }
+
+    pDst += nDstPitch;
+    pSrc += nSrcPitch;
+/*    for (int k = 0; k < trad; ++k)
+    {
+      pRef[k * 2] += Pitch[k * 2];
+      pRef[k * 2 + 1] += Pitch[k * 2 + 1];
+    }*/
+    pRef[iN] += Pitch[iN];
+  }
+
+}
+
+void SubtractBlockN_C_uint8(
+  BYTE* pDst, int nDstPitch,
+  const BYTE* pSrc, int nSrcPitch,
+  const BYTE* pRef[], int Pitch[],
+  int Wall[], int iN, int blockWidth, int blockHeight
+)
+{
+/*  typedef typename std::conditional < sizeof(pixel_t) <= 2, int, float>::type target_t;
+  constexpr target_t rounder = (sizeof(pixel_t) <= 2) ? 128 : 0;*/
+  constexpr float scaleback = 1.0f / (1 << DEGRAIN_WEIGHT_BITS);
+
+  // subtract block N = (Src - BlockN*wN) * (1/(1-wN))
+  int wN = Wall[iN]; // weight of block N
+//  int mul = (int)(1.0f / ((1 << DEGRAIN_WEIGHT_BITS) - (int)wN));
+  int mul = (int)((1 << DEGRAIN_WEIGHT_BITS)*((float)(1 << DEGRAIN_WEIGHT_BITS) / (float)((1 << DEGRAIN_WEIGHT_BITS) - (int)wN)));
+
+  uint8_t* pRefBlock = (uint8_t*)pRef[iN-1]; // +-1 ?
+  const int PitchRef = Pitch[iN-1]; // +-1 ?
+
+  // Wall: 8 bit. rounding: 128
+  for (int h = 0; h < blockHeight; ++h)
+  {
+    for (int x = 0; x < blockWidth; ++x)
+    {
+      //      target_t val = reinterpret_cast<const pixel_t*>(pSrc)[x] * (target_t)Wall[0] + rounder;
+      int val = reinterpret_cast<const uint8_t*>(pSrc)[x];
+      /*      for (int k = 0; k < trad; ++k)
+            {
+              val += reinterpret_cast<const pixel_t*>(pRef[k * 2])[x] * (target_t)Wall[k * 2 + 1]
+                + reinterpret_cast<const pixel_t*>(pRef[k * 2 + 1])[x] * (target_t)Wall[k * 2 + 2]; // do it compatible with 2x16bit weight ?
+            }*/
+
+        val = ((val << 8) - (reinterpret_cast<const uint8_t*>(pRefBlock)[x] * (uint8_t)Wall[iN]));
+        val = val >> 8;
+        val *= mul;
+/*
+        if (val < 0) val = 0;
+        if (val > 65535) val = 65535;
+        */
+        reinterpret_cast<uint8_t*>(pDst)[x] = (uint8_t)(val >> 8); // 8-16bit
+    }
+
+    pDst += nDstPitch;
+    pSrc += nSrcPitch;
+    pRefBlock += PitchRef;
+  }
+
+}
+
+
+
 // Debug note: DegrainN filter is calling Degrain1-6 instead if ThSAD(C) == ThSAD(C)2.
 // To reach DegrainN_ functions, set the above parameters to different values
 
@@ -536,7 +646,7 @@ MDegrainN::MDegrainN(
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
   sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
   float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
-  int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos,
+  int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos, int _thPostProc1,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -597,6 +707,7 @@ MDegrainN::MDegrainN(
   , iInterpolateOverlap(InterpolateOverlap)
   , mvmultirs(_mvmultirs)
   , thFWBWmvpos(_thFWBWmvpos)
+  , thPostProc1(_thPostProc1)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -1089,6 +1200,14 @@ MDegrainN::MDegrainN(
 
   }
 
+  // allocate temp single subtracted blocks memory area
+  SIZE_T stSizeToAlloc = nBlkSizeX * nBlkSizeY * pixelsize + (_trad * 2 + 1); // to hold (trad*2 + 1) number of temp blocks
+#ifdef _WIN32
+  pSubtrTempBlocks = (uint8_t*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+#else
+  pSubtrTempBlocks = new uint8_t[stSizeToAlloc];
+#endif
+
   // calculate limits of blx/bly once in constructor
   if (nUseSubShift == 0)
   {
@@ -1117,9 +1236,11 @@ MDegrainN::~MDegrainN()
 #ifdef _WIN32
     VirtualFree((LPVOID)pFilteredMVsPlanesArrays_a[k], 0, MEM_FREE);
     VirtualFree((LPVOID)pMVsIntOvlpPlanesArrays_a[k], 0, MEM_FREE);
+    VirtualFree((LPVOID)pSubtrTempBlocks, 0, MEM_FREE);
 #else
     delete pFilteredMVsPlanesArrays[k];
     delete pMVsIntOvlpPlanesArrays[k];
+    delete pSubtrTempBlocks;
 #endif
   }
 
@@ -1798,11 +1919,22 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       norm_weights(weight_arr, _trad);
 
       // luma
+      if (thPostProc1 == 0)
       _degrainluma_ptr(
         pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
       );
+      else
+      {
+        _degrainluma_ptr(
+          pSubtrTempBlocks, 0, (nBlkSizeX * pixelsize),
+          pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+          ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+        );
+        uint8_t* pOut = PostProc1(ref_data_ptr_arr, pitch_arr, weight_arr, nBlkSizeX, nBlkSizeY);
+        CopyBlock(pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[0], pOut, nBlkSizeX, nBlkSizeY);
+      }
 
       xx += (nBlkSizeX); // xx: indexing offset
 
@@ -4374,4 +4506,92 @@ MV_FORCEINLINE void MDegrainN::ProcessRSMVdata(void)
 
   float fPrcFailedMVs = (float)iFailedMVs / float(nInputBlkX * nInputBlkY);
   int idbr = 0;
+}
+
+MV_FORCEINLINE uint8_t* MDegrainN::PostProc1(const BYTE* pRef[], int Pitch[], int Wall[], int iBlkWidth, int iBlkHeight)
+{
+  //first count number of non-zero weights, zero is current block weight, 1,2 is +-1frame and so on
+  int iNumNZBlocks = 1; // we have at least one non-zero - the source itself ?
+  const int iBlockSizeMem = iBlkWidth * iBlkHeight * pixelsize;
+  const int iBlocksPitch = iBlkWidth * pixelsize;
+
+  sad_t sad_array[MAX_TEMP_RAD * 2];
+
+  for (int n = 1; n < (_trad * 2); n++)
+  {
+    if (Wall[n] != 0) iNumNZBlocks++;
+  }
+
+  if (iNumNZBlocks < 3) // current and at least 2 refs are non-zero weighted
+  {
+    // nothing to process - return source (full blended block)
+    return pSubtrTempBlocks; // pointer to full blended block
+  }
+  else
+  {
+    for (int k = 1; k < _trad * 2; k++)
+      sad_array[k] = veryBigSAD;
+
+    // rewind pRef pointers after full blending
+    for (int k = 0; k < _trad * 2; k++)
+    {
+      pRef[k] -= Pitch[k] * iBlkHeight;
+    }
+
+    int iBestRefSubtractedBlockNum = 0;
+    sad_t stAVG_SAD = 0;
+    int iNumAVG = 0;
+    for (int n = 1; n < (_trad * 2); n++)
+    {
+      if (Wall[n] != 0) // create subrtracted versions of full blended block
+      {
+        SubtractBlockN_C_uint8(pSubtrTempBlocks + (iBlockSizeMem * n), iBlocksPitch,
+          pSubtrTempBlocks, iBlocksPitch, pRef, Pitch, Wall, n, iBlkWidth, iBlkHeight);
+
+        //calc SAD of full blended block vs subtracted
+        sad_array[n] = SAD(pSubtrTempBlocks, iBlocksPitch, pSubtrTempBlocks + (iBlockSizeMem * n), iBlocksPitch);
+        stAVG_SAD += sad_array[n];
+        iNumAVG++;
+      }
+
+    }
+
+    // find average SAD
+    stAVG_SAD /= iNumAVG;
+
+    //find min SAD
+    sad_t stMinSAD = veryBigSAD;
+    int iSubRefNumMinSAD = 0;
+    for (int n = 1; n < (_trad * 2); n++)
+    {
+      if (sad_array[n] < stMinSAD)
+      {
+        stMinSAD = sad_array[n];
+        iSubRefNumMinSAD = n;
+      }
+    }
+
+    if ((stAVG_SAD - stMinSAD) > thPostProc1)
+    {
+      iBestRefSubtractedBlockNum = iSubRefNumMinSAD;
+    }
+
+    if (iBestRefSubtractedBlockNum != 0)
+    {
+      return pSubtrTempBlocks + (iBlockSizeMem * iBestRefSubtractedBlockNum);
+    }
+
+  }
+
+  return pSubtrTempBlocks; // some failsafe return ?
+}
+
+MV_FORCEINLINE void MDegrainN::CopyBlock(uint8_t* pDst, int iDstPitch, uint8_t* pSrc, int iBlkWidth, int iBlkHeight)
+{
+  for (int iLine = 0; iLine < iBlkHeight; iLine++)
+  {
+    memcpy(pDst, pSrc, iBlkWidth*pixelsize);
+    pDst += iDstPitch;
+    pSrc += iBlkWidth * pixelsize;
+  }
 }
