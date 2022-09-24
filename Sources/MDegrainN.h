@@ -250,7 +250,7 @@ private:
   uint8_t* pMPBTempBlocksUV2; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
 
   // single plane only
-  MV_FORCEINLINE int AlignBlockWeights(const BYTE* pRef[], int Pitch[], const BYTE* pCurr, int iCurrPitch, int Wall[], int iBlkWidth, int iBlkHeight);
+  MV_FORCEINLINE int AlignBlockWeights(const BYTE* pRef[], int Pitch[], const BYTE* pCurr, int iCurrPitch, int Wall[], int iBlkWidth, int iBlkHeight, bool bChroma);
 
   // luma and chroma
   MV_FORCEINLINE int AlignBlockWeightsLC(const BYTE* pRef[], int Pitch[],

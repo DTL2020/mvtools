@@ -2041,7 +2041,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       );
       else
       {
-/*        int iNumItCurr = MPBNumIt;
+        int iNumItCurr = MPBNumIt;
         do
         {
           // initial blend or each iteration blend
@@ -2050,14 +2050,17 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
             pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
             ref_data_ptr_arr, pitch_arr, weight_arr, _trad
           );
+        
+          int iNumAlignedBlocks = AlignBlockWeights(
+            ref_data_ptr_arr, pitch_arr,
+            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+            weight_arr, nBlkSizeX, nBlkSizeY, false
+          );
 
-          int iNumAlignedBlocks = AlignBlockWeights(ref_data_ptr_arr, pitch_arr, pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], weight_arr, nBlkSizeX, nBlkSizeY);
-          iNumItCurr--;
-
-          if ((iNumAlignedBlocks == 0) || (iNumItCurr == 0))
+          if ((iNumAlignedBlocks == 0) || (iNumItCurr < 0))
           {
             // final output blend
-            if (_lsb_flag) // make full blend with lsb again
+            if (_lsb_flag || iNumAlignedBlocks != 0) // make full blend (with lsb) again
             {
               _degrainluma_ptr(
                 pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
@@ -2071,12 +2074,10 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
             }
             break;
           }
-          else // made some alignments to weights
-          {
-            // renorm weights
-            norm_weights_all(weight_arr, _trad);
-          }
-        } while (1);*/
+
+          iNumItCurr--;
+
+        } while (1);
       }
       
       xx += (nBlkSizeX); // xx: indexing offset
@@ -2315,11 +2316,62 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
       norm_weights(weight_arr, _trad);
 
       // luma
-      _degrainluma_ptr(
+/*      _degrainluma_ptr(
         &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
       );
+      */
+      if (MPBNumIt == 0)
+      {
+        _degrainluma_ptr(
+          &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
+          pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+          ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+        );
+      }
+      else
+      {
+        int iNumItCurr = MPBNumIt;
+        do
+        {
+          // initial blend or each iteration blend
+          _degrainluma_ptr(
+            pMPBTempBlocks, 0, (nBlkSizeX * pixelsize),
+            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+            ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+          );
+
+           int iNumAlignedBlocks = AlignBlockWeights(
+            ref_data_ptr_arr, pitch_arr,
+            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+            weight_arr, nBlkSizeX, nBlkSizeY, false
+          );
+
+          if ((iNumAlignedBlocks == 0) || (iNumItCurr < 0))
+          {
+            // final output blend
+            if (_lsb_flag || iNumAlignedBlocks != 0) // make full blend (with lsb) again
+            {
+              _degrainluma_ptr(
+                &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
+                pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+                ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+              );
+            }
+            else // simply copy current blended block
+            {
+              CopyBlock(&tmp_block._d[0], tmpPitch << pixelsize_output_shift, pMPBTempBlocks, nBlkSizeX, nBlkSizeY);
+            }
+            break;
+          }
+
+          iNumItCurr--;
+
+        } while (1);
+      }
+
+
       if (_lsb_flag)
       {
         _oversluma_lsb_ptr(
@@ -2481,8 +2533,14 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
       norm_weights(weight_arr, _trad);
       if (bthLC_diff) norm_weights(weight_arrUV, _trad);
 
+      int* pChromaWA;
+      if (bthLC_diff)
+        pChromaWA = &weight_arrUV[0];
+      else
+        pChromaWA = &weight_arr[0];
+
       // luma
-      _degrainluma_ptr(
+/*      _degrainluma_ptr(
         pDstCur + (xx << pixelsize_output_shift),
         pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
@@ -2502,7 +2560,7 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
         pDstCurUV1 + (xx_uv << pixelsize_output_shift),
         pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
         pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-        ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA/*weight_arr*/, _trad
+        ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad
       );
 
       // chroma second plane
@@ -2510,8 +2568,114 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
         pDstCurUV2 + (xx_uv << pixelsize_output_shift),
         pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
         pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-        ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA/*weight_arr*/, _trad
+        ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA, _trad
       );
+      */
+      if (MPBNumIt == 0)
+      {
+        _degrainluma_ptr(
+          pDstCur + (xx << pixelsize_output_shift),
+          pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
+          pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+          ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+        );
+
+        // chroma first plane
+        _degrainchroma_ptr(
+          pDstCurUV1 + (xx_uv << pixelsize_output_shift),
+          pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
+          pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+          ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad
+        );
+
+        // chroma second plane
+        _degrainchroma_ptr(
+          pDstCurUV2 + (xx_uv << pixelsize_output_shift),
+          pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
+          pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+          ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA, _trad
+        );
+
+      }
+      else
+      {
+        int iNumItCurr = MPBNumIt;
+        do
+        {
+          // initial blend or each iteration blend
+          _degrainluma_ptr(
+            pMPBTempBlocks, 0, (nBlkSizeX * pixelsize),
+            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+            ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+          );
+
+          _degrainchroma_ptr(
+            pMPBTempBlocksUV1, 0, ((nBlkSizeX >> nLogxRatioUV_super)* pixelsize),
+            pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+            ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad
+          );
+
+          _degrainchroma_ptr(
+            pMPBTempBlocksUV2, 0, ((nBlkSizeX >> nLogxRatioUV_super)* pixelsize),
+            pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+            ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA, _trad
+          );
+
+          int iNumAlignedBlocks = AlignBlockWeightsLC(
+            ref_data_ptr_arr, pitch_arr,
+            ref_data_ptr_arrUV1, pitch_arrUV1,
+            ref_data_ptr_arrUV2, pitch_arrUV2,
+            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+            pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+            pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+            weight_arr, nBlkSizeX, nBlkSizeY,
+            nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super,
+            _mv_clip_arr[0]._clip_sptr->chromaSADScale
+          );
+
+
+          if ((iNumAlignedBlocks == 0) || (iNumItCurr < 0))
+          {
+            // final output blend
+            if (_lsb_flag || iNumAlignedBlocks != 0) // make full blend (with lsb) again
+            {
+              _degrainluma_ptr(
+                pDstCur + (xx << pixelsize_output_shift),
+                pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
+                pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+                ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+              );
+
+              // chroma first plane
+              _degrainchroma_ptr(
+                pDstCurUV1 + (xx_uv << pixelsize_output_shift),
+                pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
+                pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+                ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad
+              );
+
+              // chroma second plane
+              _degrainchroma_ptr(
+                pDstCurUV2 + (xx_uv << pixelsize_output_shift),
+                pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
+                pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+                ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA, _trad
+              );
+
+            }
+            else // simply copy current blended block
+            {
+              CopyBlock(pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[0], pMPBTempBlocks, nBlkSizeX, nBlkSizeY);
+              CopyBlock(pDstCurUV1 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[1], pMPBTempBlocksUV1, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super);
+              CopyBlock(pDstCurUV2 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[2], pMPBTempBlocksUV2, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super);
+            }
+            break;
+          }
+
+          iNumItCurr--;
+
+        } while (1);
+      }
 
       xx += (nBlkSizeX); // xx: indexing offset
       xx_uv += (nBlkSizeX >> nLogxRatioUV_super); // xx: indexing offset
@@ -2937,7 +3101,7 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
               _degrainchroma_ptr(
                 &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
                 pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-                ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad // somewhere bug with weights for chroma ?
+                ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad 
               );
 
               _degrainchroma_ptr(
@@ -2963,18 +3127,6 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
 
 
       // chroma
-/*      int* pChromaWA;
-      if (bthLC_diff)
-        pChromaWA = &weight_arrUV[0];
-      else
-        pChromaWA = &weight_arr[0];
-        */
-/*        _degrainchroma_ptr(
-        &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
-        pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-        ref_data_ptr_arrUV1, pitch_arrUV1, weight_arr, _trad
-      );*/
-      
       // currently use common preprocessed weight-arr or no MPB chroma
 /*
         _degrainchroma_ptr(
@@ -3201,7 +3353,6 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
 
       norm_weights(weight_arr, _trad); // normaliseWeights<radius>(WSrc, WRefs);
 
-
       // chroma
 /*      _degrainchroma_ptr(
         pDstCur + (xx << pixelsize_output_shift),
@@ -3210,7 +3361,6 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
       );
       */
-      // postproc
       if (MPBNumIt == 0)
         _degrainchroma_ptr(
           pDstCur + (xx << pixelsize_output_shift),
@@ -3218,19 +3368,51 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
           pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
           ref_data_ptr_arr, pitch_arr, weight_arr, _trad
         );
-/*      else
+      else
       {
-        _degrainchroma_ptr(
-          pMPBTempBlocks,
-          0, ((nBlkSizeX >> nLogxRatioUV_super) * pixelsize),
-          pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
-          ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-        );
+        int iNumItCurr = MPBNumIt;
+        do
+        {
+          // initial blend or each iteration blend
+          _degrainchroma_ptr(
+            pMPBTempBlocks,
+            0, ((nBlkSizeX >> nLogxRatioUV_super) * pixelsize),
+            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
+            ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+          );
 
-        uint8_t* pOut = PostProc1(ref_data_ptr_arr, pitch_arr, weight_arr, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super);
-        CopyBlock(pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[P], pOut, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super);
+          int iNumAlignedBlocks = AlignBlockWeights(
+            ref_data_ptr_arr, pitch_arr,
+            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
+            weight_arr, (nBlkSizeX >> nLogxRatioUV_super), (nBlkSizeY >> nLogxRatioUV_super), true
+          );
+
+          if ((iNumAlignedBlocks == 0) || (iNumItCurr < 0))
+          {
+            // final output blend
+            if (_lsb_flag || iNumAlignedBlocks != 0) // make full blend (with lsb) again
+            {
+              _degrainchroma_ptr(
+                pDstCur + (xx << pixelsize_output_shift),
+                pDstCur + (xx << pixelsize_super_shift) + _lsb_offset_arr[P], _dst_pitch_arr[P],
+                pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
+                ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+              );
+            }
+            else // simply copy current blended block
+            {
+              CopyBlock(pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[P], pMPBTempBlocks, (nBlkSizeX >> nLogxRatioUV_super), (nBlkSizeY >> nLogxRatioUV_super));
+            }
+            break;
+          }
+
+          iNumItCurr--;
+
+        } while (1);
       }
-      */
+
+
+
       //if (nLogxRatioUV != nLogxRatioUV_super) // orphaned if. chroma processing failed between 2.7.1-2.7.20
       //xx += nBlkSizeX; // blksize of Y plane, that's why there is xx >> xRatioUVlog above
       xx += (nBlkSizeX >> nLogxRatioUV_super); // xx: indexing offset
@@ -3439,11 +3621,66 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
       // chroma
       // here we don't pass pixelsize, because _degrainchroma_ptr points already to the uint16_t version
       // if the clip was 16 bit one
-      _degrainchroma_ptr(
+/*      _degrainchroma_ptr(
         &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-      );
+      );*/
+      if (MPBNumIt == 0)
+      {
+        _degrainchroma_ptr(
+          &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
+          pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
+          ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+        );
+      }
+      else
+      {
+        int iNumItCurr = MPBNumIt;
+        do
+        {
+          // initial blend or each iteration blend
+/*          _degrainluma_ptr(
+            pMPBTempBlocks, 0, (nBlkSizeX * pixelsize),
+            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+            ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+          );
+          */
+          _degrainchroma_ptr(
+            pMPBTempBlocks, 0, ((nBlkSizeX >> nLogxRatioUV_super) * pixelsize),
+            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
+            ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+          );
+
+          int iNumAlignedBlocks = AlignBlockWeights(
+            ref_data_ptr_arr, pitch_arr,
+            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
+            weight_arr, (nBlkSizeX >> nLogxRatioUV_super), (nBlkSizeY >> nLogxRatioUV_super), true
+          );
+
+          if ((iNumAlignedBlocks == 0) || (iNumItCurr < 0))
+          {
+            // final output blend
+            if (_lsb_flag || iNumAlignedBlocks != 0) // make full blend (with lsb) again
+            {
+              _degrainchroma_ptr(
+                &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
+                pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
+                ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+              );
+            }
+            else // simply copy current blended block
+            {
+              CopyBlock(&tmp_block._d[0], tmpPitch << pixelsize_output_shift, pMPBTempBlocks, (nBlkSizeX >> nLogxRatioUV_super), (nBlkSizeY >> nLogxRatioUV_super));
+            }
+            break;
+          }
+
+          iNumItCurr--;
+
+        } while (1);
+      }
+
       if (_lsb_flag)
       {
         _overschroma_lsb_ptr(
@@ -4794,7 +5031,7 @@ MV_FORCEINLINE void MDegrainN::ProcessRSMVdata(void)
   int idbr = 0;
 }
 
-MV_FORCEINLINE int MDegrainN::AlignBlockWeights(const BYTE* pRef[], int Pitch[], const BYTE* pCurr, int iCurrPitch, int Wall[], int iBlkWidth, int iBlkHeight)
+MV_FORCEINLINE int MDegrainN::AlignBlockWeights(const BYTE* pRef[], int Pitch[], const BYTE* pCurr, int iCurrPitch, int Wall[], int iBlkWidth, int iBlkHeight, bool bChroma)
 {
   //first count number of non-zero weights, zero is current block weight, 1,2 is +-1frame and so on
   int iNumNZBlocks = 1; // we have at least one non-zero - the source itself ?
@@ -4847,11 +5084,17 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeights(const BYTE* pRef[], int Pitch[],
         pMPBTempBlocks, iBlocksPitch, (uint8_t*)pCurr, iCurrPitch, Wall[0], iBlkWidth, iBlkHeight);
     }
 
-    sad_array_sub[0] = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
+    if (!bChroma)
+      sad_array_sub[0] = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
+    else
+      sad_array_sub[0] = SADCHROMA(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
     stAVG_sub_SAD += sad_array_sub[0];
 
     // calc SAD of full blended vs refs
-    sad_array_add[0] = SAD(pMPBTempBlocks, iBlocksPitch, pCurr, iCurrPitch);
+    if (!bChroma)
+      sad_array_add[0] = SAD(pMPBTempBlocks, iBlocksPitch, pCurr, iCurrPitch);
+    else
+      sad_array_add[0] = SADCHROMA(pMPBTempBlocks, iBlocksPitch, pCurr, iCurrPitch);
     stAVG_add_SAD += sad_array_add[0];
 
     iNumAVG++;
@@ -4874,11 +5117,17 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeights(const BYTE* pRef[], int Pitch[],
         }
 
         //calc SAD of full blended block vs subtracted
-        sad_array_sub[n] = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch);
+        if (!bChroma)
+          sad_array_sub[n] = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch);
+        else
+          sad_array_sub[n] = SADCHROMA(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch);
         stAVG_sub_SAD += sad_array_sub[n];
 
         // calc SAD of full blended vs refs
-        sad_array_add[n] = SAD(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n-1]);
+        if (!bChroma)
+          sad_array_add[n] = SAD(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n-1]);
+        else
+          sad_array_add[n] = SADCHROMA(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n - 1]);
         stAVG_add_SAD += sad_array_add[n];
 
         iNumAVG++;
