@@ -39,7 +39,8 @@ public:
     sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow,
     float adjSADzeromv, float adjSADcohmv, int thCohMV,
     float fMVLPFCutoff, float fMVLPFSlope, float fMVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
-    int UseSubShift, int InterpolateOverlap, ::PClip _mvmultirs, int _thFWBWmvpos, int _thPostProc1, int _iPP1NumSkip,
+    int UseSubShift, int InterpolateOverlap, ::PClip _mvmultirs, int _thFWBWmvpos,
+    int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -239,12 +240,18 @@ private:
   MV_FORCEINLINE void ProcessRSMVdata(void);
   int thFWBWmvpos;
 
-  int thPostProc1;
-  int iPP1NumSkip;
+  // Multi Pass Blending
+  int MPBthSub;
+  int MPBthAdd;
+  int MPBNumIt;
+  float MPB_SPC;
   uint8_t* pSubtrTempBlocks; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
   MV_FORCEINLINE uint8_t* PostProc1(const BYTE* pRef[], int Pitch[], int Wall[], int iBlkWidth, int iBlkHeight);
   MV_FORCEINLINE int FindBadBlock(const BYTE* pRef[], int Pitch[], int Wall[], int iBlkWidth, int iBlkHeight);
+  MV_FORCEINLINE int AlignBlockWeights(const BYTE* pRef[], int Pitch[], const BYTE* pCurr, int iCurrPitch, int Wall[], int iBlkWidth, int iBlkHeight);
+
   MV_FORCEINLINE void CopyBlock(uint8_t* pDst, int iDstPitch, uint8_t* pSrc, int iBlkWidth, int iBlkHeight);
+  MV_FORCEINLINE void norm_weights_all(int wref_arr[], int trad);
 
   std::unique_ptr <YUY2Planes> _dst_planes;
   std::unique_ptr <YUY2Planes> _src_planes;

@@ -641,7 +641,8 @@ MDegrainN::MDegrainN(
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
   sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
   float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
-  int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos, int _thPostProc1, int _iPP1NumSkip,
+  int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos,
+  int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -702,8 +703,10 @@ MDegrainN::MDegrainN(
   , iInterpolateOverlap(InterpolateOverlap)
   , mvmultirs(_mvmultirs)
   , thFWBWmvpos(_thFWBWmvpos)
-  , thPostProc1(_thPostProc1)
-  , iPP1NumSkip(_iPP1NumSkip)
+  , MPBthSub(_MPBthSub)
+  , MPBthAdd(_MPBthAdd)
+  , MPBNumIt(_MPBNumIt)
+  , MPB_SPC(_MPB_SPC)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -1197,7 +1200,7 @@ MDegrainN::MDegrainN(
   }
 
   // allocate temp single subtracted blocks memory area
-  SIZE_T stSizeToAlloc = nBlkSizeX * nBlkSizeY * pixelsize + (_trad * 2 + 1); // to hold (trad*2 + 1) number of temp blocks
+  SIZE_T stSizeToAlloc = nBlkSizeX * nBlkSizeY * pixelsize + (_trad * 2 + 2); // to hold (trad*2 + 2) number of temp blocks, full blended + subtracted current + all refs
 #ifdef _WIN32
   pSubtrTempBlocks = (uint8_t*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
 #else
@@ -1915,7 +1918,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       norm_weights(weight_arr, _trad);
 
       // luma
-      if ((thPostProc1 == 0) || (iPP1NumSkip == 0))
+      if (MPBNumIt == 0)
       _degrainluma_ptr(
         pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
@@ -1923,40 +1926,44 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       );
       else
       {
-        int iPPNumSkipCurr = iPP1NumSkip;
+/*        int iNumItCurr = MPBNumIt;
         do
         {
-          // initial pre process or each iteration preprocess
+          // initial blend or each iteration blend
           _degrainluma_ptr(
             pSubtrTempBlocks, 0, (nBlkSizeX * pixelsize),
             pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
             ref_data_ptr_arr, pitch_arr, weight_arr, _trad
           );
 
-          int iBadBlock = FindBadBlock(ref_data_ptr_arr, pitch_arr, weight_arr, nBlkSizeX, nBlkSizeY);
-          iPPNumSkipCurr--;
+          int iNumAlignedBlocks = AlignBlockWeights(ref_data_ptr_arr, pitch_arr, pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], weight_arr, nBlkSizeX, nBlkSizeY);
+          iNumItCurr--;
 
-          if ((iBadBlock == 0) || (iPPNumSkipCurr == 0))
+          if ((iNumAlignedBlocks == 0) || (iNumItCurr == 0))
           {
             // final output blend
-            _degrainluma_ptr(
-              pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
-              pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-              ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-            );
+            if (_lsb_flag) // make full blend with lsb again
+            {
+              _degrainluma_ptr(
+                pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
+                pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+                ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+              );
+            }
+            else // simply copy current blended block
+            {
+              CopyBlock(pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[0], pSubtrTempBlocks, nBlkSizeX, nBlkSizeY);
+            }
             break;
           }
-          else // found some bad block
+          else // made some alignments to weights
           {
-            //mark found block as no use
-            weight_arr[iBadBlock] = 0;
-
             // renorm weights
-            norm_weights(weight_arr, _trad);
+            norm_weights_all(weight_arr, _trad);
           }
-        } while (1);
+        } while (1);*/
       }
-
+      
       xx += (nBlkSizeX); // xx: indexing offset
 
       if (bx == nBlkX - 1 && _covered_width < nWidth) // right non-covered region
@@ -2722,7 +2729,8 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
       );*/
-/*      if ((thPostProc1 == 0) || (iPP1NumSkip == 0))
+
+      if (MPBNumIt == 0)
         _degrainluma_ptr(
           &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
           pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
@@ -2730,54 +2738,38 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
         );
       else
       {
-        _degrainluma_ptr(
-          pSubtrTempBlocks, 0, (nBlkSizeX * pixelsize),
-          pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-          ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-        );
-        uint8_t* pOut = PostProc1(ref_data_ptr_arr, pitch_arr, weight_arr, nBlkSizeX, nBlkSizeY);
-        CopyBlock(&tmp_block._d[0], tmpPitch << pixelsize_output_shift, pOut, nBlkSizeX, nBlkSizeY);
-      }
-      */
-      if ((thPostProc1 == 0) || (iPP1NumSkip == 0))
-        _degrainluma_ptr(
-          &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
-          pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-          ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-        );
-      else
-      {
-        int iPPNumSkipCurr = iPP1NumSkip;
+        int iNumItCurr = MPBNumIt;
         do
         {
-          // initial pre process or each iteration preprocess
+          // initial blend or each iteration blend
           _degrainluma_ptr(
             pSubtrTempBlocks, 0, (nBlkSizeX * pixelsize),
             pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
             ref_data_ptr_arr, pitch_arr, weight_arr, _trad
           );
 
-          int iBadBlock = FindBadBlock(ref_data_ptr_arr, pitch_arr, weight_arr, nBlkSizeX, nBlkSizeY);
-          iPPNumSkipCurr--;
+          int iNumAlignedBlocks = AlignBlockWeights(ref_data_ptr_arr, pitch_arr, pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], weight_arr, nBlkSizeX, nBlkSizeY);
 
-          if ((iBadBlock == 0) || (iPPNumSkipCurr == 0))
+          if ((iNumAlignedBlocks == 0) || (iNumItCurr < 0))
           {
             // final output blend
-            _degrainluma_ptr(
-              &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
-              pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-              ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-            );
+            if (_lsb_flag || iNumAlignedBlocks != 0) // make full blend (with lsb) again
+            {
+              _degrainluma_ptr(
+                &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
+                pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+                ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+              );
+            }
+            else // simply copy current blended block
+            {
+              CopyBlock(&tmp_block._d[0], tmpPitch << pixelsize_output_shift, pSubtrTempBlocks, nBlkSizeX, nBlkSizeY);
+            }
             break;
           }
-          else // found some bad block
-          {
-            //mark found block as no use
-            weight_arr[iBadBlock] = 0;
 
-            // renorm weights
-            norm_weights(weight_arr, _trad);
-          }
+          iNumItCurr--;
+
         } while (1);
       }
 
@@ -2794,52 +2786,15 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
         pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
         ref_data_ptr_arrUV1, pitch_arrUV1, weight_arr, _trad
       );*/
-//      if ((thPostProc1 == 0) || (iPP1NumSkip == 0))
 
-      // currently use common preprocessed weight-arr or no postproc chroma
+      // currently use common preprocessed weight-arr or no MPB chroma
         _degrainchroma_ptr(
           &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
           pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
           ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad
         );
-/*      else
-      {
-        int iPPNumSkipCurr = iPP1NumSkip;
-        do
-        {
-          // initial pre process or each iteration preprocess
-          _degrainluma_ptr(
-            pSubtrTempBlocks, 0, (nBlkSizeX * pixelsize),
-            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-            ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad
-          );
 
-          int iBadBlock = FindBadBlock(ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, nBlkSizeX, nBlkSizeY);
-          iPPNumSkipCurr--;
-
-          if ((iBadBlock == 0) || (iPPNumSkipCurr == 0))
-          {
-            // final output blend
-            _degrainchroma_ptr(
-              &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
-              pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-              ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad
-            );
-            break;
-          }
-          else // found some bad block
-          {
-            //mark found block as no use
-            pChromaWA[iBadBlock] = 0;
-
-            // renorm weights
-            norm_weights(pChromaWA, _trad);
-          }
-        } while (1);
-      }
-      */
-
-        // currently use common preprocessed weight_arr from Y or no postproc chroma
+     // currently use common preprocessed weight_arr from Y or no MPB chroma
         _degrainchroma_ptr(
         &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch << pixelsize_output_shift,
         pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
@@ -3066,7 +3021,7 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
       );
       */
       // postproc
-      if ((thPostProc1 == 0) || (iPP1NumSkip == 0))
+      if (MPBNumIt == 0)
         _degrainchroma_ptr(
           pDstCur + (xx << pixelsize_output_shift),
           pDstCur + (xx << pixelsize_super_shift) + _lsb_offset_arr[P], _dst_pitch_arr[P],
@@ -3782,6 +3737,29 @@ void MDegrainN::norm_weights(int wref_arr[], int trad)
   const int one = 1 << DEGRAIN_WEIGHT_BITS; // 8 bit, 256
 
   wref_arr[0] = one;
+  int wsum = 1;
+  for (int k = 0; k < nbr_frames; ++k)
+  {
+    wsum += wref_arr[k];
+  }
+
+  // normalize weights to 256
+  int wsrc = one;
+  for (int k = 1; k < nbr_frames; ++k)
+  {
+    const int norm = wref_arr[k] * one / wsum;
+    wref_arr[k] = norm;
+    wsrc -= norm;
+  }
+  wref_arr[0] = wsrc;
+}
+
+MV_FORCEINLINE void MDegrainN::norm_weights_all(int wref_arr[], int trad)
+{
+  const int nbr_frames = trad * 2 + 1;
+
+  const int one = 1 << DEGRAIN_WEIGHT_BITS; // 8 bit, 256
+
   int wsum = 1;
   for (int k = 0; k < nbr_frames; ++k)
   {
@@ -4689,7 +4667,7 @@ MV_FORCEINLINE uint8_t* MDegrainN::PostProc1(const BYTE* pRef[], int Pitch[], in
       }
     }
 
-    if ((stAVG_SAD - stMinSAD) > thPostProc1)
+    if ((stAVG_SAD - stMinSAD) > MPBthSub)
     {
       iBestRefSubtractedBlockNum = iSubRefNumMinSAD;
     }
@@ -4768,12 +4746,116 @@ MV_FORCEINLINE int MDegrainN::FindBadBlock(const BYTE* pRef[], int Pitch[], int 
       }
     }
 
-    if ((stAVG_SAD - stMinSAD) > thPostProc1)
+    if ((stAVG_SAD - stMinSAD) > MPBthSub)
     {
       iBadBlock = iSubRefNumMinSAD;
     }
   }
   return iBadBlock; // index from zero - zero is current block in Wall array
+}
+
+MV_FORCEINLINE int MDegrainN::AlignBlockWeights(const BYTE* pRef[], int Pitch[], const BYTE* pCurr, int iCurrPitch, int Wall[], int iBlkWidth, int iBlkHeight)
+{
+  //first count number of non-zero weights, zero is current block weight, 1,2 is +-1frame and so on
+  int iNumNZBlocks = 1; // we have at least one non-zero - the source itself ?
+  const int iBlockSizeMem = iBlkWidth * iBlkHeight * pixelsize;
+  const int iBlocksPitch = iBlkWidth * pixelsize;
+  int iNumAlignedBlocks = 0;
+
+  sad_t sad_array_sub[(MAX_TEMP_RAD * 2 + 1)];
+  sad_t sad_array_add[(MAX_TEMP_RAD * 2 + 1)];
+
+  // always rewind pRef pointers after full blending, hope after zeroing weight of block it will never put back ?
+  for (int k = 0; k < _trad * 2; k++)
+  {
+    pRef[k] -= Pitch[k] * iBlkHeight;
+  }
+
+  for (int n = 1; n < (_trad * 2 + 1); n++)
+  {
+    if (Wall[n] != 0) iNumNZBlocks++;
+  }
+
+  if (iNumNZBlocks < 3) // current and at least 2 refs are non-zero weighted
+  {
+    // nothing to process - return 0 to stop proc
+    return 0;
+  }
+  else
+  {
+    // fill initial max values
+    for (int k = 0; k < (_trad * 2 + 1); k++)
+    {
+      sad_array_sub[k] = veryBigSAD;
+      sad_array_add[k] = veryBigSAD;
+    }
+
+    sad_t stAVG_sub_SAD = 0;
+    sad_t stAVG_add_SAD = 0;
+    int iNumAVG = 0;
+
+    // process current block too
+    // subtracted
+/*    SubtractBlockN_C_uint8(pSubtrTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch,
+      pSubtrTempBlocks, iBlocksPitch, pRef, Pitch, Wall, n, iBlkWidth, iBlkHeight);
+      */
+
+    for (int n = 1; n < (_trad * 2 + 1); n++)
+    {
+      if (Wall[n] != 0) // create subrtracted versions of full blended block
+      {
+        // create subrtracted versions of full blended block
+        SubtractBlockN_C_uint8(pSubtrTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch,
+          pSubtrTempBlocks, iBlocksPitch, pRef, Pitch, Wall, n, iBlkWidth, iBlkHeight);
+
+        //calc SAD of full blended block vs subtracted
+        sad_array_sub[n] = SAD(pSubtrTempBlocks, iBlocksPitch, pSubtrTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch);
+        stAVG_sub_SAD += sad_array_sub[n];
+
+        // calc SAD of full blended vs refs
+        sad_array_add[n] = SAD(pSubtrTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n-1]);
+        stAVG_add_SAD += sad_array_add[n];
+
+        iNumAVG++;
+      }
+
+    }
+
+    // find average SAD
+    stAVG_add_SAD /= iNumAVG;
+    stAVG_sub_SAD /= iNumAVG;
+
+    //check if SAD of curr block too differs from average
+    for (int n = 1; n < (_trad * 2 + 1); n++)
+    {
+      if (Wall[n] != 0) // check only processed above blocks
+      {
+        if (stAVG_sub_SAD - sad_array_sub[n] > MPBthSub)
+        {
+//          int iAbsDelta = stAVG_sub_SAD - sad_array_sub[n];
+//          float fRelDelta = (float)iAbsDelta/(float)stAVG_sub_SAD; // <1.0f always ?
+          Wall[n] = (int)((float)Wall[n] * (1.0f/MPB_SPC)); // decrease weight
+          iNumAlignedBlocks++;
+        }
+
+        if (stAVG_add_SAD - sad_array_add[n] > MPBthAdd)
+        {
+          int iNewW = (int)((float)Wall[n] * MPB_SPC); // increase weight 
+          if (iNewW > 255) iNewW = 255;
+          Wall[n] = iNewW; 
+          iNumAlignedBlocks++;
+        }
+      }
+    }
+
+  }
+
+  if (iNumAlignedBlocks != 0)
+  {
+    norm_weights_all(Wall, _trad);
+  }
+
+  return iNumAlignedBlocks; // counter of weight-adjusted blocks, 0 if none
 }
 
 MV_FORCEINLINE void MDegrainN::CopyBlock(uint8_t* pDst, int iDstPitch, uint8_t* pSrc, int iBlkWidth, int iBlkHeight)
