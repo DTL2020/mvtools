@@ -40,7 +40,7 @@ public:
     float adjSADzeromv, float adjSADcohmv, int thCohMV,
     float fMVLPFCutoff, float fMVLPFSlope, float fMVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
     int UseSubShift, int InterpolateOverlap, ::PClip _mvmultirs, int _thFWBWmvpos,
-    int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC,
+    int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -244,7 +244,9 @@ private:
   int MPBthSub;
   int MPBthAdd;
   int MPBNumIt;
-  float MPB_SPC;
+  float MPB_SPC_sub;
+  float MPB_SPC_add;
+  bool MPB_PartBlend; // false if using faster blocksubtract (may be lower precison/quality), true if use real partial blend with skipped tested block
   uint8_t* pMPBTempBlocks; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
   uint8_t* pMPBTempBlocksUV1; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
   uint8_t* pMPBTempBlocksUV2; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing

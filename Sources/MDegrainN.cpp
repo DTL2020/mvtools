@@ -107,6 +107,7 @@ void DegrainN_C(
   }
 }
 
+#if 0
 template <typename pixel_t, int blockWidth, int blockHeight>
 void SubtractBlockN_C(
   BYTE* pDst, /*BYTE* pDstLsb,*/ int nDstPitch,
@@ -165,47 +166,7 @@ void SubtractBlockN_C(
   }
 
 }
-
-void SubtractBlockN_C_uint8(
-  BYTE* pDst, int nDstPitch,
-  const BYTE* pSrc, int nSrcPitch,
-  const BYTE* pRef[], int Pitch[],
-  int Wall[], int iN, int blockWidth, int blockHeight
-)
-{
-/*  typedef typename std::conditional < sizeof(pixel_t) <= 2, int, float>::type target_t;
-  constexpr target_t rounder = (sizeof(pixel_t) <= 2) ? 128 : 0;*/
-  constexpr float scaleback = 1.0f / (1 << DEGRAIN_WEIGHT_BITS);
-
-  // subtract block N = (Src - BlockN*wN) * (1/(1-wN))
-  int wN = Wall[iN]; // weight of block N
-//  int mul = (int)(1.0f / ((1 << DEGRAIN_WEIGHT_BITS) - (int)wN));
-  int mul = (int)((1 << DEGRAIN_WEIGHT_BITS)*((float)(1 << DEGRAIN_WEIGHT_BITS) / (float)((1 << DEGRAIN_WEIGHT_BITS) - (int)wN)));
-
-  uint8_t* pRefBlock = (uint8_t*)pRef[iN-1]; 
-  const int PitchRef = Pitch[iN-1]; 
-
-  // Wall: 8 bit. 
-  for (int h = 0; h < blockHeight; ++h)
-  {
-    for (int x = 0; x < blockWidth; ++x)
-    {
-      //      target_t val = reinterpret_cast<const pixel_t*>(pSrc)[x] * (target_t)Wall[0] + rounder;
-      int val = reinterpret_cast<const uint8_t*>(pSrc)[x];
-
-      val = ((val << 8) - (reinterpret_cast<const uint8_t*>(pRefBlock)[x] * (uint8_t)Wall[iN]));
-      val = val >> 8;
-      val *= mul;
-
-        reinterpret_cast<uint8_t*>(pDst)[x] = (uint8_t)(val >> 8); // 8bit
-    }
-
-    pDst += nDstPitch;
-    pSrc += nSrcPitch;
-    pRefBlock += PitchRef;
-  }
-
-}
+#endif
 
 void SubtractBlock_C_uint8(
   BYTE* pDst, int nDstPitch,
@@ -218,8 +179,13 @@ void SubtractBlock_C_uint8(
     constexpr target_t rounder = (sizeof(pixel_t) <= 2) ? 128 : 0;*/
   constexpr float scaleback = 1.0f / (1 << DEGRAIN_WEIGHT_BITS);
 
+  int one = (1 << DEGRAIN_WEIGHT_BITS);
+
   // subtract block N = (Src - BlockN*wN) * (1/(1-wN))
-  int mul = (int)((1 << DEGRAIN_WEIGHT_BITS) * ((float)(1 << DEGRAIN_WEIGHT_BITS) / (float)((1 << DEGRAIN_WEIGHT_BITS) - (int)wN)));
+  int mul = (int)(((float)one * ((float)(one) / (float)(one - wN))) + 0.5f);
+
+  float  fmul = 256.0f / (float)(256 - wN);
+  int rounder = 128;
 
   // Wall: 8 bit. 
   for (int h = 0; h < blockHeight; ++h)
@@ -229,10 +195,26 @@ void SubtractBlock_C_uint8(
       int val = reinterpret_cast<const uint8_t*>(pSrc)[x];
 
       val = ((val << 8) - (reinterpret_cast<const uint8_t*>(pRefBlock)[x] * (uint8_t)wN));
+      val += rounder;
       val = val >> 8;
       val *= mul;
+      val += rounder;
 
       reinterpret_cast<uint8_t*>(pDst)[x] = (uint8_t)(val >> 8); // 8bit
+#ifdef _DEBUG
+      int src = reinterpret_cast<const uint8_t*>(pSrc)[x];
+      src = src << 8; // *256
+      src = (src - (reinterpret_cast<const uint8_t*>(pRefBlock)[x] * (uint8_t)wN));
+
+      float fres = ((float)src * fmul);
+      uint8_t res8 = ((fres / 256.0f) + 0.5f);
+      reinterpret_cast<uint8_t*>(pDst)[x] = res8;
+
+      if (abs(res8 - pDst[x]) > 0)
+      {
+        int idbr = 0;
+      }
+#endif
     }
 
     pDst += nDstPitch;
@@ -256,8 +238,13 @@ void SubtractBlock_uint8_sse2(
     constexpr target_t rounder = (sizeof(pixel_t) <= 2) ? 128 : 0;*/
   constexpr float scaleback = 1.0f / (1 << DEGRAIN_WEIGHT_BITS);
 
+  int one = (1 << DEGRAIN_WEIGHT_BITS);
+
   // subtract block N = (Src - BlockN*wN) * (1/(1-wN))
-  int mul = (int)((1 << DEGRAIN_WEIGHT_BITS) * ((float)(1 << DEGRAIN_WEIGHT_BITS) / (float)((1 << DEGRAIN_WEIGHT_BITS) - (int)wN)));
+  int mul = (int)(((float)one * ((float)(one) / (float)(one - wN))) + 0.5f);
+  int rounder_i = 128;
+
+  const __m128i rounder = _mm_set1_epi16(rounder_i);
 
   const __m128i z = _mm_setzero_si128();
 
@@ -269,13 +256,15 @@ void SubtractBlock_uint8_sse2(
   {
     for (int x = 0; x < blockWidth; x += pixels_at_a_time)
     {
-/*      int val = reinterpret_cast<const uint8_t*>(pSrc)[x];
+      /*      int val = reinterpret_cast<const uint8_t*>(pSrc)[x];
 
-      val = ((val << 8) - (reinterpret_cast<const uint8_t*>(pRefBlock)[x] * (uint8_t)wN));
-      val = val >> 8;
-      val *= mul;
+            val = ((val << 8) - (reinterpret_cast<const uint8_t*>(pRefBlock)[x] * (uint8_t)wN));
+            val += rounder;
+            val = val >> 8;
+            val *= mul;
+            val += rounder;
 
-      reinterpret_cast<uint8_t*>(pDst)[x] = (uint8_t)(val >> 8); // 8bit*/
+            reinterpret_cast<uint8_t*>(pDst)[x] = (uint8_t)(val >> 8); // 8bit*/
       __m128i src;
       if (is_mod8) // load 8 pixels
         src = _mm_loadl_epi64((__m128i*) (pSrc + x));
@@ -297,8 +286,10 @@ void SubtractBlock_uint8_sse2(
       __m128i mul1 = _mm_mullo_epi16(_mm_unpacklo_epi8(ref, z), _mm_set1_epi16(wN));
 
       val = _mm_sub_epi16(val, mul1);
+      val = _mm_adds_epi16(val, rounder);
       val = _mm_srli_epi16(val, 8);
       val = _mm_mullo_epi16(val, _mm_set1_epi16(mul));
+      val = _mm_adds_epi16(val, rounder);
 
       auto res = _mm_packus_epi16(_mm_srli_epi16(val, 8), z);
 
@@ -749,7 +740,7 @@ MDegrainN::MDegrainN(
   sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
   float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
   int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos,
-  int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC,
+  int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -813,7 +804,9 @@ MDegrainN::MDegrainN(
   , MPBthSub(_MPBthSub)
   , MPBthAdd(_MPBthAdd)
   , MPBNumIt(_MPBNumIt)
-  , MPB_SPC(_MPB_SPC)
+  , MPB_SPC_sub(_MPB_SPC_sub)
+  , MPB_SPC_add(_MPB_SPC_add)
+  , MPB_PartBlend(_MPB_PartBlend)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -5038,6 +5031,7 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeights(const BYTE* pRef[], int Pitch[],
   const int iBlockSizeMem = iBlkWidth * iBlkHeight * pixelsize;
   const int iBlocksPitch = iBlkWidth * pixelsize;
   int iNumAlignedBlocks = 0;
+  int W_sub[MAX_TEMP_RAD * 2 + 1];
 
   sad_t sad_array_sub[(MAX_TEMP_RAD * 2 + 1)];
   sad_t sad_array_add[(MAX_TEMP_RAD * 2 + 1)];
@@ -5073,15 +5067,80 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeights(const BYTE* pRef[], int Pitch[],
 
     // process current block too
     // subtracted
-    if (_cpuFlags & CPUF_SSE2)
+    if (!MPB_PartBlend) // use subtraction
     {
-      SubtractBlock_uint8_sse2(pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch,
-        pMPBTempBlocks, iBlocksPitch, (uint8_t*)pCurr, iCurrPitch, Wall[0], iBlkWidth, iBlkHeight);
+      if (_cpuFlags & CPUF_SSE2)
+      {
+        SubtractBlock_uint8_sse2(pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch,
+          pMPBTempBlocks, iBlocksPitch, (uint8_t*)pCurr, iCurrPitch, Wall[0], iBlkWidth, iBlkHeight);
+        //      SubtractBlock_C_uint8(pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch,
+        //        pMPBTempBlocks, iBlocksPitch, (uint8_t*)pCurr, iCurrPitch, Wall[0], iBlkWidth, iBlkHeight);
+              // test - compare with real partial blend
+/*
+#ifdef _DEBUG
+        for (int i = 0; i < (_trad * 2 + 1); i++)
+          W_sub[i] = Wall[i];
+        W_sub[0] = 0; // zero weight of current block
+        norm_weights_all(W_sub, _trad);
+        TmpBlock       tmp_block;
+        const int tmpPitch = nBlkSizeX;
+        _degrainluma_ptr(
+          &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch,
+          pCurr, iCurrPitch,
+          pRef, Pitch, W_sub, _trad);
+
+        int idifsamples = 0;
+        for (int x = 0; x < nBlkSizeX; x++)
+        {
+          for (int y = 0; y < nBlkSizeY; y++)
+          {
+            int isample_part_blend = tmp_block._d[y * tmpPitch + x];
+            int isample_subtr = (pMPBTempBlocks + (iBlockSizeMem * (1)))[y * iBlocksPitch + x];
+
+            if (abs(isample_part_blend - isample_subtr) > 1)
+            {
+              int idbr = 0;
+              idifsamples++;
+            }
+          }
+        }
+
+        sad_t difsad = SAD(&tmp_block._d[0], tmpPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
+
+        float fdif = (float)idifsamples / (float)(nBlkSizeX * nBlkSizeY);
+        int idbr2 = int(fdif);
+#endif
+*/
+      }
+      else
+      {
+        SubtractBlock_C_uint8(pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch,
+          pMPBTempBlocks, iBlocksPitch, (uint8_t*)pCurr, iCurrPitch, Wall[0], iBlkWidth, iBlkHeight);
+      }
     }
-    else
+    else // use real partial blending
     {
-      SubtractBlock_C_uint8(pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch,
-        pMPBTempBlocks, iBlocksPitch, (uint8_t*)pCurr, iCurrPitch, Wall[0], iBlkWidth, iBlkHeight);
+      for (int i = 0; i < (_trad * 2 + 1); i++)
+        W_sub[i] = Wall[i];
+      W_sub[0] = 0; // zero weight of current block
+      norm_weights_all(W_sub, _trad);
+
+      if (!bChroma)
+        _degrainluma_ptr(
+          pMPBTempBlocks + (iBlockSizeMem * (1)), 0, iBlocksPitch,
+          pCurr, iCurrPitch,
+          pRef, Pitch, W_sub, _trad);
+      else
+        _degrainchroma_ptr(
+          pMPBTempBlocks + (iBlockSizeMem * (1)), 0, iBlocksPitch,
+          pCurr, iCurrPitch,
+          pRef, Pitch, W_sub, _trad);
+
+      // always rewind pRef pointers after full blending, hope after zeroing weight of block it will never put back ?
+      for (int k = 0; k < _trad * 2; k++)
+      {
+        pRef[k] -= Pitch[k] * iBlkHeight;
+      }
     }
 
     if (!bChroma)
@@ -5102,20 +5161,46 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeights(const BYTE* pRef[], int Pitch[],
     // ref blocks
     for (int n = 1; n < (_trad * 2 + 1); n++)
     {
-      if (Wall[n] != 0) // create subrtracted versions of full blended block
+      if (Wall[n] != 0)
       {
-        // create subrtracted versions of full blended block
-        if (_cpuFlags & CPUF_SSE2)
+        if (!MPB_PartBlend) // create subrtracted versions of full blended block (faster)
         {
-          SubtractBlock_uint8_sse2(pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch,
-            pMPBTempBlocks, iBlocksPitch, (uint8_t*)pRef[n - 1], Pitch[n - 1], Wall[n], iBlkWidth, iBlkHeight);
+          if (_cpuFlags & CPUF_SSE2)
+          {
+            SubtractBlock_uint8_sse2(pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch,
+              pMPBTempBlocks, iBlocksPitch, (uint8_t*)pRef[n - 1], Pitch[n - 1], Wall[n], iBlkWidth, iBlkHeight);
+          }
+          else
+          {
+            SubtractBlock_C_uint8(pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch,
+              pMPBTempBlocks, iBlocksPitch, (uint8_t*)pRef[n - 1], Pitch[n - 1], Wall[n], iBlkWidth, iBlkHeight);
+          }
         }
-        else
+        else // real partial blend (slower)
         {
-          SubtractBlock_C_uint8(pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch,
-            pMPBTempBlocks, iBlocksPitch, (uint8_t*)pRef[n - 1], Pitch[n - 1], Wall[n], iBlkWidth, iBlkHeight);
-        }
+          for (int i = 0; i < (_trad * 2 + 1); i++)
+            W_sub[i] = Wall[i];
+          W_sub[n] = 0; // zero weight of n-th block
+          norm_weights_all(W_sub, _trad);
 
+          if (!bChroma)
+            _degrainluma_ptr(
+              pMPBTempBlocks + (iBlockSizeMem * (n + 1)), 0, iBlocksPitch,
+              pCurr, iCurrPitch,
+              pRef, Pitch, W_sub, _trad);
+          else
+            _degrainchroma_ptr(
+              pMPBTempBlocks + (iBlockSizeMem * (n + 1)), 0, iBlocksPitch,
+              pCurr, iCurrPitch,
+              pRef, Pitch, W_sub, _trad);
+
+          // always rewind pRef pointers after full blending, hope after zeroing weight of block it will never put back ?
+          for (int k = 0; k < _trad * 2; k++)
+          {
+            pRef[k] -= Pitch[k] * iBlkHeight;
+          }
+
+        }
         //calc SAD of full blended block vs subtracted
         if (!bChroma)
           sad_array_sub[n] = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch);
@@ -5125,7 +5210,7 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeights(const BYTE* pRef[], int Pitch[],
 
         // calc SAD of full blended vs refs
         if (!bChroma)
-          sad_array_add[n] = SAD(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n-1]);
+          sad_array_add[n] = SAD(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n - 1]);
         else
           sad_array_add[n] = SADCHROMA(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n - 1]);
         stAVG_add_SAD += sad_array_add[n];
@@ -5146,15 +5231,16 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeights(const BYTE* pRef[], int Pitch[],
       {
         if (stAVG_sub_SAD - sad_array_sub[n] > MPBthSub)
         {
-          Wall[n] = (int)((float)Wall[n] * (1.0f/MPB_SPC)); // decrease weight
+          Wall[n] = (int)((float)Wall[n] * MPB_SPC_sub); // decrease weight
           iNumAlignedBlocks++;
+          continue; // do not check for addition if already adjusted to lower weight ?
         }
 
         if (stAVG_add_SAD - sad_array_add[n] > MPBthAdd)
         {
-          int iNewW = (int)((float)Wall[n] * MPB_SPC); // increase weight 
+          int iNewW = (int)((float)Wall[n] * MPB_SPC_add); // increase weight 
           if (iNewW > 255) iNewW = 255;
-          Wall[n] = iNewW; 
+          Wall[n] = iNewW;
           iNumAlignedBlocks++;
         }
       }
@@ -5169,6 +5255,7 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeights(const BYTE* pRef[], int Pitch[],
 
   return iNumAlignedBlocks; // counter of weight-adjusted blocks, 0 if none
 }
+
 
 MV_FORCEINLINE int MDegrainN::AlignBlockWeightsLC(const BYTE* pRef[], int Pitch[],
   const BYTE* pRefUV1[], int PitchUV1[],
@@ -5187,6 +5274,7 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeightsLC(const BYTE* pRef[], int Pitch[
   const int iBlocksPitch = iBlkWidth * pixelsize;
   const int iBlocksPitchUV = iBlkWidthC * pixelsize;
   int iNumAlignedBlocks = 0;
+  int W_sub[MAX_TEMP_RAD * 2 + 1];
 
   sad_t sad_array_sub[(MAX_TEMP_RAD * 2 + 1)];
   sad_t sad_array_add[(MAX_TEMP_RAD * 2 + 1)];
@@ -5227,25 +5315,60 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeightsLC(const BYTE* pRef[], int Pitch[
 
     // process current block too
     // subtracted
-    if (_cpuFlags & CPUF_SSE2)
+    if (!MPB_PartBlend) // use subtraction
     {
-      SubtractBlock_uint8_sse2(pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch,
-        pMPBTempBlocks, iBlocksPitch, (uint8_t*)pCurr, iCurrPitch, Wall[0], iBlkWidth, iBlkHeight);
-      SubtractBlock_uint8_sse2(pMPBTempBlocksUV1 + (iBlockSizeMemUV * (1)), iBlocksPitchUV,
-        pMPBTempBlocksUV1, iBlocksPitchUV, (uint8_t*)pCurrUV1, iCurrPitchUV1, Wall[0], iBlkWidthC, iBlkHeightC);
-      SubtractBlock_uint8_sse2(pMPBTempBlocksUV2 + (iBlockSizeMemUV * (1)), iBlocksPitchUV,
-        pMPBTempBlocksUV2, iBlocksPitchUV, (uint8_t*)pCurrUV2, iCurrPitchUV2, Wall[0], iBlkWidthC, iBlkHeightC);
+      if (_cpuFlags & CPUF_SSE2)
+      {
+        SubtractBlock_uint8_sse2(pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch,
+          pMPBTempBlocks, iBlocksPitch, (uint8_t*)pCurr, iCurrPitch, Wall[0], iBlkWidth, iBlkHeight);
+        SubtractBlock_uint8_sse2(pMPBTempBlocksUV1 + (iBlockSizeMemUV * (1)), iBlocksPitchUV,
+          pMPBTempBlocksUV1, iBlocksPitchUV, (uint8_t*)pCurrUV1, iCurrPitchUV1, Wall[0], iBlkWidthC, iBlkHeightC);
+        SubtractBlock_uint8_sse2(pMPBTempBlocksUV2 + (iBlockSizeMemUV * (1)), iBlocksPitchUV,
+          pMPBTempBlocksUV2, iBlocksPitchUV, (uint8_t*)pCurrUV2, iCurrPitchUV2, Wall[0], iBlkWidthC, iBlkHeightC);
+      }
+      else
+      {
+        SubtractBlock_C_uint8(pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch,
+          pMPBTempBlocks, iBlocksPitch, (uint8_t*)pCurr, iCurrPitch, Wall[0], iBlkWidth, iBlkHeight);
+        SubtractBlock_C_uint8(pMPBTempBlocksUV1 + (iBlockSizeMemUV * (1)), iBlocksPitchUV,
+          pMPBTempBlocksUV1, iBlocksPitchUV, (uint8_t*)pCurrUV1, iCurrPitchUV1, Wall[0], iBlkWidthC, iBlkHeightC);
+        SubtractBlock_C_uint8(pMPBTempBlocksUV2 + (iBlockSizeMemUV * (1)), iBlocksPitchUV,
+          pMPBTempBlocksUV2, iBlocksPitchUV, (uint8_t*)pCurrUV2, iCurrPitchUV2, Wall[0], iBlkWidthC, iBlkHeightC);
+      }
     }
-    else
+    else // use real partial blending
     {
-      SubtractBlock_C_uint8(pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch,
-        pMPBTempBlocks, iBlocksPitch, (uint8_t*)pCurr, iCurrPitch, Wall[0], iBlkWidth, iBlkHeight);
-      SubtractBlock_C_uint8(pMPBTempBlocksUV1 + (iBlockSizeMemUV * (1)), iBlocksPitchUV,
-        pMPBTempBlocksUV1, iBlocksPitchUV, (uint8_t*)pCurrUV1, iCurrPitchUV1, Wall[0], iBlkWidthC, iBlkHeightC);
-      SubtractBlock_C_uint8(pMPBTempBlocksUV2 + (iBlockSizeMemUV * (1)), iBlocksPitchUV,
-        pMPBTempBlocksUV2, iBlocksPitchUV, (uint8_t*)pCurrUV2, iCurrPitchUV2, Wall[0], iBlkWidthC, iBlkHeightC);
+      for (int i = 0; i < (_trad * 2 + 1); i++)
+        W_sub[i] = Wall[i];
+      W_sub[0] = 0; // zero weight of current block
+
+      norm_weights_all(W_sub, _trad);
+
+      _degrainluma_ptr(
+        pMPBTempBlocks + (iBlockSizeMem * (1)), 0, iBlocksPitch,
+        pCurr, iCurrPitch,
+        pRef, Pitch, W_sub, _trad);
+
+      _degrainchroma_ptr(
+        pMPBTempBlocksUV1 + (iBlockSizeMemUV * (1)), 0, iBlocksPitchUV,
+        pCurrUV1, iCurrPitchUV1,
+        pRefUV1, PitchUV1, W_sub, _trad);
+
+      _degrainchroma_ptr(
+        pMPBTempBlocksUV2 + (iBlockSizeMemUV * (1)), 0, iBlocksPitchUV,
+        pCurrUV2, iCurrPitchUV2,
+        pRefUV2, PitchUV2, W_sub, _trad);
+
+      // always rewind pRef pointers after full blending
+      for (int k = 0; k < _trad * 2; k++)
+      {
+        pRef[k] -= Pitch[k] * iBlkHeight;
+        pRefUV1[k] -= PitchUV1[k] * iBlkHeightC;
+        pRefUV2[k] -= PitchUV2[k] * iBlkHeightC;
+      }
+
     }
-    
+
     luma_sad = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
     sad_chroma = ScaleSadChroma(SADCHROMA(pMPBTempBlocksUV1, iBlocksPitchUV, pMPBTempBlocksUV1 + (iBlockSizeMemUV * (1)), iBlocksPitchUV)
       + SADCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pMPBTempBlocksUV2 + (iBlockSizeMemUV * (1)), iBlocksPitchUV), chromaSADscale);
@@ -5264,26 +5387,59 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeightsLC(const BYTE* pRef[], int Pitch[
     // ref blocks
     for (int n = 1; n < (_trad * 2 + 1); n++)
     {
-      if (Wall[n] != 0) // create subrtracted versions of full blended block
+      if (Wall[n] != 0)
       {
-        // create subrtracted versions of full blended block
-        if (_cpuFlags & CPUF_SSE2)
+        if (!MPB_PartBlend)
         {
-          SubtractBlock_uint8_sse2(pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch,
-            pMPBTempBlocks, iBlocksPitch, (uint8_t*)pRef[n - 1], Pitch[n - 1], Wall[n], iBlkWidth, iBlkHeight);
-          SubtractBlock_uint8_sse2(pMPBTempBlocksUV1 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV,
-            pMPBTempBlocksUV1, iBlocksPitchUV, (uint8_t*)pRefUV1[n - 1], PitchUV1[n - 1], Wall[n], iBlkWidthC, iBlkHeightC);
-          SubtractBlock_uint8_sse2(pMPBTempBlocksUV2 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV,
-            pMPBTempBlocksUV2, iBlocksPitchUV, (uint8_t*)pRefUV2[n - 1], PitchUV2[n - 1], Wall[n], iBlkWidthC, iBlkHeightC);
+          // create subrtracted versions of full blended block (faster)
+          if (_cpuFlags & CPUF_SSE2)
+          {
+            SubtractBlock_uint8_sse2(pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch,
+              pMPBTempBlocks, iBlocksPitch, (uint8_t*)pRef[n - 1], Pitch[n - 1], Wall[n], iBlkWidth, iBlkHeight);
+            SubtractBlock_uint8_sse2(pMPBTempBlocksUV1 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV,
+              pMPBTempBlocksUV1, iBlocksPitchUV, (uint8_t*)pRefUV1[n - 1], PitchUV1[n - 1], Wall[n], iBlkWidthC, iBlkHeightC);
+            SubtractBlock_uint8_sse2(pMPBTempBlocksUV2 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV,
+              pMPBTempBlocksUV2, iBlocksPitchUV, (uint8_t*)pRefUV2[n - 1], PitchUV2[n - 1], Wall[n], iBlkWidthC, iBlkHeightC);
+          }
+          else
+          {
+            SubtractBlock_C_uint8(pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch,
+              pMPBTempBlocks, iBlocksPitch, (uint8_t*)pRef[n - 1], Pitch[n - 1], Wall[n], iBlkWidth, iBlkHeight);
+            SubtractBlock_C_uint8(pMPBTempBlocksUV1 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV,
+              pMPBTempBlocksUV1, iBlocksPitchUV, (uint8_t*)pRefUV1[n - 1], PitchUV1[n - 1], Wall[n], iBlkWidthC, iBlkHeightC);
+            SubtractBlock_C_uint8(pMPBTempBlocksUV2 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV,
+              pMPBTempBlocksUV2, iBlocksPitchUV, (uint8_t*)pRefUV2[n - 1], PitchUV2[n - 1], Wall[n], iBlkWidthC, iBlkHeightC);
+          }
         }
-        else
+        else // real partial blending (slower)
         {
-          SubtractBlock_C_uint8(pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch,
-            pMPBTempBlocks, iBlocksPitch, (uint8_t*)pRef[n - 1], Pitch[n - 1], Wall[n], iBlkWidth, iBlkHeight);
-          SubtractBlock_C_uint8(pMPBTempBlocksUV1 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV,
-            pMPBTempBlocksUV1, iBlocksPitchUV, (uint8_t*)pRefUV1[n - 1], PitchUV1[n - 1], Wall[n], iBlkWidthC, iBlkHeightC);
-          SubtractBlock_C_uint8(pMPBTempBlocksUV2 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV,
-            pMPBTempBlocksUV2, iBlocksPitchUV, (uint8_t*)pRefUV2[n - 1], PitchUV2[n - 1], Wall[n], iBlkWidthC, iBlkHeightC);
+          for (int i = 0; i < (_trad * 2 + 1); i++)
+            W_sub[i] = Wall[i];
+          W_sub[n] = 0; // zero weight of n-th block
+          norm_weights_all(W_sub, _trad);
+
+          _degrainluma_ptr(
+            pMPBTempBlocks + (iBlockSizeMem * (n + 1)), 0, iBlocksPitch,
+            pCurr, iCurrPitch,
+            pRef, Pitch, W_sub, _trad);
+
+          _degrainchroma_ptr(
+            pMPBTempBlocksUV1 + (iBlockSizeMem * (n + 1)), 0, iBlocksPitchUV,
+            pCurrUV1, iCurrPitchUV1,
+            pRefUV1, PitchUV1, W_sub, _trad);
+
+          _degrainchroma_ptr(
+            pMPBTempBlocksUV2 + (iBlockSizeMem * (n + 1)), 0, iBlocksPitchUV,
+            pCurrUV2, iCurrPitchUV2,
+            pRefUV2, PitchUV2, W_sub, _trad);
+
+          // always rewind pRef pointers after full blending, hope after zeroing weight of block it will never put back ?
+          for (int k = 0; k < _trad * 2; k++)
+          {
+            pRef[k] -= Pitch[k] * iBlkHeight;
+            pRefUV1[k] -= PitchUV1[k] * iBlkHeightC;
+            pRefUV2[k] -= PitchUV2[k] * iBlkHeightC;
+          }
         }
 
         //calc SAD of full blended block vs subtracted
@@ -5292,14 +5448,14 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeightsLC(const BYTE* pRef[], int Pitch[
           + SADCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pMPBTempBlocksUV2 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV), chromaSADscale);
         sad_array_sub[n] = luma_sad + sad_chroma;
         stAVG_sub_SAD += sad_array_sub[n];
-        
+
         // calc SAD of full blended vs refs
         luma_sad = SAD(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n - 1]);
         sad_chroma = ScaleSadChroma(SADCHROMA(pMPBTempBlocksUV1, iBlocksPitchUV, pRefUV1[n - 1], PitchUV1[n - 1])
           + SADCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pRefUV2[n - 1], PitchUV2[n - 1]), chromaSADscale);
         sad_array_add[n] = luma_sad + sad_chroma;
         stAVG_add_SAD += sad_array_add[n];
-        
+
         iNumAVG++;
       }
 
@@ -5308,7 +5464,7 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeightsLC(const BYTE* pRef[], int Pitch[
     // find average SAD
     stAVG_add_SAD /= iNumAVG;
     stAVG_sub_SAD /= iNumAVG;
-    
+
     //check if SAD of curr block too differs from average
     for (int n = 0; n < (_trad * 2 + 1); n++)
     {
@@ -5316,20 +5472,21 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeightsLC(const BYTE* pRef[], int Pitch[
       {
         if (stAVG_sub_SAD - sad_array_sub[n] > MPBthSub)
         {
-          Wall[n] = (int)((float)Wall[n] * (1.0f / MPB_SPC)); // decrease weight
+          Wall[n] = (int)((float)Wall[n] * MPB_SPC_sub); // decrease weight
           iNumAlignedBlocks++;
+          continue; // do not check for addition if already adjusted to lower weight ?
         }
 
         if (stAVG_add_SAD - sad_array_add[n] > MPBthAdd)
         {
-          int iNewW = (int)((float)Wall[n] * MPB_SPC); // increase weight 
+          int iNewW = (int)((float)Wall[n] * MPB_SPC_add); // increase weight 
           if (iNewW > 255) iNewW = 255;
           Wall[n] = iNewW;
           iNumAlignedBlocks++;
         }
       }
     }
-    
+
   }
 
   if (iNumAlignedBlocks != 0)
