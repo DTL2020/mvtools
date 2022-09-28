@@ -22,6 +22,15 @@
 #include <stdint.h>
 #include "commonfunctions.h"
 
+float DiamondAngle(int y, int x)
+{
+  if (y >= 0)
+    return (x >= 0 ? y / (x + y) : 1 - x / (-x + y));
+  else
+    return (x < 0 ? 2 - y / (-x - y) : 3 + x / (x - y));
+}
+
+
 // out16_type: 
 //   0: native 8 or 16
 //   1: 8bit in, lsb
@@ -740,7 +749,7 @@ MDegrainN::MDegrainN(
   sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
   float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
   int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos,
-  int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
+  int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend, int _MPBthIVS,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -807,6 +816,7 @@ MDegrainN::MDegrainN(
   , MPB_SPC_sub(_MPB_SPC_sub)
   , MPB_SPC_add(_MPB_SPC_add)
   , MPB_PartBlend(_MPB_PartBlend)
+  , MPB_thIVS(_MPBthIVS)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -2026,7 +2036,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
       norm_weights(weight_arr, _trad);
 
       // luma
-      if (MPBNumIt == 0)
+      if (MPBNumIt == 0 || !isMVsStable(pMVsWorkPlanesArrays, i, weight_arr))
       _degrainluma_ptr(
         pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
@@ -2315,7 +2325,7 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
       );
       */
-      if (MPBNumIt == 0)
+      if (MPBNumIt == 0 || !isMVsStable(pMVsWorkPlanesArrays, i, weight_arr))
       {
         _degrainluma_ptr(
           &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
@@ -2564,7 +2574,7 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
         ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA, _trad
       );
       */
-      if (MPBNumIt == 0)
+      if (MPBNumIt == 0 || !isMVsStable(pMVsWorkPlanesArrays, i, weight_arr))
       {
         _degrainluma_ptr(
           pDstCur + (xx << pixelsize_output_shift),
@@ -3008,7 +3018,7 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
       );*/
 
-      if (MPBNumIt == 0)
+      if (MPBNumIt == 0 || !isMVsStable(pMVsWorkPlanesArrays, i, weight_arr))
       {
         _degrainluma_ptr(
           &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
@@ -3354,7 +3364,7 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
       );
       */
-      if (MPBNumIt == 0)
+      if (MPBNumIt == 0 || !isMVsStable(pMVsWorkPlanesArrays, i, weight_arr))
         _degrainchroma_ptr(
           pDstCur + (xx << pixelsize_output_shift),
           pDstCur + (xx << pixelsize_super_shift) + _lsb_offset_arr[P], _dst_pitch_arr[P],
@@ -3619,7 +3629,7 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
         pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[P],
         ref_data_ptr_arr, pitch_arr, weight_arr, _trad
       );*/
-      if (MPBNumIt == 0)
+      if (MPBNumIt == 0 || !isMVsStable(pMVsWorkPlanesArrays, i, weight_arr))
       {
         _degrainchroma_ptr(
           &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
@@ -5506,4 +5516,43 @@ MV_FORCEINLINE void MDegrainN::CopyBlock(uint8_t* pDst, int iDstPitch, uint8_t* 
     pDst += iDstPitch;
     pSrc += iBlkWidth * pixelsize;
   }
+}
+
+MV_FORCEINLINE bool MDegrainN::isMVsStable(VECTOR** pMVsPlanesArrays, int iNumBlock, int wref_arr[])
+{
+  VECTOR blockMVs[(MAX_TEMP_RAD * 2) + 1];
+  int iNumMVs2Proc = 0;
+
+  for (int k = 0; k < _trad * 2; ++k)
+  {
+    if (wref_arr[k + 1] != 0)
+    {
+      blockMVs[iNumMVs2Proc] = pMVsPlanesArrays[k][iNumBlock];
+      iNumMVs2Proc++;
+    }
+  }
+
+  if (iNumMVs2Proc < 2) return false;
+
+  //calc avg angle between series of MVs ?
+
+  //calc avg dif length of MVs
+  int iTotalDifLength_sq = 0;
+  for (int n = 0; n < iNumMVs2Proc - 1; n++)
+  {
+    VECTOR v1 = blockMVs[n];
+    VECTOR v2 = blockMVs[n + 1];
+
+    int iDifLength_sq = (v1.x - v2.x) * (v1.x - v2.x) + (v1.y - v2.y) * (v1.y - v2.y);
+    iTotalDifLength_sq += iDifLength_sq;
+  }
+
+  int iAvgLength_sq = iTotalDifLength_sq / (iNumMVs2Proc - 1);
+
+  if (iAvgLength_sq > MPB_thIVS)
+    return false;
+
+  return true;
+    
+
 }

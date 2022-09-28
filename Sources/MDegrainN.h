@@ -40,7 +40,7 @@ public:
     float adjSADzeromv, float adjSADcohmv, int thCohMV,
     float fMVLPFCutoff, float fMVLPFSlope, float fMVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
     int UseSubShift, int InterpolateOverlap, ::PClip _mvmultirs, int _thFWBWmvpos,
-    int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
+    int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend, int _MPBthIVS,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -246,6 +246,7 @@ private:
   int MPBNumIt;
   float MPB_SPC_sub;
   float MPB_SPC_add;
+  int MPB_thIVS;
   bool MPB_PartBlend; // false if using faster blocksubtract (may be lower precison/quality), true if use real partial blend with skipped tested block
   uint8_t* pMPBTempBlocks; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
   uint8_t* pMPBTempBlocksUV1; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
@@ -267,6 +268,10 @@ private:
 
   MV_FORCEINLINE void CopyBlock(uint8_t* pDst, int iDstPitch, uint8_t* pSrc, int iBlkWidth, int iBlkHeight);
   MV_FORCEINLINE void norm_weights_all(int wref_arr[], int trad);
+
+  MV_FORCEINLINE bool isMVsStable(VECTOR** pMVsPlanesArrays, int iNumBlock, int wref_arr[]);
+  //pMVsPlanesArrays may be not work (interfiltered, prefiltered or other but separately provided with most noised and most noise-search Manalyse settings
+  //like truemotion=false, low lambda and lsad, zero penalties
 
   std::unique_ptr <YUY2Planes> _dst_planes;
   std::unique_ptr <YUY2Planes> _src_planes;
