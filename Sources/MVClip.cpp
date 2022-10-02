@@ -113,6 +113,7 @@ void	MVClip::update_analysis_data (const MVAnalysisData &adata)
    isBackward  = adata.IsBackward();
    nLvCount    = adata.GetLevelCount();
    nDeltaFrame = adata.GetDeltaFrame();
+   nTrad       = adata.GetTrad();
    nWidth      = adata.GetWidth();
    nHeight     = adata.GetHeight();
    nMagicKey   = adata.GetMagicKey();

@@ -330,6 +330,7 @@ MVAnalyse::MVAnalyse(
   }
 
   analysisData.nDeltaFrame = df;
+  analysisData.nTrad = df;
 //	if (analysisData.nDeltaFrame < 1)
 //	{
 //		analysisData.nDeltaFrame = 1;
@@ -611,6 +612,8 @@ MVAnalyse::MVAnalyse(
         {
           srd._analysis_data.nFlags &= ~MOTION_IS_BACKWARD;
         }
+
+        srd._analysis_data.nTrad = df;
 
         srd._analysis_data_divided.nDeltaFrame = srd._analysis_data.nDeltaFrame;
         srd._analysis_data_divided.isBackward = srd._analysis_data.isBackward;

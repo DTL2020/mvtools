@@ -107,6 +107,7 @@ public:
 
   int nVPadding; // Vertical padding - v1.8.1
 
+  int nTrad; // tr param for multi mode - to check if it equal for MAnalyse and other filters (2.7.46)
 
 public :
 
@@ -119,6 +120,7 @@ public :
    MV_FORCEINLINE bool IsBackward() const { return isBackward; }
    MV_FORCEINLINE int GetMagicKey() const { return nMagicKey; }
    MV_FORCEINLINE int GetDeltaFrame() const { return nDeltaFrame; }
+   MV_FORCEINLINE int GetTrad() const { return nTrad; }
    MV_FORCEINLINE int GetWidth() const { return nWidth; }
    MV_FORCEINLINE int GetHeight() const { return nHeight; }
    MV_FORCEINLINE int GetOverlapX() const { return nOverlapX; }

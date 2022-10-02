@@ -30,7 +30,6 @@ float DiamondAngle(int y, int x)
     return (x < 0 ? 2 - y / (-x - y) : 3 + x / (x - y));
 }
 
-
 // out16_type: 
 //   0: native 8 or 16
 //   1: 8bit in, lsb
@@ -835,6 +834,10 @@ MDegrainN::MDegrainN(
     env_ptr->ThrowError("MDegrainN: temporal radius must be at least 1.");
   }
 
+  // check if padding is enough - must be at least blksize/2
+  if (nHPadding < nBlkSizeX / 2) env_ptr->ThrowError("MDegrainN: hpad in MSuper must be > blksize (%d).", nBlkSizeX);
+  if (nVPadding < nBlkSizeY / 2) env_ptr->ThrowError("MDegrainN: vpad in MSuper must be > blksize (%d).", nBlkSizeY);
+
   if (wpow < 1 || wpow > 7)
   {
     env_ptr->ThrowError("MDegrainN: wpow must be from 1 to 7. 7 = equal weights.");
@@ -917,7 +920,6 @@ MDegrainN::MDegrainN(
       CheckSimilarity(*(_mv_clip_arr[k]._clip_sptr), txt_0, env_ptr);
     else
       CheckSimilarityEO(*(_mv_clip_arr[k]._clip_sptr), txt_0, env_ptr);
-
   }
 
   if (mvmultirs != 0) // separate reverse search MVclip provided
@@ -1399,6 +1401,9 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
     mv_clip.Update(mv, env_ptr);
     _usable_flag_arr[k] = mv_clip.IsUsable();
 
+    int iTrad = mv_clip.GetTrad();
+    if (iTrad != _trad) env_ptr->ThrowError("MDegrainN : nTrad in mvmulti %d not equal to MDegrain(tr=%d), possibly wrong tr params in MAnalyse and MDegrain", iTrad, _trad);
+    
     if (mvmultirs != 0) // get and update reverse search MVs
     {
       MVClip& mv_clip_rs = *(_mv_clip_arr[k]._cliprs_sptr);
@@ -5434,12 +5439,12 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeightsLC(const BYTE* pRef[], int Pitch[
             pRef, Pitch, W_sub, _trad);
 
           _degrainchroma_ptr(
-            pMPBTempBlocksUV1 + (iBlockSizeMem * (n + 1)), 0, iBlocksPitchUV,
+            pMPBTempBlocksUV1 + (iBlockSizeMemUV * (n + 1)), 0, iBlocksPitchUV,
             pCurrUV1, iCurrPitchUV1,
             pRefUV1, PitchUV1, W_sub, _trad);
 
           _degrainchroma_ptr(
-            pMPBTempBlocksUV2 + (iBlockSizeMem * (n + 1)), 0, iBlocksPitchUV,
+            pMPBTempBlocksUV2 + (iBlockSizeMemUV * (n + 1)), 0, iBlocksPitchUV,
             pCurrUV2, iCurrPitchUV2,
             pRefUV2, PitchUV2, W_sub, _trad);
 
