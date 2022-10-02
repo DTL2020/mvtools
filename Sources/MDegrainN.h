@@ -266,6 +266,30 @@ private:
     const int iBlkWidthC, const int iBlkHeightC, const int chromaSADscale
   );
 
+  //multi-pass blending single plane only
+  MV_FORCEINLINE void MPB_SP(
+    BYTE* pDst, BYTE* pDstLsb, int nDstPitch,
+    const BYTE* pSrc, int nSrcPitch,
+    const BYTE* pRef[], int Pitch[],
+    int Wall[], const int iBlkWidth, const int iBlkHeight,
+    bool bChroma
+  );
+
+  // multi-pass blending luma and chroma planes
+  MV_FORCEINLINE void MPB_LC(
+    BYTE* pDst, BYTE* pDstLsb, int nDstPitch,
+    const BYTE* pSrc, int nSrcPitch,
+    const BYTE* pRef[], int Pitch[],
+    BYTE* pDstUV1, BYTE* pDstLsbUV1, int nDstPitchUV1,
+    const BYTE* pSrcUV1, int nSrcPitchUV1,
+    const BYTE* pRefUV1[], int PitchUV1[],
+    BYTE* pDstUV2, BYTE* pDstLsbUV2, int nDstPitchUV2,
+    const BYTE* pSrcUV2, int nSrcPitchUV2,
+    const BYTE* pRefUV2[], int PitchUV2[],
+    int Wall[], int WallC[], const int iBlkWidth, const int iBlkHeight,
+    const int iBlkWidthC, const int iBlkHeightC, const int chromaSADscale
+  );
+
   MV_FORCEINLINE void CopyBlock(uint8_t* pDst, int iDstPitch, uint8_t* pSrc, int iBlkWidth, int iBlkHeight);
   MV_FORCEINLINE void norm_weights_all(int wref_arr[], int trad);
 
