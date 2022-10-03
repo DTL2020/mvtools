@@ -748,7 +748,8 @@ MDegrainN::MDegrainN(
   sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, int wpow, float adjSADzeromv, float adjSADcohmv, int thCohMV,
   float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
   int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos,
-  int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend, int _MPBthIVS,
+  int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
+  int _MPBthIVS, bool _showIVSmask,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -816,6 +817,7 @@ MDegrainN::MDegrainN(
   , MPB_SPC_add(_MPB_SPC_add)
   , MPB_PartBlend(_MPB_PartBlend)
   , MPB_thIVS(_MPBthIVS)
+  , showIVSmask(_showIVSmask)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -5289,6 +5291,106 @@ MV_FORCEINLINE bool MDegrainN::isMVsStable(VECTOR** pMVsPlanesArrays, int iNumBl
   VECTOR blockMVs[(MAX_TEMP_RAD * 2) + 1];
   int iNumMVs2Proc = 0;
 
+  VECTOR blockMVs_sq[(MAX_TEMP_RAD * 2) + 1];
+  // convert +1, -1, +2, -2, +3, -3 ... to
+// -3, -2, -1, 0, +1, +2, +3 timed sequence
+  for (int k = 0; k < _trad; ++k)
+  {
+    blockMVs_sq[k] = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][iNumBlock];
+  }
+
+  blockMVs_sq[_trad].x = 0; // zero trad - source block itself
+  blockMVs_sq[_trad].y = 0;
+  blockMVs_sq[_trad].sad = 0;
+
+  for (int k = 1; k < _trad + 1; ++k)
+  {
+    blockMVs_sq[k + _trad] = pMVsPlanesArrays[(k - 1) * 2][iNumBlock];
+  }
+
+  // velocity Vs (N-1)
+  int iVx[(MAX_TEMP_RAD * 2) + 1];
+  int iVy[(MAX_TEMP_RAD * 2) + 1];
+
+  //acceleration (N-2)
+  int iAx[(MAX_TEMP_RAD * 2) + 1];
+  int iAy[(MAX_TEMP_RAD * 2) + 1];
+
+  // velocity X, Y
+  for (int n = 0; n < (_trad * 2); n++)
+  {
+    VECTOR v1 = blockMVs_sq[n];
+    VECTOR v2 = blockMVs_sq[n+1];
+    iVx[n] = v2.x - v1.x;
+    iVy[n] = v2.y - v1.y;
+  }
+
+  // acceleration X, Y 
+  for (int n = 0; n < (_trad * 2) - 1; n++)
+  {
+    iAx[n] = iVx[n + 1] - iVx[n];
+    iAy[n] = iVy[n + 1] - iVy[n];
+  }
+
+  // calc max sum A
+  int iMaxAsq = 0;
+  for (int n = 0; n < (_trad * 2) - 1; n++)
+  {
+    int Asq = iAx[n] * iAx[n] + iAy[n] * iAy[n];
+    if (Asq > iMaxAsq) iMaxAsq = Asq;
+  }
+
+  if (iMaxAsq > MPB_thIVS)
+    return false;
+
+  return true;
+
+
+  /*
+  //calc max length of MVs
+  int iMaxLength_sq = 0;
+  for (int n = 0; n < (_trad * 2 + 1); n++)
+  {
+    VECTOR v1 = blockMVs_sq[n];
+
+    int iLength_sq = (v1.x ) * (v1.x ) + (v1.y ) * (v1.y);
+    if (iLength_sq > iMaxLength_sq) iMaxLength_sq = iLength_sq;
+
+  }
+
+  if (iMaxLength_sq > MPB_thIVS)
+    return false;
+
+  return true;
+  */
+
+  /*
+  //calc avg dif length of MVs
+  int iTotalDifLength_sq = 0;
+  for (int n = 0; n < (_trad * 2); n++)
+  {
+    VECTOR v1 = blockMVs_sq[n];
+    VECTOR v2 = blockMVs_sq[n + 1];
+
+    int iDifLength_sq = (v1.x - v2.x) * (v1.x - v2.x) + (v1.y - v2.y) * (v1.y - v2.y);
+    iTotalDifLength_sq += iDifLength_sq;
+  }
+
+  int iAvgLength_sq = iTotalDifLength_sq / (_trad * 2);
+
+  if (iAvgLength_sq > MPB_thIVS)
+    return false;
+
+  return true;
+
+  */
+  /*
+
+
+
+
+
+
   for (int k = 0; k < _trad * 2; ++k)
   {
     if (wref_arr[k + 1] != 0)
@@ -5319,7 +5421,7 @@ MV_FORCEINLINE bool MDegrainN::isMVsStable(VECTOR** pMVsPlanesArrays, int iNumBl
     return false;
 
   return true;
-
+  */
 }
 
 MV_FORCEINLINE void MDegrainN::MPB_SP(
@@ -5330,54 +5432,115 @@ MV_FORCEINLINE void MDegrainN::MPB_SP(
   bool bChroma
 )
 {
+  int adjWarr[1 + MAX_TEMP_RAD * 2]; 
+  int startWarr[1 + MAX_TEMP_RAD * 2]; 
+
+  if (showIVSmask) // may be not best place but less places in text to place
+  {
+    for (int h = 0; h < iBlkHeight; h++)
+    {
+      for (int w = 0; w < iBlkWidth; w++)
+      {
+        pDst[h * nDstPitch + w] = 0;
+      }
+    }
+    return;
+  }
+
+  // start check from equal weights (equal to wpow=7 ?)
+  int iNonZeroWeights = 0;
+  for (int i = 0; i < (_trad * 2) + 1; i++)
+  {
+    if (Wall[i] != 0)
+    {
+      {
+        adjWarr[i] = 1 << DEGRAIN_WEIGHT_BITS;
+        iNonZeroWeights++;
+      }
+    }
+    else
+      adjWarr[i] = 0;
+  }
+
+  if (iNonZeroWeights != 0)
+  {
+    norm_weights_all(adjWarr, _trad);
+
+    // copy start weights to start weights array
+    for (int i = 0; i < (_trad * 2) + 1; i++)
+    {
+      startWarr[i] = adjWarr[i];
+    }
+  }
+
   int iNumItCurr = MPBNumIt;
   do
   {
     // initial blend or each iteration blend
-    _degrainluma_ptr(
-      pMPBTempBlocks, 0, (iBlkWidth * pixelsize),
-      pSrc, nSrcPitch,
-      pRef, Pitch, Wall, _trad
-    );
+    if (!bChroma)
+    {
+      _degrainluma_ptr(
+        pMPBTempBlocks, 0, (iBlkWidth * pixelsize),
+        pSrc, nSrcPitch,
+        pRef, Pitch, adjWarr, _trad
+      );
+    }
+    else
+    {
+      _degrainchroma_ptr(
+        pMPBTempBlocks, 0, (iBlkWidth * pixelsize),
+        pSrc, nSrcPitch,
+        pRef, Pitch, adjWarr, _trad
+      );
+    }
 
     int iNumAlignedBlocks = AlignBlockWeights(
       pRef, Pitch,
       pSrc, nSrcPitch,
-      Wall, iBlkWidth, iBlkHeight, bChroma
+      adjWarr, iBlkWidth, iBlkHeight, bChroma
     );
 
     if ((iNumAlignedBlocks == 0) || (iNumItCurr < 0))
     {
-      // final output blend
-      if (_lsb_flag || iNumAlignedBlocks != 0) // make full blend (with lsb) again
-      {
-        if (!bChroma)
-        {
-          _degrainluma_ptr(
-            pDst, pDstLsb, nDstPitch,
-            pSrc, nSrcPitch,
-            pRef, Pitch, Wall, _trad
-          );
-        }
-        else
-        {
-          _degrainchroma_ptr(
-            pDst, pDstLsb, nDstPitch,
-            pSrc, nSrcPitch,
-            pRef, Pitch, Wall, _trad
-          );
-        }
-      }
-      else // simply copy current blended block
-      {
-        CopyBlock(pDst, nDstPitch, pMPBTempBlocks, iBlkWidth, iBlkHeight);
-      }
       break;
     }
 
     iNumItCurr--;
 
   } while (1);
+
+  // adjust Wall weights proportionally to found weights
+  for (int i = 0; i < (_trad * 2) + 1; i++)
+  {
+    if (startWarr[i] != 0)
+    {
+      float fRatio = (float)adjWarr[i] / (float)startWarr[i];
+      int weight = Wall[i];
+      weight = (int)((float)weight * fRatio + 0.5f);
+      Wall[i] = weight;
+    }
+  }
+
+  norm_weights_all(Wall, _trad);
+
+  // make final blend to output
+  if (!bChroma)
+  {
+    _degrainluma_ptr(
+      pDst, pDstLsb, nDstPitch,
+      pSrc, nSrcPitch,
+      pRef, Pitch, Wall, _trad
+    );
+  }
+  else
+  {
+    _degrainchroma_ptr(
+      pDst, pDstLsb, nDstPitch,
+      pSrc, nSrcPitch,
+      pRef, Pitch, Wall, _trad
+    );
+  }
+
 }
 
 MV_FORCEINLINE void MDegrainN::MPB_LC(
@@ -5394,122 +5557,122 @@ MV_FORCEINLINE void MDegrainN::MPB_LC(
   const int iBlkWidthC, const int iBlkHeightC, const int chromaSADscale
 )
 {
+  if (showIVSmask) // may be not best place but less places in text to place
+  {
+    for (int h = 0; h < iBlkHeight; h++)
+    {
+      for (int w = 0; w < iBlkWidth; w++)
+      {
+        pDst[h * nDstPitch + w] = 0;
+      }
+    }
+    return;
+  }
+
+  int adjWarr[1 + MAX_TEMP_RAD * 2];
+  int startWarr[1 + MAX_TEMP_RAD * 2];
+
+  // start check from equal weights (equal to wpow=7 ?)
+  int iNonZeroWeights = 0;
+  for (int i = 0; i < (_trad * 2) + 1; i++)
+  {
+    if (Wall[i] != 0)
+    {
+      {
+        adjWarr[i] = 1 << DEGRAIN_WEIGHT_BITS;
+        iNonZeroWeights++;
+      }
+    }
+    else
+      adjWarr[i] = 0;
+  }
+
+  if (iNonZeroWeights != 0)
+  {
+    norm_weights_all(adjWarr, _trad);
+
+    // copy start weights to start weights array
+    for (int i = 0; i < (_trad * 2) + 1; i++)
+    {
+      startWarr[i] = adjWarr[i];
+    }
+  }
+
   int iNumItCurr = MPBNumIt;
   do
   {
     // initial blend or each iteration blend
-/*    _degrainluma_ptr(
-      pMPBTempBlocks, 0, (nBlkSizeX * pixelsize),
-      pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-      ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-    );*/
     _degrainluma_ptr(
       pMPBTempBlocks, 0, (iBlkWidth * pixelsize),
       pSrc, nSrcPitch,
-      pRef, Pitch, Wall, _trad
+      pRef, Pitch, adjWarr, _trad
     );
 
-/*    _degrainchroma_ptr(
-      pMPBTempBlocksUV1, 0, ((nBlkSizeX >> nLogxRatioUV_super)* pixelsize),
-      pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-      ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad
-    );*/
     _degrainchroma_ptr(
       pMPBTempBlocksUV1, 0, (iBlkWidthC * pixelsize),
       pSrcUV1, nSrcPitchUV1,
-      pRefUV1, PitchUV1, Wall, _trad
+      pRefUV1, PitchUV1, adjWarr, _trad
     );
 
-/*    _degrainchroma_ptr(
-      pMPBTempBlocksUV2, 0, ((nBlkSizeX >> nLogxRatioUV_super)* pixelsize),
-      pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-      ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA, _trad
-    );*/
     _degrainchroma_ptr(
       pMPBTempBlocksUV2, 0, (iBlkWidthC * pixelsize),
       pSrcUV2, nSrcPitchUV2,
-      pRefUV2, PitchUV2, Wall, _trad
+      pRefUV2, PitchUV2, adjWarr, _trad
     );
 
     int iNumAlignedBlocks = AlignBlockWeightsLC(
-/*      ref_data_ptr_arr, pitch_arr,
-      ref_data_ptr_arrUV1, pitch_arrUV1,
-      ref_data_ptr_arrUV2, pitch_arrUV2,
-      pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-      pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-      pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-      weight_arr, nBlkSizeX, nBlkSizeY,
-      nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super,
-      _mv_clip_arr[0]._clip_sptr->chromaSADScale*/
       pRef, Pitch,
       pRefUV1, PitchUV1,
       pRefUV2, PitchUV2,
       pSrc, nSrcPitch,
       pSrcUV1, nSrcPitchUV1,
       pSrcUV2, nSrcPitchUV2,
-      Wall, iBlkWidth, iBlkHeight,
+      adjWarr, iBlkWidth, iBlkHeight,
       iBlkWidthC, iBlkHeightC,
       chromaSADscale
     );
 
-
     if ((iNumAlignedBlocks == 0) || (iNumItCurr < 0))
     {
-      // final output blend
-      if (_lsb_flag || iNumAlignedBlocks != 0) // make full blend (with lsb) again
-      {
-/*        _degrainluma_ptr(
-          pDstCur + (xx << pixelsize_output_shift),
-          pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
-          pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-          ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-        );*/
-        _degrainluma_ptr(
-          pDst, pDstLsb, nDstPitch,
-          pSrc, nSrcPitch,
-          pRef, Pitch, Wall, _trad
-        );
-
-        // chroma first plane
-/*        _degrainchroma_ptr(
-          pDstCurUV1 + (xx_uv << pixelsize_output_shift),
-          pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
-          pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-          ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad
-        );*/
-        _degrainchroma_ptr(
-          pDstUV1, pDstLsbUV1, nDstPitchUV1,
-          pSrcUV1, nSrcPitchUV1,
-          pRefUV1, PitchUV1, WallC, _trad
-        );
-
-        // chroma second plane
-/*        _degrainchroma_ptr(
-          pDstCurUV2 + (xx_uv << pixelsize_output_shift),
-          pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
-          pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-          ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA, _trad
-        );*/
-        _degrainchroma_ptr(
-          pDstUV2, pDstLsbUV2, nDstPitchUV2,
-          pSrcUV2, nSrcPitchUV2,
-          pRefUV2, PitchUV2, WallC, _trad
-        );
-
-      }
-      else // simply copy current blended block
-      {
-/*        CopyBlock(pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[0], pMPBTempBlocks, nBlkSizeX, nBlkSizeY);
-        CopyBlock(pDstCurUV1 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[1], pMPBTempBlocksUV1, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super);
-        CopyBlock(pDstCurUV2 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[2], pMPBTempBlocksUV2, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super);*/
-        CopyBlock(pDst, nDstPitch, pMPBTempBlocks, iBlkWidth, iBlkHeight);
-        CopyBlock(pDstUV1, nDstPitchUV1, pMPBTempBlocksUV1, iBlkWidthC, iBlkHeightC);
-        CopyBlock(pDstUV2, nDstPitchUV2, pMPBTempBlocksUV2, iBlkWidthC, iBlkHeightC);
-      }
       break;
     }
 
     iNumItCurr--;
 
   } while (1);
+
+  // adjust Wall weights proportionally to found weights
+  for (int i = 0; i < (_trad * 2) + 1; i++)
+  {
+    if (startWarr[i] != 0)
+    {
+      float fRatio = (float)adjWarr[i] / (float)startWarr[i];
+      int weight = Wall[i];
+      weight = (int)((float)weight * fRatio + 0.5f);
+      Wall[i] = weight;
+    }
+  }
+
+  norm_weights_all(Wall, _trad);
+
+  // make final blend to output
+  _degrainluma_ptr(
+    pDst, pDstLsb, nDstPitch,
+    pSrc, nSrcPitch,
+    pRef, Pitch, Wall, _trad
+  );
+
+  // chroma first plane
+  _degrainchroma_ptr(
+    pDstUV1, pDstLsbUV1, nDstPitchUV1,
+    pSrcUV1, nSrcPitchUV1,
+    pRefUV1, PitchUV1, WallC, _trad
+  );
+
+  // chroma second plane
+  _degrainchroma_ptr(
+    pDstUV2, pDstLsbUV2, nDstPitchUV2,
+    pSrcUV2, nSrcPitchUV2,
+    pRefUV2, PitchUV2, WallC, _trad
+  );
 }
