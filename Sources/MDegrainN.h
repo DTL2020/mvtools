@@ -41,7 +41,7 @@ public:
     float fMVLPFCutoff, float fMVLPFSlope, float fMVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
     int UseSubShift, int InterpolateOverlap, ::PClip _mvmultirs, int _thFWBWmvpos,
     int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
-    int _MPBthIVS, bool _showIVSmask,
+    int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -74,6 +74,7 @@ private:
   public:
     SharedPtr <MVClip> _clip_sptr;
     SharedPtr <MVClip> _cliprs_sptr; // separate MVclip reverse search provided
+    SharedPtr <MVClip> _clipvs_sptr; // separate MVclip vectors stable check provided
     SharedPtr <MVGroupOfFrames> _gof_sptr;
     sad_t _thsad;
     sad_t _thsadc;
@@ -225,7 +226,9 @@ private:
   void InterpolateOverlap_2x(VECTOR* pInterpolatedMVs, const VECTOR* pInputMVs, int idx);
   bool bDiagOvlp;
   VECTOR* pMVsWorkPlanesArrays[MAX_TEMP_RAD * 2]; // curernt working MVs
-  VECTOR* pMVsWorkPlanesArraysRS[MAX_TEMP_RAD * 2]; // curernt working MVs reverse search
+  const VECTOR* pMVsPlanesArraysVS[MAX_TEMP_RAD * 2]; // curernt working MVs IVS check
+  VECTOR* pMVsIntOvlpPlanesArraysVS[MAX_TEMP_RAD * 2]; // interpolated overlap MVs
+  const uint8_t* pMVsIntOvlpPlanesArraysVS_a[MAX_TEMP_RAD * 2]; // pointers to aligned memory pages to free
   sad_t veryBigSAD;
   MV_FORCEINLINE sad_t CheckSAD(int bx_src, int by_src, int ref_idx, int dx_ref, int dy_ref);
 
@@ -238,6 +241,7 @@ private:
   float fSinc(float x);
 
   PClip mvmultirs;
+  PClip mvmultivs;
   MV_FORCEINLINE void ProcessRSMVdata(void);
   int thFWBWmvpos;
 

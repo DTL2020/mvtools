@@ -761,7 +761,7 @@ MDegrainN::MDegrainN(
   float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
   int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos,
   int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
-  int _MPBthIVS, bool _showIVSmask,
+  int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -830,6 +830,7 @@ MDegrainN::MDegrainN(
   , MPB_PartBlend(_MPB_PartBlend)
   , MPB_thIVS(_MPBthIVS)
   , showIVSmask(_showIVSmask)
+  , mvmultivs(_mvmultivs)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -954,6 +955,25 @@ MDegrainN::MDegrainN(
         CheckSimilarity(*(_mv_clip_arr[k]._cliprs_sptr), txt_0, env_ptr);
       else
         CheckSimilarityEO(*(_mv_clip_arr[k]._cliprs_sptr), txt_0, env_ptr);
+    }
+  }
+
+  if (mvmultivs != 0) // separate MVclip provided for IVS check/mask
+  {
+    for (int k = 0; k < _trad * 2; ++k)
+    {
+      _mv_clip_arr[k]._clipvs_sptr = SharedPtr <MVClip>(
+        new MVClip(mvmultivs, nscd1, nscd2, env_ptr, _trad * 2, k, true) // use MVsArray only, not blocks[]
+        );
+
+      static const char* name_0[2] = { "mvbw", "mvfw" };
+      char txt_0[127 + 1];
+      sprintf(txt_0, "%s%d", name_0[k & 1], 1 + k / 2);
+      //    CheckSimilarity(*(_mv_clip_arr[k]._clip_sptr), txt_0, env_ptr);
+      if (iInterpolateOverlap == 0)
+        CheckSimilarity(*(_mv_clip_arr[k]._clipvs_sptr), txt_0, env_ptr);
+      else
+        CheckSimilarityEO(*(_mv_clip_arr[k]._clipvs_sptr), txt_0, env_ptr);
     }
   }
 
@@ -1325,6 +1345,20 @@ MDegrainN::MDegrainN(
 #endif
     pMVsIntOvlpPlanesArrays[k] = pTmp;
 
+    if (mvmultivs)
+    {
+#ifdef _WIN32
+      pTmp_a = (BYTE*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+      pMVsIntOvlpPlanesArraysVS_a[k] = pTmp_a;
+      pTmp = (VECTOR*)(pTmp_a + k * L2L3_CACHE_LINE_SIZE);
+#else
+      pTmp = new VECTOR[nBlkCount]; // allocate in heap ?
+      pMVsIntOvlpPlanesArraysVS_a[k] = pTmp;
+#endif
+      pMVsIntOvlpPlanesArraysVS[k] = pTmp;
+
+    }
+
   }
 
   // allocate temp single subtracted blocks memory area
@@ -1367,6 +1401,7 @@ MDegrainN::~MDegrainN()
 #ifdef _WIN32
     VirtualFree((LPVOID)pFilteredMVsPlanesArrays_a[k], 0, MEM_FREE);
     VirtualFree((LPVOID)pMVsIntOvlpPlanesArrays_a[k], 0, MEM_FREE);
+    VirtualFree((LPVOID)pMVsIntOvlpPlanesArraysVS_a[k], 0, MEM_FREE);
     VirtualFree((LPVOID)pMPBTempBlocks, 0, MEM_FREE);
     VirtualFree((LPVOID)pMPBTempBlocksUV1, 0, MEM_FREE);
     VirtualFree((LPVOID)pMPBTempBlocksUV2, 0, MEM_FREE);
@@ -1424,6 +1459,13 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
       MVClip& mv_clip_rs = *(_mv_clip_arr[k]._cliprs_sptr);
       ::PVideoFrame mv_rs = mv_clip_rs.GetFrame(n, env_ptr);
       mv_clip_rs.Update(mv_rs, env_ptr);
+    }
+
+    if (mvmultivs != 0) // get and update IVS check MVs
+    {
+      MVClip& mv_clip_vs = *(_mv_clip_arr[k]._clipvs_sptr);
+      ::PVideoFrame mv_vs = mv_clip_vs.GetFrame(n, env_ptr);
+      mv_clip_vs.Update(mv_vs, env_ptr);
     }
   }
 
@@ -1595,10 +1637,20 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
     for (int k = 0; k < _trad * 2; ++k)
     {
       if ((iInterpolateOverlap == 1) || (iInterpolateOverlap == 2))
+      {
         InterpolateOverlap_4x(pMVsIntOvlpPlanesArrays[k], _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0), k);
+        if (mvmultivs != 0)
+          InterpolateOverlap_4x(pMVsIntOvlpPlanesArraysVS[k], _mv_clip_arr[k]._clipvs_sptr->GetpMVsArray(0), k);
+      }
       else if ((iInterpolateOverlap == 3) || (iInterpolateOverlap == 4))
+      {
         InterpolateOverlap_2x(pMVsIntOvlpPlanesArrays[k], _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0), k);
+        if (mvmultivs != 0)
+          InterpolateOverlap_2x(pMVsIntOvlpPlanesArraysVS[k], _mv_clip_arr[k]._clipvs_sptr->GetpMVsArray(0), k);
+      }
       pMVsWorkPlanesArrays[k] = pMVsIntOvlpPlanesArrays[k];
+      if (mvmultivs != 0)
+        pMVsPlanesArraysVS[k] = pMVsIntOvlpPlanesArraysVS[k];
     }
   }
   else
@@ -1608,6 +1660,9 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
 //      pMVsPlanesArrays[k] = _mv_clip_arr[k]._clip_sptr->GetpMVsArray(0);
 //      pMVsWorkPlanesArrays[k] = (VECTOR*)pMVsPlanesArrays[k];
       pMVsWorkPlanesArrays[k] = (VECTOR*)_mv_clip_arr[k]._clip_sptr->GetpMVsArray(0);
+
+      if (mvmultivs != 0)
+        pMVsPlanesArraysVS[k] = _mv_clip_arr[k]._clipvs_sptr->GetpMVsArray(0);
     }
   }
 
@@ -5305,12 +5360,21 @@ MV_FORCEINLINE bool MDegrainN::isMVsStable(VECTOR** pMVsPlanesArrays, int iNumBl
   VECTOR blockMVs[(MAX_TEMP_RAD * 2) + 1];
   int iNumMVs2Proc = 0;
 
+  VECTOR** pMVSPlanesArrays_working;
+
+  if (mvmultivs != 0)
+  {
+    pMVSPlanesArrays_working = (VECTOR**)pMVsPlanesArraysVS;
+  }
+  else
+    pMVSPlanesArrays_working = pMVsPlanesArrays;
+
   VECTOR blockMVs_sq[(MAX_TEMP_RAD * 2) + 1];
   // convert +1, -1, +2, -2, +3, -3 ... to
 // -3, -2, -1, 0, +1, +2, +3 timed sequence
   for (int k = 0; k < _trad; ++k)
   {
-    blockMVs_sq[k] = pMVsPlanesArrays[(_trad - k - 1) * 2 + 1][iNumBlock];
+    blockMVs_sq[k] = pMVSPlanesArrays_working[(_trad - k - 1) * 2 + 1][iNumBlock];
   }
 
   blockMVs_sq[_trad].x = 0; // zero trad - source block itself
@@ -5319,7 +5383,7 @@ MV_FORCEINLINE bool MDegrainN::isMVsStable(VECTOR** pMVsPlanesArrays, int iNumBl
 
   for (int k = 1; k < _trad + 1; ++k)
   {
-    blockMVs_sq[k + _trad] = pMVsPlanesArrays[(k - 1) * 2][iNumBlock];
+    blockMVs_sq[k + _trad] = pMVSPlanesArrays_working[(k - 1) * 2][iNumBlock];
   }
 
   // velocity Vs (N-1)
