@@ -537,7 +537,7 @@ AVSValue __cdecl Create_MDegrainN(AVSValue args, void*, IScriptEnvironment* env)
     args[34].AsFloat(0.7f), // MPB_SPCsub - single pass coeff for subtractively checked blocks
     args[35].AsFloat(1.5f), // MPB_SPCadd - single pass coeff for additively checked blocks, typically MPB_SPCadd ~ 1/MPB_SPCsub as start values for tuning
     args[36].AsBool(false), // MPB_PartBlend
-    args[37].AsInt(0), // MPB_thIVS - threshold isMVsStable
+    args[37].AsInt(0), // MPBthIVS - threshold isMVsStable
     args[38].AsBool(false), // showIVSmask
     args[39].AsClip(), // mvmultivs - for IVS mask search with separate MVclip, optional
     // fixme: out32
