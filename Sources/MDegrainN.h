@@ -296,6 +296,7 @@ private:
   MV_FORCEINLINE void norm_weights_all(int wref_arr[], int trad);
 
   MV_FORCEINLINE bool isMVsStable(VECTOR** pMVsPlanesArrays, int iNumBlock, int wref_arr[]);
+  MV_FORCEINLINE float DeltaDiAngle(VECTOR v1, VECTOR v2);
   //pMVsPlanesArrays may be not work (interfiltered, prefiltered or other but separately provided with most noised and most noise-search Manalyse settings
   //like truemotion=false, low lambda and lsad, zero penalties
 

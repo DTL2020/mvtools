@@ -24,10 +24,22 @@
 
 float DiamondAngle(int y, int x)
 {
+  if ((x + y) == 0 || (y - x) == 0 || (-y - x) == 0 || (x - y) == 0)
+    return 0;
+
+  float fy = (float)y;
+  float fx = (float)x;
+/*
   if (y >= 0)
     return (x >= 0 ? y / (x + y) : 1 - x / (-x + y));
   else
-    return (x < 0 ? 2 - y / (-x - y) : 3 + x / (x - y));
+    return (x < 0 ? 2 - y / (-x - y) : 3 + x / (x - y));*/
+
+  if (y >= 0)
+    return (x >= 0 ? fy / (fx + fy) : 1 - fx / (-fx + fy));
+  else
+    return (x < 0 ? 2 - fy / (-fx - fy) : 3 + fx / (fx - fy));
+
 }
 
 // out16_type: 
@@ -906,6 +918,8 @@ MDegrainN::MDegrainN(
   }
 
   _wpow = wpow;
+  // scale to nPel^2
+  MPB_thIVS *= (nPel * nPel);
 
   _mv_clip_arr.resize(_trad * 2);
   for (int k = 0; k < _trad * 2; ++k)
@@ -5316,13 +5330,18 @@ MV_FORCEINLINE bool MDegrainN::isMVsStable(VECTOR** pMVsPlanesArrays, int iNumBl
   int iAx[(MAX_TEMP_RAD * 2) + 1];
   int iAy[(MAX_TEMP_RAD * 2) + 1];
 
-  // velocity X, Y
+  //delta angles (relative angle velocity per interframe time ?)
+  float fDDA[(MAX_TEMP_RAD * 2) + 1];
+
+  // velocity X, Y, linear and vectors rotational
   for (int n = 0; n < (_trad * 2); n++)
   {
     VECTOR v1 = blockMVs_sq[n];
     VECTOR v2 = blockMVs_sq[n+1];
     iVx[n] = v2.x - v1.x;
     iVy[n] = v2.y - v1.y;
+
+    fDDA[n] = DeltaDiAngle(v1, v2);
   }
 
   // acceleration X, Y 
@@ -5333,14 +5352,26 @@ MV_FORCEINLINE bool MDegrainN::isMVsStable(VECTOR** pMVsPlanesArrays, int iNumBl
   }
 
   // calc max sum A
-  int iMaxAsq = 0;
+/*  int iMaxAsq = 0;
   for (int n = 0; n < (_trad * 2) - 1; n++)
   {
     int Asq = iAx[n] * iAx[n] + iAy[n] * iAy[n];
     if (Asq > iMaxAsq) iMaxAsq = Asq;
   }
+  */
+  int iSumAsq = 0;
+  int fSumDDA = 0.0f;
+  for (int n = 0; n < (_trad * 2) - 1; n++)
+  {
+    int Asq = iAx[n] * iAx[n] + iAy[n] * iAy[n];
+    iSumAsq += Asq;
+    fSumDDA += fDDA[n];
+  }
 
-  if (iMaxAsq > MPB_thIVS)
+  int iTotalDif = (int)((float)iSumAsq * fSumDDA);
+//  int iTotalDif = (int)((float)iMaxAsq * fSumDDA);
+
+  if (iTotalDif > MPB_thIVS)
     return false;
 
   return true;
@@ -5385,11 +5416,6 @@ MV_FORCEINLINE bool MDegrainN::isMVsStable(VECTOR** pMVsPlanesArrays, int iNumBl
 
   */
   /*
-
-
-
-
-
 
   for (int k = 0; k < _trad * 2; ++k)
   {
@@ -5675,4 +5701,28 @@ MV_FORCEINLINE void MDegrainN::MPB_LC(
     pSrcUV2, nSrcPitchUV2,
     pRefUV2, PitchUV2, WallC, _trad
   );
+}
+
+// return minimal diamong angle between 2 vectors
+MV_FORCEINLINE float MDegrainN::DeltaDiAngle(VECTOR v1, VECTOR v2)
+{
+  float fDiaA_v1 = DiamondAngle(v1.y, v1.x); // return diamond angle in range 0..4.0f (0..2pi)
+  float fDiaA_v2 = DiamondAngle(v2.y, v2.x);
+
+  float a;
+  float b;
+
+  if (fDiaA_v1 <= fDiaA_v2)
+  {
+    a = fDiaA_v1;
+    b = fDiaA_v2;
+  }
+  else
+  {
+    a = fDiaA_v2;
+    b = fDiaA_v1;
+  }
+
+  return fmin(b - a, a - b + 4.0f);
+
 }
