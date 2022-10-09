@@ -5228,16 +5228,23 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeightsLC(const BYTE* pRef[], int Pitch[
 
     }
 
-    luma_sad = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
+/*    luma_sad = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
     sad_chroma = ScaleSadChroma(SADCHROMA(pMPBTempBlocksUV1, iBlocksPitchUV, pMPBTempBlocksUV1 + (iBlockSizeMemUV * (1)), iBlocksPitchUV)
-      + SADCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pMPBTempBlocksUV2 + (iBlockSizeMemUV * (1)), iBlocksPitchUV), chromaSADscale);
+          + SADCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pMPBTempBlocksUV2 + (iBlockSizeMemUV * (1)), iBlocksPitchUV), chromaSADscale);
+*/
+    luma_sad = DM_Luma->GetDisMetric(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
+    sad_chroma = ScaleSadChroma(DM_Chroma->GetDisMetric(pMPBTempBlocksUV1, iBlocksPitchUV, pMPBTempBlocksUV1 + (iBlockSizeMemUV * (1)), iBlocksPitchUV)
+      + DM_Chroma->GetDisMetric(pMPBTempBlocksUV2, iBlocksPitchUV, pMPBTempBlocksUV2 + (iBlockSizeMemUV * (1)), iBlocksPitchUV), chromaSADscale);
     sad_array_sub[0] = luma_sad + sad_chroma;
     stAVG_sub_SAD += sad_array_sub[0];
 
     // calc SAD of full blended vs refs
-    luma_sad = SAD(pMPBTempBlocks, iBlocksPitch, pCurr, iCurrPitch);
+/*    luma_sad = SAD(pMPBTempBlocks, iBlocksPitch, pCurr, iCurrPitch);
     sad_chroma = ScaleSadChroma(SADCHROMA(pMPBTempBlocksUV1, iBlocksPitchUV, pCurrUV1, iCurrPitchUV1)
-      + SADCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pCurrUV2, iCurrPitchUV2), chromaSADscale);
+      + SADCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pCurrUV2, iCurrPitchUV2), chromaSADscale);*/
+    luma_sad = DM_Luma->GetDisMetric(pMPBTempBlocks, iBlocksPitch, pCurr, iCurrPitch);
+    sad_chroma = ScaleSadChroma(DM_Chroma->GetDisMetric(pMPBTempBlocksUV1, iBlocksPitchUV, pCurrUV1, iCurrPitchUV1)
+      + DM_Chroma->GetDisMetric(pMPBTempBlocksUV2, iBlocksPitchUV, pCurrUV2, iCurrPitchUV2), chromaSADscale);
     sad_array_add[0] = luma_sad + sad_chroma;
     stAVG_add_SAD += sad_array_add[0];
 
@@ -5302,16 +5309,22 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeightsLC(const BYTE* pRef[], int Pitch[
         }
 
         //calc SAD of full blended block vs subtracted
-        luma_sad = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch);
+/*        luma_sad = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch);
         sad_chroma = ScaleSadChroma(SADCHROMA(pMPBTempBlocksUV1, iBlocksPitchUV, pMPBTempBlocksUV1 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV)
-          + SADCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pMPBTempBlocksUV2 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV), chromaSADscale);
+          + SADCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pMPBTempBlocksUV2 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV), chromaSADscale);*/
+        luma_sad = DM_Luma->GetDisMetric(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch);
+        sad_chroma = ScaleSadChroma(DM_Chroma->GetDisMetric(pMPBTempBlocksUV1, iBlocksPitchUV, pMPBTempBlocksUV1 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV)
+          + DM_Chroma->GetDisMetric(pMPBTempBlocksUV2, iBlocksPitchUV, pMPBTempBlocksUV2 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV), chromaSADscale);
         sad_array_sub[n] = luma_sad + sad_chroma;
         stAVG_sub_SAD += sad_array_sub[n];
 
         // calc SAD of full blended vs refs
-        luma_sad = SAD(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n - 1]);
+/*        luma_sad = SAD(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n - 1]);
         sad_chroma = ScaleSadChroma(SADCHROMA(pMPBTempBlocksUV1, iBlocksPitchUV, pRefUV1[n - 1], PitchUV1[n - 1])
-          + SADCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pRefUV2[n - 1], PitchUV2[n - 1]), chromaSADscale);
+          + SADCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pRefUV2[n - 1], PitchUV2[n - 1]), chromaSADscale);*/
+        luma_sad = DM_Luma->GetDisMetric(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n - 1]);
+        sad_chroma = ScaleSadChroma(DM_Chroma->GetDisMetric(pMPBTempBlocksUV1, iBlocksPitchUV, pRefUV1[n - 1], PitchUV1[n - 1])
+          + DM_Chroma->GetDisMetric(pMPBTempBlocksUV2, iBlocksPitchUV, pRefUV2[n - 1], PitchUV2[n - 1]), chromaSADscale);
         sad_array_add[n] = luma_sad + sad_chroma;
         stAVG_add_SAD += sad_array_add[n];
 

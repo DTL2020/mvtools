@@ -31,7 +31,8 @@ GroupOfPlanes::GroupOfPlanes(
   int _nOverlapX, int _nOverlapY, int _nBlkX, int _nBlkY, int _xRatioUV, int _yRatioUV,
   int _divideExtra, int _pixelsize, int _bits_per_pixel,
   conc::ObjPool <DCTClass> *dct_pool_ptr,
-  bool mt_flag, int _chromaSADScale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift,
+  bool mt_flag, int _chromaSADScale, int _optSearchOption, float _scaleCSADfine,
+  int _iUseSubShift, int _DMFlags,
   IScriptEnvironment* env
 )
   : nBlkSizeX(_nBlkSizeX)
@@ -52,6 +53,7 @@ GroupOfPlanes::GroupOfPlanes(
   , scaleCSADfine(_scaleCSADfine)
   , _dct_pool_ptr(dct_pool_ptr)
   , iUseSubShift(_iUseSubShift)
+  , DMFlags(_DMFlags)
 {
   planes = new PlaneOfBlocks*[nLevelCount];
 
@@ -74,7 +76,7 @@ GroupOfPlanes::GroupOfPlanes(
     nBlkY = ((nHeight_B >> i) - nOverlapY) / (nBlkSizeY - nOverlapY);
     planes[i] = new PlaneOfBlocks(nBlkX, nBlkY, nBlkSizeX, nBlkSizeY, nPelCurrent, i, nFlagsCurrent, nOverlapX, nOverlapY,
       xRatioUV, yRatioUV, pixelsize, bits_per_pixel, dct_pool_ptr,
-      mt_flag, chromaSADScale, optSearchOption, scaleCSADfine, iUseSubShift, env);
+      mt_flag, chromaSADScale, optSearchOption, scaleCSADfine, iUseSubShift, DMFlags, env);
     nPelCurrent = 1;
   }
 }

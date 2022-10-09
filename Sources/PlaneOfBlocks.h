@@ -45,6 +45,7 @@
 #include "MVFrame.h"
 #include "MVPlane.h"
 #include "MVPlaneSet.h"
+#include "DisMetric.h"
 
 
 // right now 5 should be enough (TSchniede)
@@ -103,7 +104,7 @@ public:
   PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int _nFlags, int _nOverlapX, int _nOverlapY,
     int _xRatioUV, int _yRatioUV, int _pixelsize, int _bits_per_pixel,
     conc::ObjPool <DCTClass> *dct_pool_ptr,
-    bool mt_flag, int _chromaSADscale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift,
+    bool mt_flag, int _chromaSADscale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift, int _DMFlags,
   IScriptEnvironment* env);
 
   ~PlaneOfBlocks();
@@ -184,6 +185,10 @@ private:
   COPYFunction * BLITCHROMA;
   SADFunction *  SADCHROMA;
   SADFunction *  SATD;              /* SATD function, (similar to SAD), used as replacement to dct */
+
+  // DTL test
+  DisMetric* DM_Luma;
+  DisMetric* DM_Chroma;
 
   // DTL test
   class WorkingArea; // forward

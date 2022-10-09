@@ -52,7 +52,7 @@ public:
   DisMetric(int iBlkSizeX, int iBlkSizeY, int iBPP, int _pixelsize, arch_t _arch, int metric_flags);
   ~DisMetric();
 
-  int GetDisMetric(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
+int GetDisMetric(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
 };
 
 
