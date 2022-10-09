@@ -63,12 +63,12 @@ int DisMetric::GetDisMetric(const uint8_t* pSrc, int nSrcPitch, const uint8_t* p
     iRetDisMetric += (int)(((1.0f - SSIM_L(pSrc, nSrcPitch, pRef, nRefPitch)) * (float)(veryBigSAD >> 1)));
   }
 
-  if (nMetricFlags & MEF_SSIM_CS && !(nMetricFlags & MEF_SSIM_L))
+  if ((nMetricFlags & MEF_SSIM_CS) && !(nMetricFlags & MEF_SSIM_L))
   {
     iRetDisMetric += (int)(((1.0f - SSIM_CS(pSrc, nSrcPitch, pRef, nRefPitch)) * (float)(veryBigSAD >> 1))); // SSIM may be low as -1.0f
   }
 
-  if (nMetricFlags & MEF_SSIM_CS && (nMetricFlags & MEF_SSIM_L))
+  if ((nMetricFlags & MEF_SSIM_CS) && (nMetricFlags & MEF_SSIM_L))
   {
     iRetDisMetric += (int)(((1.0f - SSIM_L(pSrc, nSrcPitch, pRef, nRefPitch) * SSIM_CS(pSrc, nSrcPitch, pRef, nRefPitch)) * (float)(veryBigSAD >> 1))); // SSIM may be low as -1.0f
   }
