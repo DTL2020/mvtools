@@ -225,6 +225,13 @@ MVAnalyse::MVAnalyse(
 
   analysisData.chromaSADScale = _chromaSADScale;
 
+#if defined _WIN32 && !defined DX12_ME
+  if (optSearchOption == 5 || optSearchOption == 6) // DX12_ME
+  {
+    env->ThrowError("MAnalyse: Executable was compiled without DX12_ME defined, optSearchOption 5 and 6 not avaialble.");
+  }
+#endif
+
 #if defined _WIN32 && defined DX12_ME
 
   if (optSearchOption == 5 || optSearchOption == 6) // DX12_ME
