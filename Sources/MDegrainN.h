@@ -14,6 +14,7 @@
 #include "def.h"
 
 #include "MVInterface.h"
+#include "DisMetric.h"
 
 #include	<memory>
 #include	<vector>
@@ -41,7 +42,7 @@ public:
     float fMVLPFCutoff, float fMVLPFSlope, float fMVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
     int UseSubShift, int InterpolateOverlap, ::PClip _mvmultirs, int _thFWBWmvpos,
     int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
-    int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs,
+    int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int MPB_DMFlags,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -213,6 +214,9 @@ private:
   const uint8_t* pFilteredMVsPlanesArrays_a[MAX_TEMP_RAD * 2]; // pointers to aligned memory pages to free
   SADFunction* SAD;              /* function which computes the sad */
   SADFunction* SADCHROMA;
+
+  DisMetric* DM_Luma;
+  DisMetric* DM_Chroma;
 
   bool bthLC_diff;
 

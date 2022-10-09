@@ -6615,7 +6615,8 @@ MVVector<T>::~MVVector()
   buffer = 0;
   size_bytes = 0;
 #ifdef _WIN32
-  VirtualFree(buffer, 0, MEM_RELEASE);
+  if (buffer != 0)
+    VirtualFree(buffer, 0, MEM_RELEASE);
 #else
   delete[]buffer;
 #endif

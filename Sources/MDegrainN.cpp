@@ -761,7 +761,7 @@ MDegrainN::MDegrainN(
   float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
   int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos,
   int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
-  int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs,
+  int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int MPB_DMFlags,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -1177,6 +1177,9 @@ MDegrainN::MDegrainN(
 
   SAD = get_sad_function(nBlkSizeX, nBlkSizeY, bits_per_pixel, arch);
   SADCHROMA = get_sad_function(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits_per_pixel, arch);
+
+  DM_Luma = new DisMetric(nBlkSizeX, nBlkSizeY, bits_per_pixel, pixelsize, arch, MPB_DMFlags);
+  DM_Chroma = new DisMetric(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits_per_pixel, pixelsize, arch, MPB_DMFlags);
 
 // C only -> NO_SIMD
   _oversluma_lsb_ptr = get_overlaps_lsb_function(nBlkSizeX, nBlkSizeY, sizeof(uint8_t), NO_SIMD);
@@ -4991,16 +4994,21 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeights(const BYTE* pRef[], int Pitch[],
     }
 
     if (!bChroma)
-      sad_array_sub[0] = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
+//      sad_array_sub[0] = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
+//      sad_t tmp_sad = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
+      sad_array_sub[0] = DM_Luma->GetDisMetric(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
     else
-      sad_array_sub[0] = SADCHROMA(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
+//      sad_array_sub[0] = SADCHROMA(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
+        sad_array_sub[0] = DM_Chroma->GetDisMetric(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
     stAVG_sub_SAD += sad_array_sub[0];
 
     // calc SAD of full blended vs refs
     if (!bChroma)
-      sad_array_add[0] = SAD(pMPBTempBlocks, iBlocksPitch, pCurr, iCurrPitch);
+//      sad_array_add[0] = SAD(pMPBTempBlocks, iBlocksPitch, pCurr, iCurrPitch);
+        sad_array_add[0] = DM_Luma->GetDisMetric(pMPBTempBlocks, iBlocksPitch, pCurr, iCurrPitch);
     else
-      sad_array_add[0] = SADCHROMA(pMPBTempBlocks, iBlocksPitch, pCurr, iCurrPitch);
+//      sad_array_add[0] = SADCHROMA(pMPBTempBlocks, iBlocksPitch, pCurr, iCurrPitch);
+        sad_array_add[0] = DM_Chroma->GetDisMetric(pMPBTempBlocks, iBlocksPitch, pCurr, iCurrPitch);
     stAVG_add_SAD += sad_array_add[0];
 
     iNumAVG++;
@@ -5050,16 +5058,20 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeights(const BYTE* pRef[], int Pitch[],
         }
         //calc SAD of full blended block vs subtracted
         if (!bChroma)
-          sad_array_sub[n] = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch);
+          //sad_array_sub[n] = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch);
+          sad_array_sub[n] = DM_Luma->GetDisMetric(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch);
         else
-          sad_array_sub[n] = SADCHROMA(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch);
+//          sad_array_sub[n] = SADCHROMA(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch);
+          sad_array_sub[n] = DM_Chroma->GetDisMetric(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch);
         stAVG_sub_SAD += sad_array_sub[n];
 
         // calc SAD of full blended vs refs
         if (!bChroma)
-          sad_array_add[n] = SAD(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n - 1]);
+//          sad_array_add[n] = SAD(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n - 1]);
+            sad_array_add[n] = DM_Luma->GetDisMetric(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n - 1]);
         else
-          sad_array_add[n] = SADCHROMA(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n - 1]);
+//          sad_array_add[n] = SADCHROMA(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n - 1]);
+            sad_array_add[n] = DM_Chroma->GetDisMetric(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n - 1]);
         stAVG_add_SAD += sad_array_add[n];
 
         iNumAVG++;

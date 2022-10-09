@@ -1,22 +1,25 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64'">
-    <RemoteDebuggerCommand>I:\Distr\rem_debug\rem_debug\x64\AVSMeter64.exe</RemoteDebuggerCommand>
-    <RemoteDebuggerCommandArguments>src_spt.avs</RemoteDebuggerCommandArguments>
+    <RemoteDebuggerCommand>I:\Distr\VirtualDub-1.10.4-AMD64\Veedub64.exe</RemoteDebuggerCommand>
+    <RemoteDebuggerCommandArguments>src.avs</RemoteDebuggerCommandArguments>
     <RemoteDebuggerWorkingDirectory>I:\Distr\rem_debug\rem_debug\x64</RemoteDebuggerWorkingDirectory>
     <RemoteDebuggerServerName>ITENGINEER:4024</RemoteDebuggerServerName>
     <RemoteDebuggerConnection>RemoteWithoutAuthentication</RemoteDebuggerConnection>
     <DeploymentDirectory>I:\Distr\rem_debug\rem_debug\x64</DeploymentDirectory>
     <DebuggerFlavor>WindowsRemoteDebugger</DebuggerFlavor>
+    <LocalDebuggerCommand>C:\cpp\tmp\vd64\Veedub64.exe</LocalDebuggerCommand>
+    <LocalDebuggerCommandArguments>ezdn.avs</LocalDebuggerCommandArguments>
+    <LocalDebuggerWorkingDirectory>.\x64\ReleaseWithDebugInfo</LocalDebuggerWorkingDirectory>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <RemoteDebuggerCommand>I:\Distr\rem_debug\rem_debug\x64\AVSMeter64.exe</RemoteDebuggerCommand>
-    <RemoteDebuggerCommandArguments>src_spt.avs</RemoteDebuggerCommandArguments>
+    <RemoteDebuggerCommand>I:\Distr\rem_debug\rem_debug\x64\avsmeter64.exe</RemoteDebuggerCommand>
+    <RemoteDebuggerCommandArguments>src_pp.avs</RemoteDebuggerCommandArguments>
     <RemoteDebuggerWorkingDirectory>I:\Distr\rem_debug\rem_debug\x64\</RemoteDebuggerWorkingDirectory>
     <RemoteDebuggerServerName>192.168.126.97:4024</RemoteDebuggerServerName>
     <RemoteDebuggerConnection>RemoteWithoutAuthentication</RemoteDebuggerConnection>
     <DeploymentDirectory>I:\Distr\rem_debug\rem_debug\x64\</DeploymentDirectory>
-    <DebuggerFlavor>WindowsRemoteDebugger</DebuggerFlavor>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <LocalDebuggerCommand>C:\cpp\tmp\vd64\Veedub64.exe</LocalDebuggerCommand>
     <LocalDebuggerCommandArguments>src.avs</LocalDebuggerCommandArguments>
     <LocalDebuggerWorkingDirectory>.\x64\Debug</LocalDebuggerWorkingDirectory>

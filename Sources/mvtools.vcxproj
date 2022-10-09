@@ -1153,11 +1153,11 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <OmitFramePointers>true</OmitFramePointers>
       <WholeProgramOptimization>true</WholeProgramOptimization>
-      <PreprocessorDefinitions>_SILENCE_CXX17_ALLOCATOR_VOID_DEPRECATION_WARNING;_SILENCE_CXX17_OLD_ALLOCATOR_MEMBERS_DEPRECATION_WARNING;FORCE_INLINE;WIN32;NDEBUG;_WINDOWS;_USRDLL;MVTOOLS_EXPORTS;_CRT_SECURE_NO_WARNINGS;DX12_ME;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_SILENCE_CXX17_ALLOCATOR_VOID_DEPRECATION_WARNING;_SILENCE_CXX17_OLD_ALLOCATOR_MEMBERS_DEPRECATION_WARNING;FORCE_INLINE;WIN32;NDEBUG;_WINDOWS;_USRDLL;MVTOOLS_EXPORTS;_CRT_SECURE_NO_WARNINGS;DX12_ME%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
-      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -1184,6 +1184,11 @@
       <BrowseInformationFile>$(IntDir)$(ProjectName)\</BrowseInformationFile>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <ConformanceMode>true</ConformanceMode>
+      <CallingConvention>Cdecl</CallingConvention>
+      <UseProcessorExtensions>None</UseProcessorExtensions>
+      <UseIntelOptimizedHeaders>true</UseIntelOptimizedHeaders>
+      <OptimizeForWindowsApplication>true</OptimizeForWindowsApplication>
+      <InterproceduralOptimization>MultiFile</InterproceduralOptimization>
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -1730,6 +1735,7 @@
     <ClCompile Include="DCTFFTW.cpp" />
     <ClCompile Include="DCTINT.cpp" />
     <ClCompile Include="DescriptorHeap.cpp" />
+    <ClCompile Include="DisMetric.cpp" />
     <ClCompile Include="FakeBlockData.cpp" />
     <ClCompile Include="FakeGroupOfPlanes.cpp" />
     <ClCompile Include="FakePlaneOfBlocks.cpp" />
@@ -1832,6 +1838,7 @@
       <UseProcessorExtensions Condition="'$(Configuration)|$(Platform)'=='ICX|x64'">COMMON512</UseProcessorExtensions>
     </ClCompile>
     <ClCompile Include="SimpleResize.cpp" />
+    <ClCompile Include="SSIMFunctions.cpp" />
     <ClCompile Include="Variance.cpp" />
     <ClCompile Include="yuy2planes.cpp" />
   </ItemGroup>
@@ -1909,6 +1916,7 @@
     <ClInclude Include="debugprintf.h" />
     <ClInclude Include="def.h" />
     <ClInclude Include="DescriptorHeap.h" />
+    <ClInclude Include="DisMetric.h" />
     <ClInclude Include="FakeBlockData.h" />
     <ClInclude Include="FakeGroupOfPlanes.h" />
     <ClInclude Include="FakePlaneOfBlocks.h" />
@@ -1973,6 +1981,7 @@
     <ClInclude Include="SharedPtr.h" />
     <ClInclude Include="SharedPtr.hpp" />
     <ClInclude Include="SimpleResize.h" />
+    <ClInclude Include="SSIMFunctions.h" />
     <ClInclude Include="SuperParams64Bits.h" />
     <ClInclude Include="Time256ProviderCst.h" />
     <ClInclude Include="Time256ProviderPlane.h" />
