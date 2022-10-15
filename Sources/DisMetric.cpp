@@ -105,6 +105,18 @@ int DisMetric::GetDisMetric(const uint8_t* pSrc, int nSrcPitch, const uint8_t* p
     iRetDisMetric += (int)(((5.0f - VIF_FULL(pSrc, nSrcPitch, pRef, nRefPitch, DWT2D)) * (float)(maxSAD >> 2))); // VIF range ??? [0..1] ?
   }
 
+  if ((nMetricFlags & MEF_VIFA_DWT) && !(nMetricFlags & MEF_VIFE_DWT))
+  {
+    //    iRetDisMetric += (int)(((1.0f - VIF_FULL(pSrc, nSrcPitch, pRef, nRefPitch, DWT2D)) * (float)(maxSAD))); // VIF range ??? [0..1] ?
+    iRetDisMetric += (int)(((5.0f - VIF_A(pSrc, nSrcPitch, pRef, nRefPitch, DWT2D)) * (float)(maxSAD >> 2))); // VIF range ??? [0..1] ?
+  }
+
+  if (!(nMetricFlags & MEF_VIFA_DWT) && (nMetricFlags & MEF_VIFE_DWT))
+  {
+    //    iRetDisMetric += (int)(((1.0f - VIF_FULL(pSrc, nSrcPitch, pRef, nRefPitch, DWT2D)) * (float)(maxSAD))); // VIF range ??? [0..1] ?
+    iRetDisMetric += (int)(((5.0f - VIF_E(pSrc, nSrcPitch, pRef, nRefPitch, DWT2D)) * (float)(maxSAD >> 2))); // VIF range ??? [0..1] ?
+  }
+
   // todo: currently sum may be num of metrics * veryBigSAD ! may be norm max value to verybigsad ?
 
   return iRetDisMetric;

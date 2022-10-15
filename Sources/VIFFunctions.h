@@ -47,9 +47,11 @@ VIFFunction* get_vif_function_e(int BlockX, int BlockY, int bits_per_pixel, arch
 
 VIFFunction* get_vif_function_full(int BlockX, int BlockY, int bits_per_pixel, arch_t arch);
 
+
+float mvt_vif_full_8x8_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch, DWT2DFunction* pDWT2D);
 /*
 float mvt_ssim_full_4x4_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
-float mvt_ssim_full_8x8_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
+
 float mvt_ssim_full_16x16_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
 
 float mvt_ssim_l_4x4_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);

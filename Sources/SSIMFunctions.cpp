@@ -850,8 +850,8 @@ float mvt_ssim_full_4x4_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t
   __m256i ymm_4row_X = _mm256_set_epi32(0, 0, *(int*)(pWorkSrc + nSrcPitch * 3), *(int*)(pWorkSrc + nSrcPitch * 2), 0, 0, *(int*)(pWorkSrc + nSrcPitch * 1), *(int*)(pWorkSrc + 0));
   __m256i ymm_4row_Y = _mm256_set_epi32(0, 0, *(int*)(pWorkRef + nRefPitch * 3), *(int*)(pWorkRef + nRefPitch * 2), 0, 0, *(int*)(pWorkRef + nRefPitch * 1), *(int*)(pWorkRef + 0));
 
-  __m256i ymm_suX = _mm256_unpacklo_epi8(ymm_4row_X, ymm_zero);;
-  __m256i ymm_suY = _mm256_unpacklo_epi8(ymm_4row_Y, ymm_zero);;
+  __m256i ymm_suX = _mm256_unpacklo_epi8(ymm_4row_X, ymm_zero);
+  __m256i ymm_suY = _mm256_unpacklo_epi8(ymm_4row_Y, ymm_zero);
 
   ymm_suX = _mm256_hadd_epi16(_mm256_permute2x128_si256(ymm_suX, ymm_suX, 1), ymm_suX); // 8x16 16320+16320 max - still 16bit unsigned OK
   ymm_suY = _mm256_hadd_epi16(_mm256_permute2x128_si256(ymm_suY, ymm_suY, 1), ymm_suY); // 8x16
