@@ -129,7 +129,7 @@ static float VIF_DWT_FULL_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* p
 }
 
 template<int nBlkWidth, int nBlkHeight, typename pixel_t>
-static float VIF_DWT_A_C(const uint8_t *pSrc, int nSrcPitch,const uint8_t *pRef,  int nRefPitch, DWT2DFunction* pDTW2D)
+static float VIF_DWT_A_C(const uint8_t *pSrc, int nSrcPitch,const uint8_t *pRef,  int nRefPitch, DWT2DFunction* pDWT2D)
 {
   typedef typename std::conditional < sizeof(pixel_t) <= 2, DWT_DECOMP_INT, DWT_DECOMP_FLOAT >::type target_t_dwt;
   typedef typename std::conditional < sizeof(pixel_t) <= 2, int, float >::type dwt_t;
@@ -138,8 +138,8 @@ static float VIF_DWT_A_C(const uint8_t *pSrc, int nSrcPitch,const uint8_t *pRef,
   target_t_dwt Src_DWT;
   target_t_dwt Ref_DWT;
 
-  pDWT2D(pSrc, nSrcPitch, &Src_DWT.a, &Src_DWT.v, &Src_DWT.h, &Src_DWT.d);
-  pDWT2D(pRef, nRefPitch, &Ref_DWT.a, &Ref_DWT.v, &Ref_DWT.h, &Ref_DWT.d);
+  pDWT2D(pSrc, nSrcPitch, &Src_DWT.a, 0, 0, 0);
+  pDWT2D(pRef, nRefPitch, &Ref_DWT.a, 0, 0, 0);
 
   float Xe[MAX_BLOCK_SIZE * MAX_BLOCK_SIZE / 4];
   float Ye[MAX_BLOCK_SIZE * MAX_BLOCK_SIZE / 4];
@@ -193,7 +193,7 @@ static float VIF_DWT_A_C(const uint8_t *pSrc, int nSrcPitch,const uint8_t *pRef,
   fsY = fsY / (float)iN;
   fsXY = fsXY / (float)iN;
 
-  float fEps = 1e-20;
+  float fEps = 1e-20f;
   float fg = fsXY / (fsX + fEps);
   float fsV = fsY - fg * fsXY;
   float fVIFa = log10f(1 + (fg * fsX) / (fsV + fSigm_sq_N)) / log10f(1 + fsX / fSigm_sq_N);
@@ -215,7 +215,7 @@ static float VIF_DWT_A_C(const uint8_t *pSrc, int nSrcPitch,const uint8_t *pRef,
 }
 
 template<int nBlkWidth, int nBlkHeight, typename pixel_t>
-static float VIF_DWT_E_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef,  int nRefPitch, DWT2DFunction* pDTW2D)
+static float VIF_DWT_E_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef,  int nRefPitch, DWT2DFunction* pDWT2D)
 {
   typedef typename std::conditional < sizeof(pixel_t) <= 2, DWT_DECOMP_INT, DWT_DECOMP_FLOAT >::type target_t_dwt;
   typedef typename std::conditional < sizeof(pixel_t) <= 2, int, float >::type dwt_t;
@@ -224,8 +224,8 @@ static float VIF_DWT_E_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef
   target_t_dwt Src_DWT;
   target_t_dwt Ref_DWT;
 
-  pDWT2D(pSrc, nSrcPitch, &Src_DWT.a, &Src_DWT.v, &Src_DWT.h, &Src_DWT.d);
-  pDWT2D(pRef, nRefPitch, &Ref_DWT.a, &Ref_DWT.v, &Ref_DWT.h, &Ref_DWT.d);
+  pDWT2D(pSrc, nSrcPitch, 0, &Src_DWT.v, &Src_DWT.h, &Src_DWT.d);
+  pDWT2D(pRef, nRefPitch, 0, &Ref_DWT.v, &Ref_DWT.h, &Ref_DWT.d);
 
   float Xe[MAX_BLOCK_SIZE * MAX_BLOCK_SIZE / 4];
   float Ye[MAX_BLOCK_SIZE * MAX_BLOCK_SIZE / 4];
@@ -280,6 +280,7 @@ static float VIF_DWT_E_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef
   fsYe = fsYe / (float)iN;
   fsXYe = fsXYe / (float)iN;
 
+  float fEps = 1e-20f;
   float fge = fsXYe / (fsXe + fEps);
   float fsVe = fsYe - fge * fsXYe;
   float fVIFe = log10f(1 + (fge * fsXe) / (fsVe + fSigm_sq_N)) / log10f(1 + fsXe / fSigm_sq_N);
