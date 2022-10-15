@@ -46,6 +46,25 @@ DisMetric::DisMetric(int iBlkSizeX, int iBlkSizeY, int iBPP, int _pixelsize, arc
     SSIM_FULL = get_ssim_function_full(nBlkSizeX, nBlkSizeY, nBPP, arch);
   }
 
+  if (metric_flags & MEF_VIFA_DWT)
+  {
+    VIF_A = get_vif_function_a(nBlkSizeX, nBlkSizeY, nBPP, arch);
+  }
+
+  if (metric_flags & MEF_VIFE_DWT)
+  {
+    VIF_E = get_vif_function_e(nBlkSizeX, nBlkSizeY, nBPP, arch);
+  }
+
+  if ((metric_flags & MEF_VIFA_DWT) && (metric_flags & MEF_VIFE_DWT))
+  {
+    VIF_FULL = get_vif_function_full(nBlkSizeX, nBlkSizeY, nBPP, arch);
+  }
+
+  if ((metric_flags & MEF_VIFA_DWT) || (metric_flags & MEF_VIFE_DWT))
+  {
+    DWT2D = get_dwt_function(nBlkSizeX, nBlkSizeY, nBPP, arch);
+  }
 
   maxSAD = (nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << nBPP))); // * 256, pixelsize==2 -> 65536. Float:1
 
@@ -78,6 +97,12 @@ int DisMetric::GetDisMetric(const uint8_t* pSrc, int nSrcPitch, const uint8_t* p
   {
 //    iRetDisMetric += (int)(((1.0f - SSIM_L(pSrc, nSrcPitch, pRef, nRefPitch) * SSIM_CS(pSrc, nSrcPitch, pRef, nRefPitch)) * (float)(maxSAD >> 1))); // SSIM may be low as -1.0f
     iRetDisMetric += (int)(((1.0f - SSIM_FULL(pSrc, nSrcPitch, pRef, nRefPitch)) * (float)(maxSAD >> 1))); // SSIM may be low as -1.0f
+  }
+
+  if ((nMetricFlags & MEF_VIFA_DWT) && (nMetricFlags & MEF_VIFE_DWT))
+  {
+//    iRetDisMetric += (int)(((1.0f - VIF_FULL(pSrc, nSrcPitch, pRef, nRefPitch, DWT2D)) * (float)(maxSAD))); // VIF range ??? [0..1] ?
+    iRetDisMetric += (int)(((5.0f - VIF_FULL(pSrc, nSrcPitch, pRef, nRefPitch, DWT2D)) * (float)(maxSAD >> 2))); // VIF range ??? [0..1] ?
   }
 
   // todo: currently sum may be num of metrics * veryBigSAD ! may be norm max value to verybigsad ?
