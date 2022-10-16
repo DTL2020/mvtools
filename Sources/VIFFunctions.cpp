@@ -41,7 +41,7 @@ static float VIF_DWT_FULL_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* p
   }
 
   // VIF_A
-  float fSigm_sq_N = 5; // some default ?
+  float fSigm_sq_N = SIGMA_SQ_NOISE; // some default ?
 
   int suX = 0;
   int suY = 0;
@@ -70,10 +70,10 @@ static float VIF_DWT_FULL_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* p
   fsY = fsY / (float)iN;
   fsXY = fsXY / (float)iN;
 
-  float fEps = 1e-20;
+  float fEps = 1e-20f;
   float fg = fsXY / (fsX + fEps);
   float fsV = fsY - fg * fsXY;
-  float fVIFa = logf(1 + (fg * fsX) / (fsV + fSigm_sq_N)) / logf(1 + fsX / fSigm_sq_N);
+  float fVIFa = logf(1 + (fg * fsX) / (fsV + fSigm_sq_N)) / logf(1 + fsX / fSigm_sq_N); 
 
   // VIF_E
   float suXe = 0;
@@ -110,7 +110,7 @@ static float VIF_DWT_FULL_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* p
   
   float fVIF = fVIFa * fAWeight + (1.0f - fAWeight) * fVIFe;
 
-  if (fVIF > 5.0f)
+/*  if (fVIF > 5.0f)
   {
     int idbr = 0;
     fVIF = 5.0f;
@@ -121,9 +121,20 @@ static float VIF_DWT_FULL_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* p
     int idbr = 0;
     fVIF = -5.0f;
   }
+  */
+  if (fVIF > 1.0f)
+  {
+    int idbr = 0;
+    fVIF = 1.0f;
+  }
+
+  if (fVIF < 0.0f)
+  {
+    int idbr = 0;
+    fVIF = 0.0f;
+  }
 
   return fVIF;
-
 
 }
 
@@ -163,7 +174,7 @@ static float VIF_DWT_A_C(const uint8_t *pSrc, int nSrcPitch,const uint8_t *pRef,
   }
 
   // VIF_A
-  float fSigm_sq_N = 5; // some default ?
+  float fSigm_sq_N = SIGMA_SQ_NOISE; // some default ?
 
   int suX = 0;
   int suY = 0;
@@ -198,16 +209,28 @@ static float VIF_DWT_A_C(const uint8_t *pSrc, int nSrcPitch,const uint8_t *pRef,
   float fVIFa = logf(1 + (fg * fsX) / (fsV + fSigm_sq_N)) / logf(1 + fsX / fSigm_sq_N);
 
  
-  if (fVIFa > 5.0f)
+  /*  if (fVIF > 5.0f)
+    {
+      int idbr = 0;
+      fVIF = 5.0f;
+    }
+
+    if (fVIF < -5.0f)
+    {
+      int idbr = 0;
+      fVIF = -5.0f;
+    }
+    */
+  if (fVIFa > 1.0f)
   {
     int idbr = 0;
-    fVIFa = 5.0f;
+    fVIFa = 1.0f;
   }
 
-  if (fVIFa < -5.0f)
+  if (fVIFa < 0.0f)
   {
     int idbr = 0;
-    fVIFa = -5.0f;
+    fVIFa = 0.0f;
   }
 
   return fVIFa;
@@ -248,7 +271,7 @@ static float VIF_DWT_E_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef
   }
 
   // VIF_A
-  float fSigm_sq_N = 5; // some default ?
+  float fSigm_sq_N = SIGMA_SQ_NOISE; // some default ?
   const int iN = (nBlkHeight * nBlkWidth) / 4;
 
   // VIF_E
@@ -283,16 +306,28 @@ static float VIF_DWT_E_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef
   float fsVe = fsYe - fge * fsXYe;
   float fVIFe = logf(1 + (fge * fsXe) / (fsVe + fSigm_sq_N)) / logf(1 + fsXe / fSigm_sq_N);
 
-  if (fVIFe > 5.0f)
+  /*  if (fVIF > 5.0f)
+    {
+      int idbr = 0;
+      fVIF = 5.0f;
+    }
+
+    if (fVIF < -5.0f)
+    {
+      int idbr = 0;
+      fVIF = -5.0f;
+    }
+    */
+  if (fVIFe > 1.0f)
   {
     int idbr = 0;
-    fVIFe = 5.0f;
+    fVIFe = 1.0f;
   }
 
-  if (fVIFe < -5.0f)
+  if (fVIFe < 0.0f)
   {
     int idbr = 0;
-    fVIFe = -5.0f;
+    fVIFe = 0.0f;
   }
 
   return fVIFe;
@@ -564,16 +599,24 @@ func_sad[make_tuple(x, y, 16, NO_SIMD)] = VIF_DWT_FULL_C<x, y, uint16_t>;
 
 float mvt_vif_full_8x8_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch, DWT2DFunction* pDWT2D)
 {
+  struct DWT_DECOMP_INT_I {
+    int a[8 * 8 / 4];
+    int v[8 * 8 / 4];
+    int h[8 * 8 / 4];
+    int d[8 * 8 / 4];
+  };
 
-  DWT_DECOMP_INT Src_DWT;
-  DWT_DECOMP_INT Ref_DWT;
+  DWT_DECOMP_INT_I Src_DWT;
+  DWT_DECOMP_INT_I Ref_DWT;
 
   pDWT2D(pSrc, nSrcPitch, &Src_DWT.a, &Src_DWT.v, &Src_DWT.h, &Src_DWT.d);
   pDWT2D(pRef, nRefPitch, &Ref_DWT.a, &Ref_DWT.v, &Ref_DWT.h, &Ref_DWT.d);
 
-  float Xe[MAX_BLOCK_SIZE * MAX_BLOCK_SIZE / 4];
-  float Ye[MAX_BLOCK_SIZE * MAX_BLOCK_SIZE / 4];
-   
+//  float Xe[MAX_BLOCK_SIZE * MAX_BLOCK_SIZE / 4];
+//  float Ye[MAX_BLOCK_SIZE * MAX_BLOCK_SIZE / 4];
+  float Xe[8 * 8 / 4];
+  float Ye[8 * 8 / 4];
+
   float fMu = 0.45f; // H edges weight
   float fLa = 0.45f; // V edges weight
   float fPsi = 0.1f; // Diagonal edges weight
@@ -683,7 +726,7 @@ float mvt_vif_full_8x8_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t*
 #endif
 
   // VIF_A
-  float fSigm_sq_N = 5; // some default ?
+  float fSigm_sq_N = SIGMA_SQ_NOISE; // some default ?
 
   __m256i ymm_X_r01 = _mm256_loadu_si256((const __m256i*) & Src_DWT.a[0]);
   __m256i ymm_X_r23 = _mm256_loadu_si256((const __m256i*) & Src_DWT.a[8]);
@@ -814,7 +857,7 @@ float mvt_vif_full_8x8_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t*
   fsY = (float)iAVX2_sY * rcpiN;
   fsXY = (float)iAVX2_sXY * rcpiN;
 
-  float fEps = 1e-20;
+  float fEps = 1e-20f;
   float fg = fsXY / (fsX + fEps);
   float fsV = fsY - fg * fsXY;
   float fVIFa = logf(1 + (fg * fsX) / (fsV + fSigm_sq_N)) / logf(1 + fsX / fSigm_sq_N);
@@ -963,19 +1006,30 @@ float mvt_vif_full_8x8_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t*
 
   float fVIF = fVIFa * fAWeight + (1.0f - fAWeight) * fVIFe;
 
-  if (fVIF > 5.0f)
+  /*  if (fVIF > 5.0f)
+    {
+      int idbr = 0;
+      fVIF = 5.0f;
+    }
+
+    if (fVIF < -5.0f)
+    {
+      int idbr = 0;
+      fVIF = -5.0f;
+    }
+    */
+  if (fVIF > 1.0f)
   {
     int idbr = 0;
-    fVIF = 5.0f;
+    fVIF = 1.0f;
   }
 
-  if (fVIF < -5.0f)
+  if (fVIF < 0.0f)
   {
     int idbr = 0;
-    fVIF = -5.0f;
+    fVIF = 0.0f;
   }
 
   return fVIF;
-
 
 }

@@ -26,6 +26,8 @@
 #include <stdint.h>
 #include "emmintrin.h"
 
+#define SIGMA_SQ_NOISE 5.0f
+
 struct DWT_DECOMP_INT {
   int a[MAX_BLOCK_SIZE * MAX_BLOCK_SIZE / 4];
   int v[MAX_BLOCK_SIZE * MAX_BLOCK_SIZE / 4];
