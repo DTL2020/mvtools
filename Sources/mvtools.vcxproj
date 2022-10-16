@@ -1153,11 +1153,11 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <OmitFramePointers>true</OmitFramePointers>
       <WholeProgramOptimization>true</WholeProgramOptimization>
-      <PreprocessorDefinitions>_SILENCE_CXX17_ALLOCATOR_VOID_DEPRECATION_WARNING;_SILENCE_CXX17_OLD_ALLOCATOR_MEMBERS_DEPRECATION_WARNING;FORCE_INLINE;WIN32;NDEBUG;_WINDOWS;_USRDLL;MVTOOLS_EXPORTS;_CRT_SECURE_NO_WARNINGS;DX12_ME%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_SILENCE_CXX17_ALLOCATOR_VOID_DEPRECATION_WARNING;_SILENCE_CXX17_OLD_ALLOCATOR_MEMBERS_DEPRECATION_WARNING;FORCE_INLINE;WIN32;NDEBUG;_WINDOWS;_USRDLL;MVTOOLS_EXPORTS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
-      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -1736,6 +1736,7 @@
     <ClCompile Include="DCTINT.cpp" />
     <ClCompile Include="DescriptorHeap.cpp" />
     <ClCompile Include="DisMetric.cpp" />
+    <ClCompile Include="DWTFunctions.cpp" />
     <ClCompile Include="FakeBlockData.cpp" />
     <ClCompile Include="FakeGroupOfPlanes.cpp" />
     <ClCompile Include="FakePlaneOfBlocks.cpp" />
@@ -1840,6 +1841,7 @@
     <ClCompile Include="SimpleResize.cpp" />
     <ClCompile Include="SSIMFunctions.cpp" />
     <ClCompile Include="Variance.cpp" />
+    <ClCompile Include="VIFFunctions.cpp" />
     <ClCompile Include="yuy2planes.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -1917,6 +1919,7 @@
     <ClInclude Include="def.h" />
     <ClInclude Include="DescriptorHeap.h" />
     <ClInclude Include="DisMetric.h" />
+    <ClInclude Include="DWTFunctions.h" />
     <ClInclude Include="FakeBlockData.h" />
     <ClInclude Include="FakeGroupOfPlanes.h" />
     <ClInclude Include="FakePlaneOfBlocks.h" />
@@ -1989,6 +1992,7 @@
     <ClInclude Include="Variance.h" />
     <ClInclude Include="VECTOR.h" />
     <ClInclude Include="version.h" />
+    <ClInclude Include="VIFFunctions.h" />
     <ClInclude Include="yuy2planes.h" />
   </ItemGroup>
   <ItemGroup>

@@ -6,6 +6,7 @@
 #include "def.h"
 #include <immintrin.h>
 
+/*
 // one level decomposition, output up to 4 subbands to pointers pA, pV, pH, pD
 template<int nBlkWidth, int nBlkHeight, typename pixel_t>
 static void DWT_C(const uint8_t* pSrc, int nSrcPitch, void* pA, void* pV, void* pH, void* pD)
@@ -76,7 +77,92 @@ static void DWT_C(const uint8_t* pSrc, int nSrcPitch, void* pA, void* pV, void* 
     }
   }
 }
+*/
 
+// one level decomposition, output up to 4 subbands to pointers pA, pV, pH, pD
+template<int nBlkWidth, int nBlkHeight, typename pixel_t>
+static void DWT_C(const uint8_t* pSrc, int nSrcPitch, void* pA, void* pV, void* pH, void* pD)
+{
+#define A pSrc[(iVP * 2) * nSrcPitch + iHP * 2]
+#define B pSrc[(iVP * 2) * nSrcPitch + iHP * 2 + 1]
+#define C pSrc[(((iVP * 2) + 1) * nSrcPitch) + iHP * 2 + 0]
+#define D pSrc[(((iVP * 2) + 1) * nSrcPitch) + iHP * 2 + 1]
+
+  typedef typename std::conditional < sizeof(pixel_t) <= 2, int, float >::type target_t_dwt;
+
+  target_t_dwt* pDstA = reinterpret_cast<target_t_dwt*>(pA);
+  target_t_dwt* pDstV = reinterpret_cast<target_t_dwt*>(pV);
+  target_t_dwt* pDstH = reinterpret_cast<target_t_dwt*>(pH);
+  target_t_dwt* pDstD = reinterpret_cast<target_t_dwt*>(pD);
+
+  const int iNumHpos = nBlkWidth / 2;
+  const int iNumVpos = nBlkHeight / 2;
+
+  // calculate only required subbands if pointer to output != 0
+
+  if ((pDstA != 0) && (pDstD != 0)) // all subbands
+  {
+    for (int iVP = 0; iVP < iNumVpos; iVP++)
+    {
+      for (int iHP = 0; iHP < iNumHpos; iHP++)
+      {
+        target_t_dwt valA = A;
+        target_t_dwt valB = B;
+        target_t_dwt valC = C;
+        target_t_dwt valD = D;
+
+        *pDstA = ((target_t_dwt)(valA + valB + valC + valD) / (target_t_dwt)4);
+        pDstA++;
+        *pDstV = ((target_t_dwt)(valB + valD - valA - valC) / (target_t_dwt)4);
+        pDstV++;
+        *pDstH = ((target_t_dwt)(valC + valD - valA - valB) / (target_t_dwt)4);
+        pDstH++;
+        *pDstD = ((target_t_dwt)(valB + valC - valA - valD) / (target_t_dwt)4);
+        pDstD++;
+      }
+    }
+
+    return;
+  }
+
+  if ((pDstA != 0) && (pDstD == 0)) // A-only subband
+  {
+    for (int iVP = 0; iVP < iNumVpos; iVP++)
+    {
+      for (int iHP = 0; iHP < iNumHpos; iHP++)
+      {
+        *pDstA = ((target_t_dwt)(A + B + C + D) / (target_t_dwt)4);
+        pDstA++;
+      }
+    }
+
+    return;
+  }
+
+  if ((pDstA == 0) && (pDstD != 0)) // E-only subbands
+  {
+    for (int iVP = 0; iVP < iNumVpos; iVP++)
+    {
+      for (int iHP = 0; iHP < iNumHpos; iHP++)
+      {
+        target_t_dwt valA = A;
+        target_t_dwt valB = B;
+        target_t_dwt valC = C;
+        target_t_dwt valD = D;
+
+        *pDstV = ((target_t_dwt)(valB + valD - valA - valC) / (target_t_dwt)4);
+        pDstV++;
+        *pDstH = ((target_t_dwt)(valC + valD - valA - valB) / (target_t_dwt)4);
+        pDstH++;
+        *pDstD = ((target_t_dwt)(valB + valC - valA - valD) / (target_t_dwt)4);
+        pDstD++;
+      }
+    }
+
+    return;
+  }
+
+}
 
 
 DWT2DFunction* get_dwt_function(int BlockX, int BlockY, int bits_per_pixel, arch_t arch)
