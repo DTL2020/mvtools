@@ -5611,6 +5611,42 @@ MV_FORCEINLINE void MDegrainN::MPB_SP(
   // start check from equal weights (equal to wpow=7 ?), only use max MPGtgtTR number of init non zero weights
   int iNumUsedWeights = MPBtgtTR * 2;
 
+  // if MPB_SPC_add > 10 - skip iterative MPB, output only trimmed Wall
+  if (MPB_SPC_add > 10.0f)
+  {
+    for (int i = 0; i < iNumUsedWeights + 1; i++)
+    {
+      adjWarr[i] = Wall[i];
+    }
+
+    for (int i = iNumUsedWeights + 1; i < (_trad * 2) + 1; i++)
+    {
+      adjWarr[i] = 0;
+    }
+
+    norm_weights_all(adjWarr, MPBtgtTR);
+
+    // make final blend to output
+    if (!bChroma)
+    {
+      _degrainluma_ptr(
+        pDst, pDstLsb, nDstPitch,
+        pSrc, nSrcPitch,
+        pRef, Pitch, adjWarr, MPBtgtTR
+      );
+    }
+    else
+    {
+      _degrainchroma_ptr(
+        pDst, pDstLsb, nDstPitch,
+        pSrc, nSrcPitch,
+        pRef, Pitch, adjWarr, MPBtgtTR
+      );
+    }
+
+    return;
+  }
+
   // also set full weight to current block
   adjWarr[0] = 1 << DEGRAIN_WEIGHT_BITS;
 
@@ -5772,6 +5808,47 @@ MV_FORCEINLINE void MDegrainN::MPB_LC(
 
   // start check from equal weights (equal to wpow=7 ?), only use max MPGtgtTR number of init non zero weights
   int iNumUsedWeights = MPBtgtTR * 2;
+
+  // if MPB_SPC_add > 10 - skip iterative MPB, output only trimmed Wall
+  if (MPB_SPC_add > 10.0f)
+  {
+    for (int i = 0; i < iNumUsedWeights + 1; i++)
+    {
+      adjWarr[i] = Wall[i];
+    }
+
+    for (int i = iNumUsedWeights + 1; i < (_trad * 2) + 1; i++)
+    {
+        adjWarr[i] = 0;
+    }
+
+    norm_weights_all(adjWarr, MPBtgtTR);
+
+    // make final blend to output
+    _degrainluma_ptr(
+      pDst, pDstLsb, nDstPitch,
+      pSrc, nSrcPitch,
+      pRef, Pitch, adjWarr, MPBtgtTR
+    );
+
+    // chroma first plane
+    _degrainchroma_ptr(
+      pDstUV1, pDstLsbUV1, nDstPitchUV1,
+      pSrcUV1, nSrcPitchUV1,
+      pRefUV1, PitchUV1, adjWarr, MPBtgtTR
+    );
+
+    // chroma second plane
+    _degrainchroma_ptr(
+      pDstUV2, pDstLsbUV2, nDstPitchUV2,
+      pSrcUV2, nSrcPitchUV2,
+      pRefUV2, PitchUV2, adjWarr, MPBtgtTR
+    );
+
+    return;
+  }
+
+  iNumUsedWeights = MPBtgtTR * 2;
 
   // also set full weight to current block
   adjWarr[0] = 1 << DEGRAIN_WEIGHT_BITS;
