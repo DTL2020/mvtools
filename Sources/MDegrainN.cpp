@@ -761,7 +761,7 @@ MDegrainN::MDegrainN(
   float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
   int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos,
   int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
-  int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int MPB_DMFlags, int _MPBchroma,
+  int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int MPB_DMFlags, int _MPBchroma, int _MPBtgtTR,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -832,6 +832,7 @@ MDegrainN::MDegrainN(
   , showIVSmask(_showIVSmask)
   , mvmultivs(_mvmultivs)
   , MPBchroma(_MPBchroma)
+  , MPBtgtTR(_MPBtgtTR)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -5607,36 +5608,86 @@ MV_FORCEINLINE void MDegrainN::MPB_SP(
     return;
   }
 
-  // start check from equal weights (equal to wpow=7 ?)
-  int iNonZeroWeights = 0;
-  for (int i = 0; i < (_trad * 2) + 1; i++)
+  // start check from equal weights (equal to wpow=7 ?), only use max MPGtgtTR number of init non zero weights
+  int iNumUsedWeights = MPBtgtTR * 2;
+
+  // also set full weight to current block
+  adjWarr[0] = 1 << DEGRAIN_WEIGHT_BITS;
+
+  for (int i = 1; i < (_trad * 2) + 1; i++)
   {
-    if (Wall[i] != 0)
+    if ((Wall[i] != 0) && (iNumUsedWeights != 0))
     {
       {
         adjWarr[i] = 1 << DEGRAIN_WEIGHT_BITS;
-        iNonZeroWeights++;
+        iNumUsedWeights--;
       }
     }
     else
       adjWarr[i] = 0;
   }
 
-  if (iNonZeroWeights != 0)
-  {
-    norm_weights_all(adjWarr, _trad);
+  norm_weights_all(adjWarr, _trad);
 
-    // copy start weights to start weights array
-    for (int i = 0; i < (_trad * 2) + 1; i++)
+  // prepare target
+  if (!bChroma)
+  {
+    _degrainluma_ptr(
+      pMPBTempBlocks, 0, (iBlkWidth * pixelsize),
+      pSrc, nSrcPitch,
+      pRef, Pitch, adjWarr, _trad
+    );
+  }
+  else
+  {
+    _degrainchroma_ptr(
+      pMPBTempBlocks, 0, (iBlkWidth * pixelsize),
+      pSrc, nSrcPitch,
+      pRef, Pitch, adjWarr, _trad
+    );
+  }
+
+  // set equal weights to all possible blocks in tr-scope with SAD > thSAD
+// also set full weight to current block
+  adjWarr[0] = 1 << DEGRAIN_WEIGHT_BITS;
+
+  for (int i = 1; i < (_trad * 2) + 1; i++)
+  {
+    if (Wall[i] != 0)
     {
-      startWarr[i] = adjWarr[i];
+      {
+        adjWarr[i] = 1 << DEGRAIN_WEIGHT_BITS;
+      }
     }
+    else
+      adjWarr[i] = 0;
+  }
+
+  norm_weights_all(adjWarr, _trad);
+
+  // copy start weights to start weights array
+  for (int i = 0; i < (_trad * 2) + 1; i++)
+  {
+    startWarr[i] = adjWarr[i];
   }
 
   int iNumItCurr = MPBNumIt;
   do
   {
-    // initial blend or each iteration blend
+    int iNumAlignedBlocks = AlignBlockWeights(
+      pRef, Pitch,
+      pSrc, nSrcPitch,
+      adjWarr, iBlkWidth, iBlkHeight, bChroma
+    );
+
+    iNumItCurr--;
+
+    if ((iNumAlignedBlocks == 0) || (iNumItCurr == 0))
+    {
+      break;
+    }
+
+    // each iteration blend
     if (!bChroma)
     {
       _degrainluma_ptr(
@@ -5653,19 +5704,6 @@ MV_FORCEINLINE void MDegrainN::MPB_SP(
         pRef, Pitch, adjWarr, _trad
       );
     }
-
-    int iNumAlignedBlocks = AlignBlockWeights(
-      pRef, Pitch,
-      pSrc, nSrcPitch,
-      adjWarr, iBlkWidth, iBlkHeight, bChroma
-    );
-
-    if ((iNumAlignedBlocks == 0) || (iNumItCurr < 0))
-    {
-      break;
-    }
-
-    iNumItCurr--;
 
   } while (1);
 
@@ -5732,36 +5770,96 @@ MV_FORCEINLINE void MDegrainN::MPB_LC(
   int adjWarr[1 + MAX_TEMP_RAD * 2];
   int startWarr[1 + MAX_TEMP_RAD * 2];
 
-  // start check from equal weights (equal to wpow=7 ?)
-  int iNonZeroWeights = 0;
-  for (int i = 0; i < (_trad * 2) + 1; i++)
+  // start check from equal weights (equal to wpow=7 ?), only use max MPGtgtTR number of init non zero weights
+  int iNumUsedWeights = MPBtgtTR * 2;
+
+  // also set full weight to current block
+  adjWarr[0] = 1 << DEGRAIN_WEIGHT_BITS;
+
+  for (int i = 1; i < (_trad * 2) + 1; i++)
   {
-    if (Wall[i] != 0)
+    if ((Wall[i] != 0) && (iNumUsedWeights != 0))
     {
       {
         adjWarr[i] = 1 << DEGRAIN_WEIGHT_BITS;
-        iNonZeroWeights++;
+        iNumUsedWeights--;
       }
     }
     else
       adjWarr[i] = 0;
   }
 
-  if (iNonZeroWeights != 0)
-  {
-    norm_weights_all(adjWarr, _trad);
+  norm_weights_all(adjWarr, _trad);
 
-    // copy start weights to start weights array
-    for (int i = 0; i < (_trad * 2) + 1; i++)
+  // prepare target
+  _degrainluma_ptr(
+    pMPBTempBlocks, 0, (iBlkWidth * pixelsize),
+    pSrc, nSrcPitch,
+    pRef, Pitch, adjWarr, _trad
+  );
+
+  if ((MPBchroma & 0x1) != 0)
+  {
+    _degrainchroma_ptr(
+      pMPBTempBlocksUV1, 0, (iBlkWidthC * pixelsize),
+      pSrcUV1, nSrcPitchUV1,
+      pRefUV1, PitchUV1, adjWarr, _trad
+    );
+
+    _degrainchroma_ptr(
+      pMPBTempBlocksUV2, 0, (iBlkWidthC * pixelsize),
+      pSrcUV2, nSrcPitchUV2,
+      pRefUV2, PitchUV2, adjWarr, _trad
+    );
+  }
+
+  // set equal weights to all possible blocks in tr-scope with SAD > thSAD
+  // also set full weight to current block
+  adjWarr[0] = 1 << DEGRAIN_WEIGHT_BITS;
+
+  for (int i = 1; i < (_trad * 2) + 1; i++)
+  {
+    if (Wall[i] != 0)
     {
-      startWarr[i] = adjWarr[i];
+      {
+        adjWarr[i] = 1 << DEGRAIN_WEIGHT_BITS;
+      }
     }
+    else
+      adjWarr[i] = 0;
+  }
+
+  norm_weights_all(adjWarr, _trad);
+
+  // copy start weights to start weights array
+  for (int i = 0; i < (_trad * 2) + 1; i++)
+  {
+    startWarr[i] = adjWarr[i];
   }
 
   int iNumItCurr = MPBNumIt;
   do
   {
-    // initial blend or each iteration blend
+    int iNumAlignedBlocks = AlignBlockWeightsLC(
+      pRef, Pitch,
+      pRefUV1, PitchUV1,
+      pRefUV2, PitchUV2,
+      pSrc, nSrcPitch,
+      pSrcUV1, nSrcPitchUV1,
+      pSrcUV2, nSrcPitchUV2,
+      adjWarr, iBlkWidth, iBlkHeight,
+      iBlkWidthC, iBlkHeightC,
+      chromaSADscale
+    );
+
+    iNumItCurr--;
+
+    if ((iNumAlignedBlocks == 0) || (iNumItCurr == 0))
+    {
+      break;
+    }
+
+    // each iteration blend
     _degrainluma_ptr(
       pMPBTempBlocks, 0, (iBlkWidth * pixelsize),
       pSrc, nSrcPitch,
@@ -5782,25 +5880,6 @@ MV_FORCEINLINE void MDegrainN::MPB_LC(
         pRefUV2, PitchUV2, adjWarr, _trad
       );
     }
-
-    int iNumAlignedBlocks = AlignBlockWeightsLC(
-      pRef, Pitch,
-      pRefUV1, PitchUV1,
-      pRefUV2, PitchUV2,
-      pSrc, nSrcPitch,
-      pSrcUV1, nSrcPitchUV1,
-      pSrcUV2, nSrcPitchUV2,
-      adjWarr, iBlkWidth, iBlkHeight,
-      iBlkWidthC, iBlkHeightC,
-      chromaSADscale
-    );
-
-    if ((iNumAlignedBlocks == 0) || (iNumItCurr < 0))
-    {
-      break;
-    }
-
-    iNumItCurr--;
 
   } while (1);
 
