@@ -4265,10 +4265,11 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
       pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vOrig;
 
     // TEMP DEBUG 
-    vZeroMV.x = 0;
+/*    vZeroMV.x = 0;
     vZeroMV.y = 0;
     vZeroMV.sad = vLPFed.sad;
     pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vZeroMV;
+    */
   }
 
   for (int k = 1; k < _trad + 1; ++k)
@@ -4289,10 +4290,10 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
       pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vOrig;
 
     // TEMP DEBUG 
-    vZeroMV.x = 0;
+/*    vZeroMV.x = 0;
     vZeroMV.y = 0;
     vZeroMV.sad = vLPFed.sad;
-    pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vZeroMV;
+    pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vZeroMV;*/
   }
 }
 
@@ -5758,18 +5759,32 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeightsLC_SCV(const BYTE* pRef[], int Pi
     {
       if (Wall[n] != 0) // check only processed above blocks
       {
-        if (fAVG_sub_SADCV_sad - sadcv_array_sub_sad[n] > MPBthSub)
+/*        if (fAVG_sub_SADCV_sad - sadcv_array_sub_sad[n] > MPBthSub)
+        {
+          Wall[n] = (int)((float)Wall[n] * MPB_SPC_sub); // decrease weight
+          iNumAlignedBlocks++;
+          continue; // do not check for addition if already adjusted to lower weight ?
+        }
+  */
+        if ((sadcv_array_sub_cov[n] - fAVG_sub_SADCV_cov > MPBthSub) && (fAVG_add_SADCV_cov - sadcv_array_add_cov[n] > MPBthAdd)) // block worse than avg ?
         {
           Wall[n] = (int)((float)Wall[n] * MPB_SPC_sub); // decrease weight
           iNumAlignedBlocks++;
           continue; // do not check for addition if already adjusted to lower weight ?
         }
 
-        if (fAVG_add_SADCV_sad - sadcv_array_add_sad[n] > MPBthAdd)
+        if ((fAVG_sub_SADCV_cov - sadcv_array_sub_cov[n] > MPBthAdd) && (sadcv_array_add_cov[n] - fAVG_add_SADCV_cov > MPBthAdd)) // block better than avg ?
         {
           int iNewW = (int)((float)Wall[n] * MPB_SPC_add); // increase weight 
           if (iNewW > 255) iNewW = 255;
           Wall[n] = iNewW;
+          iNumAlignedBlocks++;
+          continue; // do not check for addition if already adjusted to lower weight ?
+        }
+
+        if ((fAVG_add_SADCV_sad - sadcv_array_add_sad[n] > MPBthAdd) && (fAVG_sub_SADCV_sad - sadcv_array_sub_sad[n] > MPBthSub)) // need check ?
+        {
+          Wall[n] = (int)((float)Wall[n] * MPB_SPC_sub); // decrease weight
           iNumAlignedBlocks++;
         }
       }
@@ -6162,6 +6177,9 @@ MV_FORCEINLINE void MDegrainN::MPB_LC(
   const int iBlkWidthC, const int iBlkHeightC, const int chromaSADscale
 )
 {
+  // TEMP DEBUG !!!
+//  pRef[1] ++; // shift ptr second ref block 1 to the right !!!
+
   if (showIVSmask) // may be not best place but less places in text to place
   {
     for (int h = 0; h < iBlkHeight; h++)

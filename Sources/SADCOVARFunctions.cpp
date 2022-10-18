@@ -10,8 +10,6 @@ MV_FORCEINLINE unsigned int SADABS(int x) { return (x < 0) ? -x : x; }
 template<int nBlkWidth, int nBlkHeight, typename pixel_t>
 static float SADCOVAR_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch, float* pfCov)
 {
-
-  //pRef++; // TEMP DEBUG !!!
   const pixel_t* pWorkSrc = reinterpret_cast<const pixel_t*>(pSrc);
   const pixel_t* pWorkRef = reinterpret_cast<const pixel_t*>(pRef);
 
