@@ -28,7 +28,7 @@
 #include "SSIMFunctions.h"
 #include "VIFFunctions.h"
 #include "DWTFunctions.h"
-
+#include "SADCOVARFunctions.h"
 
 enum {
   MEF_SAD = 0x01,       // SAD
@@ -36,7 +36,8 @@ enum {
   MEF_SSIM_CS = 0x04,   // SSIM contrast and structure
   MEF_MS_SSIM = 0x08,   // MS-SSIM (multi-scale SSIM)
   MEF_VIFA_DWT = 0x10,  // VIF DWT Approximation  
-  MEF_VIFE_DWT = 0x20   // VIF DWT Edges
+  MEF_VIFE_DWT = 0x20,   // VIF DWT Edges
+  MEF_SADCOVAR = 0x40
 };
 
 

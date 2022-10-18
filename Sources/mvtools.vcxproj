@@ -1817,6 +1817,7 @@
       <UseProcessorExtensions Condition="'$(Configuration)|$(Platform)'=='ICX|x64'">COMMON512</UseProcessorExtensions>
     </ClCompile>
     <ClCompile Include="PlaneOfBlocks_avx512.cpp" />
+    <ClCompile Include="SADCOVARFunctions.cpp" />
     <ClCompile Include="SADFunctions.cpp" />
     <ClCompile Include="SADFunctions_avx2.cpp">
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
@@ -1977,6 +1978,7 @@
     <ClInclude Include="PlaneOfBlocks_avx2.h" />
     <ClInclude Include="profile.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="SADCOVARFunctions.h" />
     <ClInclude Include="SADFunctions.h" />
     <ClInclude Include="SADFunctions16.h" />
     <ClInclude Include="SADFunctions_avx2.h" />

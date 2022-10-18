@@ -141,6 +141,7 @@
     <ClCompile Include="DisMetric.cpp" />
     <ClCompile Include="VIFFunctions.cpp" />
     <ClCompile Include="DWTFunctions.cpp" />
+    <ClCompile Include="SADCOVARFunctions.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MDegrainN.h">
@@ -426,6 +427,7 @@
     <ClInclude Include="DisMetric.h" />
     <ClInclude Include="VIFFunctions.h" />
     <ClInclude Include="DWTFunctions.h" />
+    <ClInclude Include="SADCOVARFunctions.h" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="cpu.h" />

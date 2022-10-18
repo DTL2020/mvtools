@@ -253,6 +253,7 @@ private:
   int MPBthSub;
   int MPBthAdd;
   int MPBNumIt;
+  int MPB_DMFlags;
   float MPB_SPC_sub;
   float MPB_SPC_add;
   int MPB_thIVS;
@@ -263,12 +264,24 @@ private:
   uint8_t* pMPBTempBlocks; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
   uint8_t* pMPBTempBlocksUV1; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
   uint8_t* pMPBTempBlocksUV2; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
+  SADCOVARFunction* SADCOVAR;              /* function which computes the sad */
+  SADCOVARFunction* SADCOVARCHROMA;
 
   // single plane only
   MV_FORCEINLINE int AlignBlockWeights(const BYTE* pRef[], int Pitch[], const BYTE* pCurr, int iCurrPitch, int Wall[], int iBlkWidth, int iBlkHeight, bool bChroma);
 
   // luma and chroma
   MV_FORCEINLINE int AlignBlockWeightsLC(const BYTE* pRef[], int Pitch[],
+    const BYTE* pRefUV1[], int PitchUV1[],
+    const BYTE* pRefUV2[], int PitchUV2[],
+    const BYTE* pCurr, const int iCurrPitch,
+    const BYTE* pCurrUV1, const int iCurrPitchUV1,
+    const BYTE* pCurrUV2, const int iCurrPitchUV2,
+    int Wall[], const int iBlkWidth, const int iBlkHeight,
+    const int iBlkWidthC, const int iBlkHeightC, const int chromaSADscale
+  );
+
+  MV_FORCEINLINE int AlignBlockWeightsLC_SCV(const BYTE* pRef[], int Pitch[],
     const BYTE* pRefUV1[], int PitchUV1[],
     const BYTE* pRefUV2[], int PitchUV2[],
     const BYTE* pCurr, const int iCurrPitch,

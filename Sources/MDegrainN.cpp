@@ -761,7 +761,7 @@ MDegrainN::MDegrainN(
   float MVLPFCutoff, float MVLPFSlope, float MVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
   int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos,
   int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
-  int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int MPB_DMFlags, int _MPBchroma, int _MPBtgtTR,
+  int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -833,6 +833,7 @@ MDegrainN::MDegrainN(
   , mvmultivs(_mvmultivs)
   , MPBchroma(_MPBchroma)
   , MPBtgtTR(_MPBtgtTR)
+  , MPB_DMFlags(_MPB_DMFlags)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -1179,6 +1180,9 @@ MDegrainN::MDegrainN(
 
   SAD = get_sad_function(nBlkSizeX, nBlkSizeY, bits_per_pixel, arch);
   SADCHROMA = get_sad_function(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits_per_pixel, arch);
+
+  SADCOVAR = get_sadcovar_function(nBlkSizeX, nBlkSizeY, bits_per_pixel, arch);
+  SADCOVARCHROMA = get_sadcovar_function(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits_per_pixel, arch);
 
   DM_Luma = new DisMetric(nBlkSizeX, nBlkSizeY, bits_per_pixel, pixelsize, arch, MPB_DMFlags);
   DM_Chroma = new DisMetric(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits_per_pixel, pixelsize, arch, MPB_DMFlags);
@@ -2500,6 +2504,14 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
     {
 
       int i = by * nBlkX + bx;
+
+#ifdef _DEBUG
+      if ((bx == 10) && (by == 10))
+      {
+        int idbr = 0;
+      }
+#endif
+
       const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
       int pitch_arr[MAX_TEMP_RAD * 2];
       int weight_arr[1 + MAX_TEMP_RAD * 2];
@@ -4232,6 +4244,7 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
 
   // final copy output
   VECTOR vLPFed, vOrig;
+  VECTOR vZeroMV;// TEMP DEBUG
 
   for (int k = 0; k < _trad; ++k)
   {
@@ -4250,6 +4263,12 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
     }
     else // place original vector
       pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vOrig;
+
+    // TEMP DEBUG 
+    vZeroMV.x = 0;
+    vZeroMV.y = 0;
+    vZeroMV.sad = vLPFed.sad;
+    pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vZeroMV;
   }
 
   for (int k = 1; k < _trad + 1; ++k)
@@ -4268,6 +4287,12 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
     }
     else
       pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vOrig;
+
+    // TEMP DEBUG 
+    vZeroMV.x = 0;
+    vZeroMV.y = 0;
+    vZeroMV.sad = vLPFed.sad;
+    pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vZeroMV;
   }
 }
 
@@ -5415,6 +5440,352 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeightsLC(const BYTE* pRef[], int Pitch[
   return iNumAlignedBlocks; // counter of weight-adjusted blocks, 0 if none
 }
 
+MV_FORCEINLINE int MDegrainN::AlignBlockWeightsLC_SCV(const BYTE* pRef[], int Pitch[],
+  const BYTE* pRefUV1[], int PitchUV1[],
+  const BYTE* pRefUV2[], int PitchUV2[],
+  const BYTE* pCurr, const int iCurrPitch,
+  const BYTE* pCurrUV1, const int iCurrPitchUV1,
+  const BYTE* pCurrUV2, const int iCurrPitchUV2,
+  int Wall[], const int iBlkWidth, const int iBlkHeight,
+  const int iBlkWidthC, const int iBlkHeightC, const int chromaSADscale
+)
+{
+  //first count number of non-zero weights, zero is current block weight, 1,2 is +-1frame and so on
+  int iNumNZBlocks = 1; // we have at least one non-zero - the source itself ?
+  const int iBlockSizeMem = iBlkWidth * iBlkHeight * pixelsize;
+  const int iBlockSizeMemUV = iBlkWidthC * iBlkHeightC * pixelsize;
+  const int iBlocksPitch = iBlkWidth * pixelsize;
+  const int iBlocksPitchUV = iBlkWidthC * pixelsize;
+  int iNumAlignedBlocks = 0;
+  int W_sub[MAX_TEMP_RAD * 2 + 1];
+
+  float sadcv_array_sub_sad[(MAX_TEMP_RAD * 2 + 1)];
+  float sadcv_array_sub_cov[(MAX_TEMP_RAD * 2 + 1)];
+  float sadcv_array_add_sad[(MAX_TEMP_RAD * 2 + 1)];
+  float sadcv_array_add_cov[(MAX_TEMP_RAD * 2 + 1)];
+
+
+  // always rewind pRef pointers after full blending, hope after zeroing weight of block it will never put back ?
+  for (int k = 0; k < _trad * 2; k++)
+  {
+    pRef[k] -= Pitch[k] * iBlkHeight;
+    if (MPBchroma & 0x1 != 0)
+    {
+      pRefUV1[k] -= PitchUV1[k] * iBlkHeightC;
+      pRefUV2[k] -= PitchUV2[k] * iBlkHeightC;
+    }
+  }
+
+  for (int n = 1; n < (_trad * 2 + 1); n++)
+  {
+    if (Wall[n] != 0) iNumNZBlocks++;
+  }
+
+  if (iNumNZBlocks < 3) // current and at least 2 refs are non-zero weighted
+  {
+    // nothing to process - return 0 to stop proc
+    return 0;
+  }
+  else
+  {
+    // fill initial max values
+/*    for (int k = 0; k < (_trad * 2 + 1); k++)
+    {
+      sad_array_sub[k] = veryBigSAD;
+      sad_array_add[k] = veryBigSAD;
+    }
+    */
+
+    float fAVG_sub_SADCV_sad = 0;
+    float fAVG_sub_SADCV_cov = 0;
+    float fAVG_add_SADCV_sad = 0;
+    float fAVG_add_SADCV_cov = 0;
+
+    int iNumAVG = 0;
+
+    float sadcv_chroma_sad;
+    float luma_sadcv_sad;
+
+    float sadcv_chroma_covUV1;
+    float sadcv_chroma_covUV2;
+    float sadcv_chroma_cov;
+    float luma_sadcv_cov;
+
+    // process current block too
+    // subtracted
+    if (!MPB_PartBlend) // use subtraction
+    {
+      if (_cpuFlags & CPUF_SSE2)
+      {
+        SubtractBlock_uint8_sse2(pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch,
+          pMPBTempBlocks, iBlocksPitch, (uint8_t*)pCurr, iCurrPitch, Wall[0], iBlkWidth, iBlkHeight);
+        if ((MPBchroma & 0x1) != 0)
+        {
+          SubtractBlock_uint8_sse2(pMPBTempBlocksUV1 + (iBlockSizeMemUV * (1)), iBlocksPitchUV,
+            pMPBTempBlocksUV1, iBlocksPitchUV, (uint8_t*)pCurrUV1, iCurrPitchUV1, Wall[0], iBlkWidthC, iBlkHeightC);
+          SubtractBlock_uint8_sse2(pMPBTempBlocksUV2 + (iBlockSizeMemUV * (1)), iBlocksPitchUV,
+            pMPBTempBlocksUV2, iBlocksPitchUV, (uint8_t*)pCurrUV2, iCurrPitchUV2, Wall[0], iBlkWidthC, iBlkHeightC);
+        }
+      }
+      else
+      {
+        SubtractBlock_C_uint8(pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch,
+          pMPBTempBlocks, iBlocksPitch, (uint8_t*)pCurr, iCurrPitch, Wall[0], iBlkWidth, iBlkHeight);
+        if ((MPBchroma & 0x1) != 0)
+        {
+          SubtractBlock_C_uint8(pMPBTempBlocksUV1 + (iBlockSizeMemUV * (1)), iBlocksPitchUV,
+            pMPBTempBlocksUV1, iBlocksPitchUV, (uint8_t*)pCurrUV1, iCurrPitchUV1, Wall[0], iBlkWidthC, iBlkHeightC);
+          SubtractBlock_C_uint8(pMPBTempBlocksUV2 + (iBlockSizeMemUV * (1)), iBlocksPitchUV,
+            pMPBTempBlocksUV2, iBlocksPitchUV, (uint8_t*)pCurrUV2, iCurrPitchUV2, Wall[0], iBlkWidthC, iBlkHeightC);
+        }
+      }
+    }
+    else // use real partial blending
+    {
+      for (int i = 0; i < (_trad * 2 + 1); i++)
+        W_sub[i] = Wall[i];
+      W_sub[0] = 0; // zero weight of current block
+
+      norm_weights_all(W_sub, _trad);
+
+      _degrainluma_ptr(
+        pMPBTempBlocks + (iBlockSizeMem * (1)), 0, iBlocksPitch,
+        pCurr, iCurrPitch,
+        pRef, Pitch, W_sub, _trad);
+      if ((MPBchroma & 0x1) != 0)
+      {
+        _degrainchroma_ptr(
+          pMPBTempBlocksUV1 + (iBlockSizeMemUV * (1)), 0, iBlocksPitchUV,
+          pCurrUV1, iCurrPitchUV1,
+          pRefUV1, PitchUV1, W_sub, _trad);
+
+        _degrainchroma_ptr(
+          pMPBTempBlocksUV2 + (iBlockSizeMemUV * (1)), 0, iBlocksPitchUV,
+          pCurrUV2, iCurrPitchUV2,
+          pRefUV2, PitchUV2, W_sub, _trad);
+      }
+
+      // always rewind pRef pointers after full blending
+      for (int k = 0; k < _trad * 2; k++)
+      {
+        pRef[k] -= Pitch[k] * iBlkHeight;
+        if ((MPBchroma & 0x1) != 0)
+        {
+          pRefUV1[k] -= PitchUV1[k] * iBlkHeightC;
+          pRefUV2[k] -= PitchUV2[k] * iBlkHeightC;
+        }
+      }
+
+    }
+
+    /*    luma_sad = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch);
+        sad_chroma = ScaleSadChroma(SADCHROMA(pMPBTempBlocksUV1, iBlocksPitchUV, pMPBTempBlocksUV1 + (iBlockSizeMemUV * (1)), iBlocksPitchUV)
+              + SADCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pMPBTempBlocksUV2 + (iBlockSizeMemUV * (1)), iBlocksPitchUV), chromaSADscale);
+    */
+    luma_sadcv_sad = SADCOVAR(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (1)), iBlocksPitch, &luma_sadcv_cov);
+    if ((MPBchroma & 0x1) != 0)
+    {
+//      sadcv_chroma = ScaleSadChroma(DM_Chroma->GetDisMetric(pMPBTempBlocksUV1, iBlocksPitchUV, pMPBTempBlocksUV1 + (iBlockSizeMemUV * (1)), iBlocksPitchUV)
+//        + DM_Chroma->GetDisMetric(pMPBTempBlocksUV2, iBlocksPitchUV, pMPBTempBlocksUV2 + (iBlockSizeMemUV * (1)), iBlocksPitchUV), chromaSADscale);
+      sadcv_chroma_sad = SADCOVARCHROMA(pMPBTempBlocksUV1, iBlocksPitchUV, pMPBTempBlocksUV1 + (iBlockSizeMemUV * (1)), iBlocksPitchUV, &sadcv_chroma_covUV1)
+                + SADCOVARCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pMPBTempBlocksUV2 + (iBlockSizeMemUV * (1)), iBlocksPitchUV, &sadcv_chroma_covUV2);
+      sadcv_chroma_cov = sadcv_chroma_covUV1 + sadcv_chroma_covUV2;
+    }
+    else
+    {
+      sadcv_chroma_sad = 0;
+      sadcv_chroma_cov = 0;
+    }
+    sadcv_array_sub_sad[0] = luma_sadcv_sad + sadcv_chroma_sad;
+    sadcv_array_sub_cov[0] = luma_sadcv_cov + sadcv_chroma_cov;
+    fAVG_sub_SADCV_sad += sadcv_array_sub_sad[0];
+    fAVG_sub_SADCV_cov += sadcv_array_sub_cov[0];
+
+    // calc SAD of full blended vs refs
+/*    luma_sad = SAD(pMPBTempBlocks, iBlocksPitch, pCurr, iCurrPitch);
+    sad_chroma = ScaleSadChroma(SADCHROMA(pMPBTempBlocksUV1, iBlocksPitchUV, pCurrUV1, iCurrPitchUV1)
+      + SADCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pCurrUV2, iCurrPitchUV2), chromaSADscale);*/
+    luma_sadcv_sad = SADCOVAR(pMPBTempBlocks, iBlocksPitch, pCurr, iCurrPitch, &luma_sadcv_cov);
+    if ((MPBchroma & 0x1) != 0)
+    {
+//      sad_chroma = ScaleSadChroma(DM_Chroma->GetDisMetric(pMPBTempBlocksUV1, iBlocksPitchUV, pCurrUV1, iCurrPitchUV1)
+//        + DM_Chroma->GetDisMetric(pMPBTempBlocksUV2, iBlocksPitchUV, pCurrUV2, iCurrPitchUV2), chromaSADscale);
+      sadcv_chroma_sad = SADCOVARCHROMA(pMPBTempBlocksUV1, iBlocksPitchUV, pCurrUV1, iCurrPitchUV1, &sadcv_chroma_covUV1)
+        + SADCOVARCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pCurrUV2, iCurrPitchUV2, &sadcv_chroma_covUV2);
+      sadcv_chroma_cov = sadcv_chroma_covUV1 + sadcv_chroma_covUV2;
+    }
+    else
+    {
+      sadcv_chroma_sad = 0;
+      sadcv_chroma_cov = 0;
+    }
+    sadcv_array_add_sad[0] = luma_sadcv_sad + sadcv_chroma_sad;
+    fAVG_add_SADCV_sad += sadcv_array_add_sad[0];
+    sadcv_array_add_cov[0] = luma_sadcv_cov + sadcv_chroma_cov;
+    fAVG_add_SADCV_cov += sadcv_array_add_cov[0];
+
+    iNumAVG++;
+
+    // ref blocks
+    for (int n = 1; n < (_trad * 2 + 1); n++)
+    {
+      if (Wall[n] != 0)
+      {
+        if (!MPB_PartBlend)
+        {
+          // create subrtracted versions of full blended block (faster)
+          if (_cpuFlags & CPUF_SSE2)
+          {
+            SubtractBlock_uint8_sse2(pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch,
+              pMPBTempBlocks, iBlocksPitch, (uint8_t*)pRef[n - 1], Pitch[n - 1], Wall[n], iBlkWidth, iBlkHeight);
+            if ((MPBchroma & 0x1) != 0)
+            {
+              SubtractBlock_uint8_sse2(pMPBTempBlocksUV1 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV,
+                pMPBTempBlocksUV1, iBlocksPitchUV, (uint8_t*)pRefUV1[n - 1], PitchUV1[n - 1], Wall[n], iBlkWidthC, iBlkHeightC);
+              SubtractBlock_uint8_sse2(pMPBTempBlocksUV2 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV,
+                pMPBTempBlocksUV2, iBlocksPitchUV, (uint8_t*)pRefUV2[n - 1], PitchUV2[n - 1], Wall[n], iBlkWidthC, iBlkHeightC);
+            }
+          }
+          else
+          {
+            SubtractBlock_C_uint8(pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch,
+              pMPBTempBlocks, iBlocksPitch, (uint8_t*)pRef[n - 1], Pitch[n - 1], Wall[n], iBlkWidth, iBlkHeight);
+            if ((MPBchroma & 0x1) != 0)
+            {
+              SubtractBlock_C_uint8(pMPBTempBlocksUV1 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV,
+                pMPBTempBlocksUV1, iBlocksPitchUV, (uint8_t*)pRefUV1[n - 1], PitchUV1[n - 1], Wall[n], iBlkWidthC, iBlkHeightC);
+              SubtractBlock_C_uint8(pMPBTempBlocksUV2 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV,
+                pMPBTempBlocksUV2, iBlocksPitchUV, (uint8_t*)pRefUV2[n - 1], PitchUV2[n - 1], Wall[n], iBlkWidthC, iBlkHeightC);
+            }
+          }
+        }
+        else // real partial blending (slower)
+        {
+          for (int i = 0; i < (_trad * 2 + 1); i++)
+            W_sub[i] = Wall[i];
+          W_sub[n] = 0; // zero weight of n-th block
+          norm_weights_all(W_sub, _trad);
+
+          _degrainluma_ptr(
+            pMPBTempBlocks + (iBlockSizeMem * (n + 1)), 0, iBlocksPitch,
+            pCurr, iCurrPitch,
+            pRef, Pitch, W_sub, _trad);
+          if ((MPBchroma & 0x1) != 0)
+          {
+            _degrainchroma_ptr(
+              pMPBTempBlocksUV1 + (iBlockSizeMemUV * (n + 1)), 0, iBlocksPitchUV,
+              pCurrUV1, iCurrPitchUV1,
+              pRefUV1, PitchUV1, W_sub, _trad);
+
+            _degrainchroma_ptr(
+              pMPBTempBlocksUV2 + (iBlockSizeMemUV * (n + 1)), 0, iBlocksPitchUV,
+              pCurrUV2, iCurrPitchUV2,
+              pRefUV2, PitchUV2, W_sub, _trad);
+          }
+          // always rewind pRef pointers after full blending, hope after zeroing weight of block it will never put back ?
+          for (int k = 0; k < _trad * 2; k++)
+          {
+            pRef[k] -= Pitch[k] * iBlkHeight;
+            if ((MPBchroma & 0x1) != 0)
+            {
+              pRefUV1[k] -= PitchUV1[k] * iBlkHeightC;
+              pRefUV2[k] -= PitchUV2[k] * iBlkHeightC;
+            }
+          }
+        }
+
+        //calc SAD of full blended block vs subtracted
+/*        luma_sad = SAD(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch);
+        sad_chroma = ScaleSadChroma(SADCHROMA(pMPBTempBlocksUV1, iBlocksPitchUV, pMPBTempBlocksUV1 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV)
+          + SADCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pMPBTempBlocksUV2 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV), chromaSADscale);*/
+        luma_sadcv_sad = SADCOVAR(pMPBTempBlocks, iBlocksPitch, pMPBTempBlocks + (iBlockSizeMem * (n + 1)), iBlocksPitch, &luma_sadcv_cov);
+        if ((MPBchroma & 0x1) != 0)
+        {
+//          sad_chroma = ScaleSadChroma(DM_Chroma->GetDisMetric(pMPBTempBlocksUV1, iBlocksPitchUV, pMPBTempBlocksUV1 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV)
+//            + DM_Chroma->GetDisMetric(pMPBTempBlocksUV2, iBlocksPitchUV, pMPBTempBlocksUV2 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV), chromaSADscale);
+            sadcv_chroma_sad = SADCOVARCHROMA(pMPBTempBlocksUV1, iBlocksPitchUV, pMPBTempBlocksUV1 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV, &sadcv_chroma_covUV1)
+            + SADCOVARCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pMPBTempBlocksUV2 + (iBlockSizeMemUV * (n + 1)), iBlocksPitchUV, &sadcv_chroma_covUV2);
+            sadcv_chroma_cov = sadcv_chroma_covUV1 + sadcv_chroma_covUV2;
+        }
+        else
+        {
+          sadcv_chroma_sad = 0;
+          sadcv_chroma_cov = 0;
+        }
+        sadcv_array_sub_sad[n] = luma_sadcv_sad + sadcv_chroma_sad;
+        fAVG_sub_SADCV_sad += sadcv_array_sub_sad[n];
+        sadcv_array_sub_cov[n] = luma_sadcv_cov + sadcv_chroma_cov;
+        fAVG_sub_SADCV_cov += sadcv_array_sub_cov[n];
+
+        // calc SAD of full blended vs refs
+/*        luma_sad = SAD(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n - 1]);
+        sad_chroma = ScaleSadChroma(SADCHROMA(pMPBTempBlocksUV1, iBlocksPitchUV, pRefUV1[n - 1], PitchUV1[n - 1])
+          + SADCHROMA(pMPBTempBlocksUV2, iBlocksPitchUV, pRefUV2[n - 1], PitchUV2[n - 1]), chromaSADscale);*/
+        luma_sadcv_sad = SADCOVAR(pMPBTempBlocks, iBlocksPitch, pRef[n - 1], Pitch[n - 1], &luma_sadcv_cov);
+        if ((MPBchroma & 0x1) != 0)
+        {
+//          sad_chroma = ScaleSadChroma(DM_Chroma->GetDisMetric(pMPBTempBlocksUV1, iBlocksPitchUV, pRefUV1[n - 1], PitchUV1[n - 1])
+//            + DM_Chroma->GetDisMetric(pMPBTempBlocksUV2, iBlocksPitchUV, pRefUV2[n - 1], PitchUV2[n - 1]), chromaSADscale);
+            sadcv_chroma_sad = SADCOVAR(pMPBTempBlocksUV1, iBlocksPitchUV, pRefUV1[n - 1], PitchUV1[n - 1], &sadcv_chroma_covUV1)
+             + SADCOVAR(pMPBTempBlocksUV2, iBlocksPitchUV, pRefUV2[n - 1], PitchUV2[n - 1], &sadcv_chroma_covUV2);
+            sadcv_chroma_cov = sadcv_chroma_covUV1 + sadcv_chroma_covUV2;
+        }
+        else
+        {
+          sadcv_chroma_sad = 0;
+          sadcv_chroma_cov = 0;
+        }
+        sadcv_array_add_sad[n] = luma_sadcv_sad + sadcv_chroma_sad;
+        fAVG_add_SADCV_sad += sadcv_array_add_sad[n];
+        sadcv_array_add_cov[n] = luma_sadcv_cov + sadcv_chroma_cov;
+        fAVG_add_SADCV_cov += sadcv_array_add_cov[n];
+
+
+        iNumAVG++;
+      }
+
+    }
+
+    // find average SAD
+    fAVG_add_SADCV_sad /= iNumAVG;
+    fAVG_sub_SADCV_sad /= iNumAVG;
+    fAVG_add_SADCV_cov /= iNumAVG;
+    fAVG_sub_SADCV_cov /= iNumAVG;
+
+
+    //check if SADCV of curr block too differs from average
+    for (int n = 0; n < (_trad * 2 + 1); n++)
+    {
+      if (Wall[n] != 0) // check only processed above blocks
+      {
+        if (fAVG_sub_SADCV_sad - sadcv_array_sub_sad[n] > MPBthSub)
+        {
+          Wall[n] = (int)((float)Wall[n] * MPB_SPC_sub); // decrease weight
+          iNumAlignedBlocks++;
+          continue; // do not check for addition if already adjusted to lower weight ?
+        }
+
+        if (fAVG_add_SADCV_sad - sadcv_array_add_sad[n] > MPBthAdd)
+        {
+          int iNewW = (int)((float)Wall[n] * MPB_SPC_add); // increase weight 
+          if (iNewW > 255) iNewW = 255;
+          Wall[n] = iNewW;
+          iNumAlignedBlocks++;
+        }
+      }
+    }
+
+  }
+
+  if (iNumAlignedBlocks != 0)
+  {
+    norm_weights_all(Wall, _trad);
+  }
+
+  return iNumAlignedBlocks; // counter of weight-adjusted blocks, 0 if none
+}
+
+
 
 MV_FORCEINLINE void MDegrainN::CopyBlock(uint8_t* pDst, int iDstPitch, uint8_t* pSrc, int iBlkWidth, int iBlkHeight)
 {
@@ -5917,17 +6288,38 @@ MV_FORCEINLINE void MDegrainN::MPB_LC(
   int iNumItCurr = MPBNumIt;
   do
   {
-    int iNumAlignedBlocks = AlignBlockWeightsLC(
-      pRef, Pitch,
-      pRefUV1, PitchUV1,
-      pRefUV2, PitchUV2,
-      pSrc, nSrcPitch,
-      pSrcUV1, nSrcPitchUV1,
-      pSrcUV2, nSrcPitchUV2,
-      adjWarr, iBlkWidth, iBlkHeight,
-      iBlkWidthC, iBlkHeightC,
-      chromaSADscale
-    );
+    int iNumAlignedBlocks;
+
+    if (MPB_DMFlags & MEF_SADCOVAR)
+    {
+      iNumAlignedBlocks = AlignBlockWeightsLC_SCV(
+        pRef, Pitch,
+        pRefUV1, PitchUV1,
+        pRefUV2, PitchUV2,
+        pSrc, nSrcPitch,
+        pSrcUV1, nSrcPitchUV1,
+        pSrcUV2, nSrcPitchUV2,
+        adjWarr, iBlkWidth, iBlkHeight,
+        iBlkWidthC, iBlkHeightC,
+        chromaSADscale
+      );
+    }
+    else
+    {
+      iNumAlignedBlocks = AlignBlockWeightsLC(
+        pRef, Pitch,
+        pRefUV1, PitchUV1,
+        pRefUV2, PitchUV2,
+        pSrc, nSrcPitch,
+        pSrcUV1, nSrcPitchUV1,
+        pSrcUV2, nSrcPitchUV2,
+        adjWarr, iBlkWidth, iBlkHeight,
+        iBlkWidthC, iBlkHeightC,
+        chromaSADscale
+      );
+
+    }
+
 
     iNumItCurr--;
 
