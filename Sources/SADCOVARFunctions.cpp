@@ -8,7 +8,7 @@
 MV_FORCEINLINE unsigned int SADABS(int x) { return (x < 0) ? -x : x; }
 
 template<int nBlkWidth, int nBlkHeight, typename pixel_t>
-static float SADCOVAR_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch, float* pfCov)
+static float SADCOVAR_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch, float* pfCov, short* pWWin, int iWinPitch)
 {
   const pixel_t* pWorkSrc = reinterpret_cast<const pixel_t*>(pSrc);
   const pixel_t* pWorkRef = reinterpret_cast<const pixel_t*>(pRef);
@@ -18,21 +18,33 @@ static float SADCOVAR_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef,
   unsigned int suX = 0;
   unsigned int suY = 0;
 
+  int iMaxDif = (sizeof(pixel_t) < 2) ? 255 : 65535; // float case ???
+
+  short* pWorkWin = pWWin;
+
   for (int y = 0; y < nBlkHeight; y++)
   {
     for (int x = 0; x < nBlkWidth; x++)
     {
-      sad += SADABS((pWorkSrc)[x] - (pWorkRef)[x]);
+      short win = pWorkWin[x];
+      int sad_init = SADABS((pWorkSrc)[x] - (pWorkRef)[x]);
+      sad_init *= win;
+      sad_init = sad_init >> 11; // valid for unsigned ?
+      sad_init = iMaxDif - sad_init;
+//      sad += SADABS((pWorkSrc)[x] - (pWorkRef)[x]);
+      sad += sad_init;
       suX += pWorkSrc[x];
       suY += pWorkRef[x];
     }
     pWorkSrc += nSrcPitch;
     pWorkRef += nRefPitch;
+    pWorkWin += iWinPitch;
   }
 
   // reset ptrs
   pWorkSrc -= nSrcPitch * nBlkHeight;
   pWorkRef -= nRefPitch * nBlkHeight;
+  pWorkWin = pWWin;
 
   int iN = nBlkWidth * nBlkHeight;
   // todo: replace with bitshift for blksz 4x4 8x8 16x16 32x32 64x64
@@ -45,10 +57,17 @@ static float SADCOVAR_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef,
   {
     for (int x = 0; x < nBlkWidth; x++)
     {
-      fsXY += (float)((pWorkSrc[x] - isuX) * (pWorkRef[x] - isuY)); 
+      short win = pWorkWin[x];
+      int covar_init = (pWorkSrc[x] - isuX) * (pWorkRef[x] - isuY);
+      covar_init *= win;
+//      covar_init = covar_init >> 11; // /2048 is it valid for signed ?
+      covar_init = covar_init / 2048;
+      fsXY += (float)covar_init;
+//      fsXY += (float)((pWorkSrc[x] - isuX) * (pWorkRef[x] - isuY)); 
     }
     pWorkSrc += nSrcPitch;
     pWorkRef += nRefPitch;
+    pWorkWin += iWinPitch;
   }
 
   *pfCov = fsXY;

@@ -267,6 +267,10 @@ private:
   SADCOVARFunction* SADCOVAR;              /* function which computes the sad */
   SADCOVARFunction* SADCOVARCHROMA;
 
+  std::unique_ptr <OverlapWindows> _overwins_metric;
+  std::unique_ptr <OverlapWindows> _overwins_uv_metric;
+
+
   // single plane only
   MV_FORCEINLINE int AlignBlockWeights(const BYTE* pRef[], int Pitch[], const BYTE* pCurr, int iCurrPitch, int Wall[], int iBlkWidth, int iBlkHeight, bool bChroma);
 
