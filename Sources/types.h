@@ -50,7 +50,7 @@ typedef float (SSIMFunction)(const uint8_t* pSrc, int nSrcPitch,
   const uint8_t* pRef, int nRefPitch);
 
 typedef float (SADCOVARFunction)(const uint8_t* pSrc, int nSrcPitch,
-  const uint8_t* pRef, int nRefPitch, float* pfCov, short* pWWin, int iWinPitch);
+  const uint8_t* pRef, int nRefPitch, float* pfCov);
 
 typedef void (DWT2DFunction)(const uint8_t* pSrc, int nSrcPitch, void* pA, void* pV, void* pH, void* pD);
 

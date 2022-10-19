@@ -30,17 +30,9 @@
 SADCOVARFunction* get_sadcovar_function(int BlockX, int BlockY, int bits_per_pixel, arch_t arch);
 
 
-float mvt_ssim_full_4x4_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
-float mvt_ssim_full_8x8_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
-float mvt_ssim_full_16x16_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
-
-float mvt_ssim_l_4x4_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
-float mvt_ssim_l_8x8_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
-float mvt_ssim_l_16x16_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
-
-float mvt_ssim_cs_4x4_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
-float mvt_ssim_cs_8x8_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
-float mvt_ssim_cs_16x16_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
+float mvt_sadcovar_4x4_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch, float* pfCov);
+float mvt_sadcovar_8x8_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch, float* pfCov);
+float mvt_sadcovar_16x16_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch, float* pfCov);
 
 
 #endif

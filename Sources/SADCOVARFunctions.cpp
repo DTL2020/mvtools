@@ -8,7 +8,7 @@
 MV_FORCEINLINE unsigned int SADABS(int x) { return (x < 0) ? -x : x; }
 
 template<int nBlkWidth, int nBlkHeight, typename pixel_t>
-static float SADCOVAR_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch, float* pfCov, short* pWWin, int iWinPitch)
+static float SADCOVAR_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch, float* pfCov)
 {
   const pixel_t* pWorkSrc = reinterpret_cast<const pixel_t*>(pSrc);
   const pixel_t* pWorkRef = reinterpret_cast<const pixel_t*>(pRef);
@@ -20,31 +20,21 @@ static float SADCOVAR_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef,
 
   int iMaxDif = (sizeof(pixel_t) < 2) ? 255 : 65535; // float case ???
 
-  short* pWorkWin = pWWin;
-
   for (int y = 0; y < nBlkHeight; y++)
   {
     for (int x = 0; x < nBlkWidth; x++)
     {
-      short win = pWorkWin[x];
-      int sad_init = SADABS((pWorkSrc)[x] - (pWorkRef)[x]);
-      sad_init *= win;
-      sad_init = sad_init >> 11; // valid for unsigned ?
-      sad_init = iMaxDif - sad_init;
-//      sad += SADABS((pWorkSrc)[x] - (pWorkRef)[x]);
-      sad += sad_init;
+      sad += SADABS((pWorkSrc)[x] - (pWorkRef)[x]);
       suX += pWorkSrc[x];
       suY += pWorkRef[x];
     }
     pWorkSrc += nSrcPitch;
     pWorkRef += nRefPitch;
-    pWorkWin += iWinPitch;
   }
 
   // reset ptrs
   pWorkSrc -= nSrcPitch * nBlkHeight;
   pWorkRef -= nRefPitch * nBlkHeight;
-  pWorkWin = pWWin;
 
   int iN = nBlkWidth * nBlkHeight;
   // todo: replace with bitshift for blksz 4x4 8x8 16x16 32x32 64x64
@@ -57,22 +47,16 @@ static float SADCOVAR_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef,
   {
     for (int x = 0; x < nBlkWidth; x++)
     {
-      short win = pWorkWin[x];
-      int covar_init = (pWorkSrc[x] - isuX) * (pWorkRef[x] - isuY);
-      covar_init *= win;
-//      covar_init = covar_init >> 11; // /2048 is it valid for signed ?
-      covar_init = covar_init / 2048;
-      fsXY += (float)covar_init;
-//      fsXY += (float)((pWorkSrc[x] - isuX) * (pWorkRef[x] - isuY)); 
+      fsXY += (pWorkSrc[x] - isuX) * (pWorkRef[x] - isuY);
     }
     pWorkSrc += nSrcPitch;
     pWorkRef += nRefPitch;
-    pWorkWin += iWinPitch;
   }
 
   *pfCov = fsXY;
 
-  return (float)sad;
+//  return (float)sad;
+  return (float)(nBlkWidth * nBlkHeight * iMaxDif); // covar only ?
 }
 
 SADCOVARFunction* get_sadcovar_function(int BlockX, int BlockY, int bits_per_pixel, arch_t arch)
@@ -143,7 +127,7 @@ func_sad[make_tuple(x, y, 16, NO_SIMD)] = SADCOVAR_C<x, y, uint16_t>;
 
   // AVX2
 //  func_sad[make_tuple(16, 16, 8, USE_AVX2)] = mvt_ssim_full_16x16_8_avx2; 
-//  func_sad[make_tuple(8, 8, 8, USE_AVX2)] = mvt_ssim_l_8x8_8_avx2;
+  func_sad[make_tuple(8, 8, 8, USE_AVX2)] = mvt_sadcovar_8x8_8_avx2; // covar only from SSIM, need sad
 //  func_sad[make_tuple(4, 4, 8, USE_AVX2)] = mvt_ssim_l_4x4_8_avx2;
 
     SADCOVARFunction* result = nullptr;
@@ -178,3 +162,104 @@ func_sad[make_tuple(x, y, 16, NO_SIMD)] = SADCOVAR_C<x, y, uint16_t>;
   return result;
 }
 
+
+float mvt_sadcovar_8x8_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch, float* pfCov)
+{
+#define BLK_X 4 // is it local for function ?
+#define BLK_Y 4
+
+  const int iN = BLK_X * BLK_Y;
+
+  uint8_t* pWorkSrc = (uint8_t*)pSrc;
+  uint8_t* pWorkRef = (uint8_t*)pRef;
+
+  unsigned int suX = 0;
+  unsigned int suY = 0;
+
+  __m256i ymm_zero = _mm256_setzero_si256();
+
+  __m256i ymm_4row_X = _mm256_set_epi32(0, 0, *(int*)(pWorkSrc + nSrcPitch * 3), *(int*)(pWorkSrc + nSrcPitch * 2), 0, 0, *(int*)(pWorkSrc + nSrcPitch * 1), *(int*)(pWorkSrc + 0));
+  __m256i ymm_4row_Y = _mm256_set_epi32(0, 0, *(int*)(pWorkRef + nRefPitch * 3), *(int*)(pWorkRef + nRefPitch * 2), 0, 0, *(int*)(pWorkRef + nRefPitch * 1), *(int*)(pWorkRef + 0));
+
+  __m256i ymm_suX = _mm256_unpacklo_epi8(ymm_4row_X, ymm_zero);
+  __m256i ymm_suY = _mm256_unpacklo_epi8(ymm_4row_Y, ymm_zero);
+
+  ymm_suX = _mm256_hadd_epi16(_mm256_permute2x128_si256(ymm_suX, ymm_suX, 1), ymm_suX); // 8x16 16320+16320 max - still 16bit unsigned OK
+  ymm_suY = _mm256_hadd_epi16(_mm256_permute2x128_si256(ymm_suY, ymm_suY, 1), ymm_suY); // 8x16
+
+  // sum of 2 rows in low 128bit now
+  ymm_suX = _mm256_hadd_epi16(ymm_suX, ymm_suX); // 4x16 
+  ymm_suY = _mm256_hadd_epi16(ymm_suY, ymm_suY); // 4x16
+
+  ymm_suX = _mm256_hadd_epi16(ymm_suX, ymm_suX); // 2x16 
+  ymm_suY = _mm256_hadd_epi16(ymm_suY, ymm_suY); // 2x16
+
+  ymm_suX = _mm256_hadd_epi16(ymm_suX, ymm_suX); // 1x16 
+  ymm_suY = _mm256_hadd_epi16(ymm_suY, ymm_suY); // 1x16
+
+  int iAVX2_sumX = _mm_cvtsi128_si32(_mm256_castsi256_si128(ymm_suX)) & 0xFFFF;
+  int iAVX2_sumY = _mm_cvtsi128_si32(_mm256_castsi256_si128(ymm_suY)) & 0xFFFF;
+
+#ifdef _DEBUG 
+  pWorkSrc = (uint8_t*)pSrc;
+  pWorkRef = (uint8_t*)pRef;
+
+  for (int y = 0; y < BLK_Y; y++) // process 2 rows
+  {
+    for (int x = 0; x < BLK_X; x++)
+    {
+      suX += pWorkSrc[x];
+      suY += pWorkRef[x];
+    }
+    pWorkSrc += nSrcPitch;
+    pWorkRef += nRefPitch;
+  }
+
+  if (suX != iAVX2_sumX)
+  {
+    int idbr = 0;
+  }
+
+  if (suY != iAVX2_sumY)
+  {
+    int idbr = 0;
+  }
+#endif
+  const int isuX = (int)((float)iAVX2_sumX / (float)(iN)+0.5f);
+  const int isuY = (int)((float)iAVX2_sumY / (float)(iN)+0.5f);
+
+  pWorkSrc = (uint8_t*)pSrc;
+  pWorkRef = (uint8_t*)pRef;
+
+  __m256i ymm_sXY = _mm256_setzero_si256();
+
+  __m256i ymm_isuX = _mm256_set1_epi32(isuX);
+  __m256i ymm_isuY = _mm256_set1_epi32(isuY);
+
+  for (int y = 0; y < BLK_Y / 2; y++)
+  {
+    __m256i ymm_2row_X = _mm256_set_epi32(0, 0, 0, *(int*)(pWorkSrc + nSrcPitch * 1), 0, 0, 0, *(int*)(pWorkSrc + 0));
+    __m256i ymm_2row_Y = _mm256_set_epi32(0, 0, 0, *(int*)(pWorkRef + nRefPitch * 1), 0, 0, 0, *(int*)(pWorkRef + 0));
+
+    ymm_2row_X = _mm256_unpacklo_epi16(_mm256_unpacklo_epi8(ymm_2row_X, ymm_zero), ymm_zero);
+    ymm_2row_Y = _mm256_unpacklo_epi16(_mm256_unpacklo_epi8(ymm_2row_Y, ymm_zero), ymm_zero);
+
+    __m256i ymm_difX = _mm256_sub_epi32(ymm_2row_X, ymm_isuX);
+    __m256i ymm_difY = _mm256_sub_epi32(ymm_2row_Y, ymm_isuY);
+
+    ymm_sXY = _mm256_add_epi32(ymm_sXY, _mm256_mullo_epi32(ymm_difX, ymm_difY));
+
+    pWorkSrc += (nSrcPitch * 2);
+    pWorkRef += (nRefPitch * 2);
+  }
+
+  ymm_sXY = _mm256_hadd_epi32(_mm256_permute2x128_si256(ymm_sXY, ymm_sXY, 1), ymm_sXY); // 4 x 32
+  ymm_sXY = _mm256_hadd_epi32(ymm_sXY, ymm_sXY); // 2 x 32
+  ymm_sXY = _mm256_hadd_epi32(ymm_sXY, ymm_sXY); // 1 x 32
+
+  int iAVX2_sXY = _mm_cvtsi128_si32(_mm256_castsi256_si128(ymm_sXY));
+
+  *pfCov = (float)iAVX2_sXY;
+
+  return 8*8*255; // maxsad temp
+}

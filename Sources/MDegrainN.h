@@ -43,6 +43,7 @@ public:
     int UseSubShift, int InterpolateOverlap, ::PClip _mvmultirs, int _thFWBWmvpos,
     int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
     int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int MPB_DMFlags, int _MPBchroma, int _MPBtgtTR,
+    int _MPB_MVlth,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -260,16 +261,13 @@ private:
   bool showIVSmask;
   int MPBchroma; // bit 0 - analysis (1 - use, 0 - not use)
   int MPBtgtTR; // MPB target tr for initial bleng
+  int MPB_MVlth;
   bool MPB_PartBlend; // false if using faster blocksubtract (may be lower precison/quality), true if use real partial blend with skipped tested block
   uint8_t* pMPBTempBlocks; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
   uint8_t* pMPBTempBlocksUV1; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
   uint8_t* pMPBTempBlocksUV2; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
   SADCOVARFunction* SADCOVAR;              /* function which computes the sad */
   SADCOVARFunction* SADCOVARCHROMA;
-
-  std::unique_ptr <OverlapWindows> _overwins_metric;
-  std::unique_ptr <OverlapWindows> _overwins_uv_metric;
-
 
   // single plane only
   MV_FORCEINLINE int AlignBlockWeights(const BYTE* pRef[], int Pitch[], const BYTE* pCurr, int iCurrPitch, int Wall[], int iBlkWidth, int iBlkHeight, bool bChroma);
@@ -282,7 +280,8 @@ private:
     const BYTE* pCurrUV1, const int iCurrPitchUV1,
     const BYTE* pCurrUV2, const int iCurrPitchUV2,
     int Wall[], const int iBlkWidth, const int iBlkHeight,
-    const int iBlkWidthC, const int iBlkHeightC, const int chromaSADscale
+    const int iBlkWidthC, const int iBlkHeightC, const int chromaSADscale,
+    int iBlkNum
   );
 
   MV_FORCEINLINE int AlignBlockWeightsLC_SCV(const BYTE* pRef[], int Pitch[],
@@ -292,7 +291,8 @@ private:
     const BYTE* pCurrUV1, const int iCurrPitchUV1,
     const BYTE* pCurrUV2, const int iCurrPitchUV2,
     int Wall[], const int iBlkWidth, const int iBlkHeight,
-    const int iBlkWidthC, const int iBlkHeightC, const int chromaSADscale
+    const int iBlkWidthC, const int iBlkHeightC, const int chromaSADscale,
+    int iBlkNum
   );
 
   //multi-pass blending single plane only
@@ -301,7 +301,7 @@ private:
     const BYTE* pSrc, int nSrcPitch,
     const BYTE* pRef[], int Pitch[],
     int Wall[], const int iBlkWidth, const int iBlkHeight,
-    bool bChroma
+    bool bChroma, int iBlkNum
   );
 
   // multi-pass blending luma and chroma planes
@@ -316,7 +316,8 @@ private:
     const BYTE* pSrcUV2, int nSrcPitchUV2,
     const BYTE* pRefUV2[], int PitchUV2[],
     int Wall[], int WallC[], const int iBlkWidth, const int iBlkHeight,
-    const int iBlkWidthC, const int iBlkHeightC, const int chromaSADscale
+    const int iBlkWidthC, const int iBlkHeightC, const int chromaSADscale,
+    int iBlkNum
   );
 
   MV_FORCEINLINE void CopyBlock(uint8_t* pDst, int iDstPitch, uint8_t* pSrc, int iBlkWidth, int iBlkHeight);
