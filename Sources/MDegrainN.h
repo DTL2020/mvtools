@@ -266,11 +266,13 @@ private:
   uint8_t* pMPBTempBlocks; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
   uint8_t* pMPBTempBlocksUV1; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
   uint8_t* pMPBTempBlocksUV2; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
-  SADCOVARFunction* SADCOVAR;              /* function which computes the sad */
-  SADCOVARFunction* SADCOVARCHROMA;
+  COVARFunction* COVAR;              /* function which computes the covariance */
+  COVARFunction* COVARCHROMA;
 
   // single plane only
-  MV_FORCEINLINE int AlignBlockWeights(const BYTE* pRef[], int Pitch[], const BYTE* pCurr, int iCurrPitch, int Wall[], int iBlkWidth, int iBlkHeight, bool bChroma);
+  MV_FORCEINLINE int AlignBlockWeights(const BYTE* pRef[], int Pitch[],
+    const BYTE* pCurr, int iCurrPitch, int Wall[], int iBlkWidth,
+    int iBlkHeight, bool bChroma, int iBlkNum);
 
   // luma and chroma
   MV_FORCEINLINE int AlignBlockWeightsLC(const BYTE* pRef[], int Pitch[],
@@ -284,7 +286,7 @@ private:
     int iBlkNum
   );
 
-  MV_FORCEINLINE int AlignBlockWeightsLC_SCV(const BYTE* pRef[], int Pitch[],
+  MV_FORCEINLINE int AlignBlockWeightsLC_CV(const BYTE* pRef[], int Pitch[],
     const BYTE* pRefUV1[], int PitchUV1[],
     const BYTE* pRefUV2[], int PitchUV2[],
     const BYTE* pCurr, const int iCurrPitch,

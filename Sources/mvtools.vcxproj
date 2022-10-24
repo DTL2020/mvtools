@@ -391,7 +391,7 @@
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_SILENCE_CXX17_ALLOCATOR_VOID_DEPRECATION_WARNING;_SILENCE_CXX17_OLD_ALLOCATOR_MEMBERS_DEPRECATION_WARNING;_CRTDBG_MAP_ALLOC;WIN32;_DEBUG;_WINDOWS;_USRDLL;MVTOOLS_EXPORTS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_SILENCE_CXX17_ALLOCATOR_VOID_DEPRECATION_WARNING;_SILENCE_CXX17_OLD_ALLOCATOR_MEMBERS_DEPRECATION_WARNING;_CRTDBG_MAP_ALLOC;WIN32;_DEBUG;_WINDOWS;_USRDLL;MVTOOLS_EXPORTS;_CRT_SECURE_NO_WARNINGS;DX12_ME;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <PrecompiledHeader>
@@ -1153,11 +1153,11 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <OmitFramePointers>true</OmitFramePointers>
       <WholeProgramOptimization>true</WholeProgramOptimization>
-      <PreprocessorDefinitions>_SILENCE_CXX17_ALLOCATOR_VOID_DEPRECATION_WARNING;_SILENCE_CXX17_OLD_ALLOCATOR_MEMBERS_DEPRECATION_WARNING;FORCE_INLINE;WIN32;NDEBUG;_WINDOWS;_USRDLL;MVTOOLS_EXPORTS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_SILENCE_CXX17_ALLOCATOR_VOID_DEPRECATION_WARNING;_SILENCE_CXX17_OLD_ALLOCATOR_MEMBERS_DEPRECATION_WARNING;FORCE_INLINE;WIN32;NDEBUG;_WINDOWS;_USRDLL;MVTOOLS_EXPORTS;_CRT_SECURE_NO_WARNINGS;DX12_ME;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
-      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -1730,6 +1730,7 @@
     <ClCompile Include="AvstpWrapper.cpp" />
     <ClCompile Include="ClipFnc.cpp" />
     <ClCompile Include="CopyCode.cpp" />
+    <ClCompile Include="COVARFunctions.cpp" />
     <ClCompile Include="cpu.cpp" />
     <ClCompile Include="DCTFactory.cpp" />
     <ClCompile Include="DCTFFTW.cpp" />
@@ -1817,7 +1818,6 @@
       <UseProcessorExtensions Condition="'$(Configuration)|$(Platform)'=='ICX|x64'">COMMON512</UseProcessorExtensions>
     </ClCompile>
     <ClCompile Include="PlaneOfBlocks_avx512.cpp" />
-    <ClCompile Include="SADCOVARFunctions.cpp" />
     <ClCompile Include="SADFunctions.cpp" />
     <ClCompile Include="SADFunctions_avx2.cpp">
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
@@ -1911,6 +1911,7 @@
       <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release_v141_xp|x64'">cpu-32.asm;%(AdditionalInputs)</AdditionalInputs>
       <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64'">cpu-32.asm;%(AdditionalInputs)</AdditionalInputs>
     </CustomBuild>
+    <ClInclude Include="COVARFunctions.h" />
     <ClInclude Include="d3dx12.h" />
     <ClInclude Include="DCTClass.h" />
     <ClInclude Include="DCTFactory.h" />
@@ -1978,7 +1979,6 @@
     <ClInclude Include="PlaneOfBlocks_avx2.h" />
     <ClInclude Include="profile.h" />
     <ClInclude Include="resource.h" />
-    <ClInclude Include="SADCOVARFunctions.h" />
     <ClInclude Include="SADFunctions.h" />
     <ClInclude Include="SADFunctions16.h" />
     <ClInclude Include="SADFunctions_avx2.h" />
