@@ -127,6 +127,16 @@ MVPlane::MVPlane(int _nWidth, int _nHeight, int _nPel, int _nHPad, int _nVPad, i
   sKernelShWI6_10 = new short[SHIFTKERNELSIZE + 1] {2, -10, 40, 40, -10, 2, 32};
   sKernelShWI6_11 = new short[SHIFTKERNELSIZE + 1] {1, -5, 20, 52, -5, 1, 16};
 
+  /* for 1/8 granularity for pel=4 and 4:2:x
+  sKernelShWI6_001 = new short[SHIFTKERNELSIZE + 1] {1, -5, 52, 20, -5, 1, 16}; // i
+  sKernelShWI6_010 = new short[SHIFTKERNELSIZE + 1] {1, -5, 52, 20, -5, 1, 16};
+  sKernelShWI6_011 = new short[SHIFTKERNELSIZE + 1] {1, -5, 52, 20, -5, 1, 16}; // i
+  sKernelShWI6_100 = new short[SHIFTKERNELSIZE + 1] {2, -10, 40, 40, -10, 2, 32};
+  sKernelShWI6_101 = new short[SHIFTKERNELSIZE + 1] {1, -5, 20, 52, -5, 1, 16}; // i
+  sKernelShWI6_110 = new short[SHIFTKERNELSIZE + 1] {1, -5, 20, 52, -5, 1, 16};
+  sKernelShWI6_111 = new short[SHIFTKERNELSIZE + 1] {1, -5, 20, 52, -5, 1, 16}; // i
+  */
+
 
 //  _sub_shift_ptr = SubShiftBlock_C<uint8_t>;
 #ifdef _WIN32
@@ -585,6 +595,208 @@ void MVPlane::reduce_slice(SlicerReduce::TaskData &td)
   );
 }
 
+const uint8_t* MVPlane::GetPointerSubShiftUV(int nX, int nY, int& pDstPitch, int LogXrUV, int LogYrUV, bool bPadded)
+{
+  uint8_t* pSrc;
+  short* psKrnH = 0;
+  short* psKrnV = 0;
+
+  int NPELL2 = nPel >> 1;
+
+  int nfullX;
+  int nfullY;
+
+  int nfullX2;
+  int nfullY2;
+
+  // if full sized plane
+  if (LogXrUV == 0 && LogYrUV == 0)
+  {
+    nfullX = nX;
+    nfullY = nY;
+
+    if (bPadded)
+    {
+      nfullX += nHPaddingPel;
+      nfullY += nVPaddingPel;
+    }
+
+    nfullX >>= NPELL2;
+    nfullY >>= NPELL2;
+
+    pSrc = (uint8_t*)GetAbsolutePointerPel <0>(nfullX, nfullY);
+
+    return pSrc;
+  }
+  else // chroma plane size < luma plane size
+  {
+    nfullX = nX >> LogXrUV;
+    nfullY = nY >> LogYrUV;
+  }
+  
+  nfullX2 = nX;
+  nfullY2 = nY;
+
+  if (bPadded)
+  {
+    nfullX += nHPaddingPel;
+    nfullY += nVPaddingPel;
+
+    nfullX2 += nHPaddingPel;
+    nfullY2 += nVPaddingPel;
+  }
+
+  int nShiftedBufPitch = (nBlkSizeX << pixelsize_shift);
+
+  // check if block already processed
+  if ((iPrcdBlockX == nfullX2) && (iPrcdBlockY == nfullY2) && bPrcdBlkValid)
+  {
+    pDstPitch = iPrcdBlkPitch;
+    return puiPrcdBlkPtr;
+  }
+
+  int iMASK = (1 << NPELL2) - 1;
+  int iMASK2 = (1 << nPel) - 1;
+
+  int i_dx = (nfullX & iMASK);
+  int i_dy = (nfullY & iMASK);
+
+  int i_dx2 = (nfullX2 & iMASK2);
+  int i_dy2 = (nfullY2 & iMASK2);
+
+  nfullX >>= NPELL2;
+  nfullY >>= NPELL2;
+
+  pSrc = (uint8_t*)GetAbsolutePointerPel <0>(nfullX, nfullY);
+
+  if ((i_dx == 0 && i_dy == 0) && (LogXrUV == 0 && LogYrUV != 0))
+  {
+    // remember last processed block params
+    iPrcdBlockX = nfullX2;
+    iPrcdBlockY = nfullY2;
+    puiPrcdBlkPtr = pSrc;
+    iPrcdBlkPitch = nPitch;
+    bPrcdBlkValid = true;
+
+    pDstPitch = nPitch;
+    return pSrc;
+  }
+
+  if (LogXrUV != 0 || LogYrUV != 0)
+  {
+    if (i_dx2 == 0 && i_dy2 == 0)
+    {
+      // remember last processed block params
+      iPrcdBlockX = nfullX2;
+      iPrcdBlockY = nfullY2;
+      puiPrcdBlkPtr = pSrc;
+      iPrcdBlkPitch = nPitch;
+      bPrcdBlkValid = true;
+
+      pDstPitch = nPitch;
+      return pSrc;
+    }
+  }
+
+  if (LogXrUV != 0)
+  {
+    if (nPel == 1)
+      i_dx = i_dx2 << 1;
+    else
+      i_dx = i_dx2; // nPel = 2 and 4 (?)
+  }
+
+  switch (i_dx)
+  {
+  case 0:
+    psKrnH = 0;
+    break;
+  case 1:
+    psKrnH = (short*)sKernelShWI6_01;
+    break;
+  case 2:
+    psKrnH = (short*)sKernelShWI6_10;
+    break;
+  case 3:
+    psKrnH = (short*)sKernelShWI6_11;
+    break;
+  }
+
+  if (LogXrUV != 0)
+  {
+    if (nPel == 1)
+      i_dy = i_dy2 << 1;
+    else
+      i_dy = i_dy2; // nPel = 2 and 4 (?)
+  }
+
+  switch (i_dy)
+  {
+  case 0:
+    psKrnV = 0;
+    break;
+  case 1:
+    psKrnV = (short*)sKernelShWI6_01;
+    break;
+  case 2:
+    psKrnV = (short*)sKernelShWI6_10;
+    break;
+  case 3:
+    psKrnV = (short*)sKernelShWI6_11;
+    break;
+  }
+
+  if (hasAVX2)
+  {
+    if (nBlkSizeX == 8 && nBlkSizeY == 8 && pixelsize == 1)
+    {
+      SubShiftBlock8x8_KS6_i16_uint8_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+    }
+    else if (nBlkSizeX == 8 && nBlkSizeY == 8 && pixelsize == 2)
+    {
+      SubShiftBlock8x8_KS6_i16_uint16_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+    }
+    else if (nBlkSizeX == 4 && nBlkSizeY == 4 && pixelsize == 1)
+    {
+      SubShiftBlock4x4_KS6_i16_uint8_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+    }
+/*    else if (nBlkSizeX == 4 && nBlkSizeY == 4 && pixelsize == 2) - still not debugged
+    {
+      SubShiftBlock4x4_KS6_i16_uint16_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+    }*/
+    else if (nBlkSizeX == 16 && nBlkSizeY == 16 && pixelsize == 1)
+    {
+      SubShiftBlock16x16_KS6_i16_uint8_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+    }
+    else
+//   _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+     _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nBlkSizeX, SHIFTKERNELSIZE);
+  }
+  else
+  {
+//    _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+    _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nBlkSizeX, SHIFTKERNELSIZE);
+  }
+
+  pDstPitch = nShiftedBufPitch;
+
+  // remember last processed block params
+  iPrcdBlockX = nfullX2;
+  iPrcdBlockY = nfullY2;
+  puiPrcdBlkPtr = pShiftedBlockBuf;
+  iPrcdBlkPitch = nShiftedBufPitch;
+  bPrcdBlkValid = true;
+
+  return pShiftedBlockBuf;
+
+}
+
+void MVPlane::SetBlockSize(int iBlockSizeX, int iBlockSizeY)
+{
+  nBlkSizeX = iBlockSizeX;
+  nBlkSizeY = iBlockSizeY;
+}
+
 const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch, bool bPadded)
 {
   uint8_t* pSrc;
@@ -680,21 +892,21 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch, bool 
     {
       SubShiftBlock4x4_KS6_i16_uint8_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
     }
-/*    else if (nBlkSizeX == 4 && nBlkSizeY == 4 && pixelsize == 2) - still not debugged
-    {
-      SubShiftBlock4x4_KS6_i16_uint16_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
-    }*/
+    /*    else if (nBlkSizeX == 4 && nBlkSizeY == 4 && pixelsize == 2) - still not debugged
+        {
+          SubShiftBlock4x4_KS6_i16_uint16_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+        }*/
     else if (nBlkSizeX == 16 && nBlkSizeY == 16 && pixelsize == 1)
     {
       SubShiftBlock16x16_KS6_i16_uint8_avx2(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
     }
     else
-//   _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
-     _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nBlkSizeX, SHIFTKERNELSIZE);
+      //   _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+      _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nBlkSizeX, SHIFTKERNELSIZE);
   }
   else
   {
-//    _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
+    //    _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nShiftedBufPitch, SHIFTKERNELSIZE);
     _sub_shift_ptr(pSrc, pShiftedBlockBuf, nBlkSizeX, nBlkSizeY, psKrnH, psKrnV, nPitch, nBlkSizeX, SHIFTKERNELSIZE);
   }
 
@@ -709,10 +921,4 @@ const uint8_t* MVPlane::GetPointerSubShift(int nX, int nY, int& pDstPitch, bool 
 
   return pShiftedBlockBuf;
 
-}
-
-void MVPlane::SetBlockSize(int iBlockSizeX, int iBlockSizeY)
-{
-  nBlkSizeX = iBlockSizeX;
-  nBlkSizeY = iBlockSizeY;
 }

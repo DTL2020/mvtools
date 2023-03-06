@@ -3638,7 +3638,7 @@ MV_FORCEINLINE void	MDegrainN::use_block_y(
   // temp check - DX12_ME return invalid vectors sometime
      ClipBlxBly
     
-     if (nPel != 1 && nUseSubShift != 0)
+     if (/*nPel != 1 && */nUseSubShift != 0)
      {
        MVPlane* p_plane = (MVPlane*)plane_ptr;
        p = p_plane->GetPointerSubShift(blx, bly, np);
@@ -3730,16 +3730,26 @@ MV_FORCEINLINE void MDegrainN::use_block_yuv(const BYTE*& pY, int& npY, const BY
     // temp check - DX12_ME return invalid vectors sometime
     ClipBlxBly
 
-    if (nPel != 1 && nUseSubShift != 0)
+    if (/*nPel != 1 && */nUseSubShift != 0)
     {
       MVPlane* p_planeY = (MVPlane*)plane_ptrY;
       pY = p_planeY->GetPointerSubShift(blx, bly, npY);
 
       MVPlane* p_planeUV1 = (MVPlane*)plane_ptrUV1;
-      pUV1 = p_planeUV1->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npUV1);
+//      pUV1 = p_planeUV1->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npUV1);
+      pUV1 = p_planeUV1->GetPointerSubShiftUV(blx, bly, npUV1, nLogxRatioUV_super, nLogyRatioUV_super);
+
+/*      pUV1 = p_planeUV1->GetPointerSubShiftUV(0, bly, npUV1, nLogxRatioUV_super, nLogyRatioUV_super);
+      pUV1 = p_planeUV1->GetPointerSubShiftUV(1, bly, npUV1, nLogxRatioUV_super, nLogyRatioUV_super);
+      pUV1 = p_planeUV1->GetPointerSubShiftUV(2, bly, npUV1, nLogxRatioUV_super, nLogyRatioUV_super);
+      pUV1 = p_planeUV1->GetPointerSubShiftUV(3, bly, npUV1, nLogxRatioUV_super, nLogyRatioUV_super);
+      pUV1 = p_planeUV1->GetPointerSubShiftUV(4, bly, npUV1, nLogxRatioUV_super, nLogyRatioUV_super);
+  */    
+
 
       MVPlane* p_planeUV2 = (MVPlane*)plane_ptrUV2;
-      pUV2 = p_planeUV2->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npUV2);
+//      pUV2 = p_planeUV2->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npUV2);
+      pUV2 = p_planeUV2->GetPointerSubShiftUV(blx, bly, npUV2, nLogxRatioUV_super, nLogyRatioUV_super);
 
     }
     else
@@ -3913,10 +3923,11 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv(
      // temp check - DX12_ME return invalid vectors sometime
      ClipBlxBly
 
-     if (nPel != 1 && nUseSubShift != 0)
+     if (/*nPel != 1 && */nUseSubShift != 0)
      {
        MVPlane* p_plane = (MVPlane*)plane_ptr;
-       p = p_plane->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, np);
+//       p = p_plane->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, np);
+       p = p_plane->GetPointerSubShiftUV(blx, bly, np, nLogxRatioUV_super, nLogyRatioUV_super);
      }
      else
      {
@@ -3952,10 +3963,11 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv_thSADzeromv_thSADcohmv(
     // temp check - DX12_ME return invalid vectors sometime
     ClipBlxBly
 
-    if (nPel != 1 && nUseSubShift != 0)
+    if (/*nPel != 1 && */nUseSubShift != 0)
     {
       MVPlane* p_plane = (MVPlane*)plane_ptr;
-      p = p_plane->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, np);
+//      p = p_plane->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, np);
+      p = p_plane->GetPointerSubShiftUV(blx, bly, np, nLogxRatioUV_super, nLogyRatioUV_super);
     }
     else
     {
@@ -4824,10 +4836,12 @@ MV_FORCEINLINE sad_t MDegrainN::CheckSAD(int bx_src, int by_src, int ref_idx, in
     const uint8_t* pRefV;
     int npitchRefU, npitchRefV;
 
-    if (nPel != 1 && nUseSubShift != 0)
+    if (/*nPel != 1 && */nUseSubShift != 0)
     {
-      pRefU = _planes_ptr[ref_idx][1]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefU);
-      pRefV = _planes_ptr[ref_idx][2]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefV);
+//      pRefU = _planes_ptr[ref_idx][1]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefU);
+//      pRefV = _planes_ptr[ref_idx][2]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefV);
+      pRefU = _planes_ptr[ref_idx][1]->GetPointerSubShiftUV(blx, bly, npitchRefU, nLogxRatioUV_super, nLogyRatioUV_super);
+      pRefV = _planes_ptr[ref_idx][2]->GetPointerSubShiftUV(blx, bly, npitchRefV, nLogxRatioUV_super, nLogyRatioUV_super);
     }
     else
     {
