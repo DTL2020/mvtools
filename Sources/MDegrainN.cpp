@@ -3757,6 +3757,8 @@ MV_FORCEINLINE void MDegrainN::use_block_yuv(const BYTE*& pY, int& npY, const BY
       pY = plane_ptrY->GetPointer(blx, bly);
       npY = plane_ptrY->GetPitch();
 
+      if (nLogxRatioUV_super == 1) blx++; // add bias for integer division for 4:2:x formats
+      if (nLogyRatioUV_super == 1) bly++; // add bias for integer division for 4:2:x formats
       pUV1 = plane_ptrUV1->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
       npUV1 = plane_ptrUV1->GetPitch();
 
@@ -3931,6 +3933,8 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv(
      }
      else
      {
+       if (nLogxRatioUV_super == 1) blx++; // add bias for integer division for 4:2:x formats
+       if (nLogyRatioUV_super == 1) bly++; // add bias for integer division for 4:2:x formats
        p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
        np = plane_ptr->GetPitch();
      }
@@ -3971,6 +3975,8 @@ MV_FORCEINLINE void	MDegrainN::use_block_uv_thSADzeromv_thSADcohmv(
     }
     else
     {
+      if (nLogxRatioUV_super == 1) blx++; // add bias for integer division for 4:2:x formats
+      if (nLogyRatioUV_super == 1) bly++; // add bias for integer division for 4:2:x formats
       p = plane_ptr->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
       np = plane_ptr->GetPitch();
     }
@@ -4845,6 +4851,8 @@ MV_FORCEINLINE sad_t MDegrainN::CheckSAD(int bx_src, int by_src, int ref_idx, in
     }
     else
     {
+      if (nLogxRatioUV_super == 1) blx++; // add bias for integer division for 4:2:x formats
+      if (nLogyRatioUV_super == 1) bly++; // add bias for integer division for 4:2:x formats
       pRefU = _planes_ptr[ref_idx][1]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
       npitchRefU = _planes_ptr[ref_idx][1]->GetPitch();
       pRefV = _planes_ptr[ref_idx][2]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);

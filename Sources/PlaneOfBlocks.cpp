@@ -1718,6 +1718,8 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
   VECTOR bestMVMany[8];
   int nMinCostMany[8];
 
+  for (int i = 0; i < 8; i++) nMinCostMany[i] = verybigSAD + 1; // init trymany with verybig value for skipped by already checked vectors points !
+
   if (tryMany)
   {
     //  refine around zero
@@ -2030,6 +2032,11 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
     workarea.bestMV.x = zeroMVfieldShifted.x;
     workarea.bestMV.y = zeroMVfieldShifted.y;
 
+    VECTOR bestMVMany[3]; // zero, global, median predictor only
+    int nMinCostMany[3];
+
+    for (int i = 0; i < 3; i++) nMinCostMany[i] = verybigSAD + 1; // init with verybig values to prevent bug with skipped already checked positions !
+
     if (iUseSubShift == 0)
     {
 /*      saduv = (chroma) ?
@@ -2066,6 +2073,14 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
 
     checked_mv_vectors[iNumCheckedVectors] = 0;
     iNumCheckedVectors++;
+
+    if (tryMany)
+    {
+      //  refine around zero
+      Refine<pixel_t>(workarea);
+      bestMVMany[0] = workarea.bestMV;    // save bestMV
+      nMinCostMany[0] = workarea.nMinCost;
+    }
 
    // Global MV predictor  - added by Fizick
     workarea.globalMVPredictor = ClipMV(workarea, workarea.globalMVPredictor);
@@ -2112,6 +2127,14 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
           workarea.bestMV.sad = sad;
           workarea.nMinCost = cost;
         }
+
+        if (tryMany)
+        {
+          // refine around global
+          Refine<pixel_t>(workarea);    // reset bestMV
+          bestMVMany[1] = workarea.bestMV;    // save bestMV
+          nMinCostMany[1] = workarea.nMinCost;
+        }
     }
 
     //	}
@@ -2150,19 +2173,43 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
 
       }
         sad += saduv;
-
         cost = sad;
+
         if (cost < workarea.nMinCost || tryMany)
         {
           workarea.bestMV.x = workarea.predictor.x;
-            workarea.bestMV.y = workarea.predictor.y;
+          workarea.bestMV.y = workarea.predictor.y;
           workarea.bestMV.sad = sad;
           workarea.nMinCost = cost;
         }
+
+        if (tryMany)
+        {
+          // refine around median
+          Refine<pixel_t>(workarea);    // reset bestMV
+          bestMVMany[2] = workarea.bestMV;    // save bestMV
+          nMinCostMany[2] = workarea.nMinCost;
+        }
     }
-    
-    // then, we refine, according to the search type
-    Refine<pixel_t>(workarea);
+
+    if (tryMany)
+    {
+      // select best of multi best
+      workarea.nMinCost = verybigSAD + 1;
+      for (int i = 0; i < 3; i++)
+      {
+        if (nMinCostMany[i] < workarea.nMinCost)
+        {
+          workarea.bestMV = bestMVMany[i];
+          workarea.nMinCost = nMinCostMany[i];
+        }
+      }
+    }
+    else
+    {
+      // then, we refine, according to the search type
+      Refine<pixel_t>(workarea);
+    }
 
 #ifdef RETURN_PREV_LEVEL_SAD_AT_LEVEL_0
     // special feature, disable in the standard release !!!
