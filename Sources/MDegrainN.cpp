@@ -2485,7 +2485,6 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
   const BYTE* pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
 
   const int rowsizeUV = nBlkSizeY >> nLogyRatioUV_super; // bad name. it's height really
-  const int rowwidthUV = nBlkSizeX >> nLogxRatioUV_super; // bad name. it's width really
   BYTE* pDstCurUV1 = _dst_ptr_arr[1] + td._y_beg * rowsizeUV * _dst_pitch_arr[1];
   BYTE* pDstCurUV2 = _dst_ptr_arr[2] + td._y_beg * rowsizeUV * _dst_pitch_arr[2];
   const BYTE* pSrcCurUV1 = _src_ptr_arr[1] + td._y_beg * rowsizeUV * _src_pitch_arr[1];
@@ -2497,7 +2496,9 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
   int effective_nSrcPitchUV2 = (nBlkSizeY >> nLogyRatioUV_super)* _src_pitch_arr[2]; // pitch is byte granularity
   int effective_nDstPitchUV2 = (nBlkSizeY >> nLogyRatioUV_super)* _dst_pitch_arr[2]; // pitch is short granularity
 
-  int DM_table[MAX_TEMP_RAD * 2 + 1][MAX_TEMP_RAD * 2 + 1];
+#ifdef _DEBUG
+  iMEL_non_zero_blocks = 0;
+#endif
 
   for (int by = td._y_beg; by < td._y_end; ++by)
   {
@@ -2697,259 +2698,22 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
       } // pmode BLEND end
       else 
       {
-        // pmode MEL select start
-        if (bMVsAddProc)
-        {
-          FilterBlkMVs(i, bx, by);
-
-          for (int k = 0; k < _trad * 2; ++k)
-          {
-            use_block_yuv_mel(
-              ref_data_ptr_arr[k],
-              pitch_arr[k],
-              ref_data_ptr_arrUV1[k],
-              pitch_arrUV1[k],
-              ref_data_ptr_arrUV2[k],
-              pitch_arrUV2[k],
-              _usable_flag_arr[k],
-              _mv_clip_arr[k],
-              i,
-              _planes_ptr[k][0],
-              pSrcCur,
-              _planes_ptr[k][1],
-              pSrcCurUV1,
-              _planes_ptr[k][2],
-              pSrcCurUV2,
-              xx << pixelsize_super_shift,
-              xx_uv << pixelsize_super_shift,
-              _src_pitch_arr[0],
-              _src_pitch_arr[1],
-              _src_pitch_arr[2],
-              bx,
-              by,
-              (const VECTOR*)pFilteredMVsPlanesArrays[k]
-            );
-          }
-        }
-        else
-        {
-          for (int k = 0; k < _trad * 2; ++k)
-          {
-            use_block_yuv_mel(
-              ref_data_ptr_arr[k],
-              pitch_arr[k],
-              ref_data_ptr_arrUV1[k],
-              pitch_arrUV1[k],
-              ref_data_ptr_arrUV2[k],
-              pitch_arrUV2[k],
-              _usable_flag_arr[k],
-              _mv_clip_arr[k],
-              i,
-              _planes_ptr[k][0],
-              pSrcCur,
-              _planes_ptr[k][1],
-              pSrcCurUV1,
-              _planes_ptr[k][2],
-              pSrcCurUV2,
-              xx << pixelsize_super_shift,
-              xx_uv << pixelsize_super_shift,
-              _src_pitch_arr[0],
-              _src_pitch_arr[1],
-              _src_pitch_arr[2],
-              bx,
-              by,
-              //            pMVsPlanesArrays[k]
-              pMVsWorkPlanesArrays[k]
-            );
-          }
-        }
-
-        for (int dmt_row = 0; dmt_row < (_trad * 2 + 1); dmt_row++)
-        {
-          for (int dmt_col = 0; dmt_col < (_trad * 2 + 1); dmt_col++)
-          {
-            if (dmt_row == dmt_col)
-            {
-              DM_table[dmt_row][dmt_col] = 0; // block with itself
-              continue;
-            }
-
-            // 0 is current src block ? 1,2,3,4,... -1, +1, -2, +2, blocks in total tr-pool ?
-            const BYTE* row_data_ptr;
-            const BYTE* row_data_ptrUV1;
-            const BYTE* row_data_ptrUV2;
-            int row_pitch;
-            int row_pitch_UV1;
-            int row_pitch_UV2;
-
-            const BYTE* col_data_ptr;
-            const BYTE* col_data_ptrUV1;
-            const BYTE* col_data_ptrUV2;
-            int col_pitch;
-            int col_pitch_UV1;
-            int col_pitch_UV2;
-
-
-            if (dmt_row == 0) // src block
-            {
-              row_data_ptr = pSrcCur + xx;
-              row_pitch = _src_pitch_arr[0];
-
-              row_data_ptrUV1 = pSrcCurUV1 + xx_uv;
-              row_pitch_UV1 = _src_pitch_arr[1];
-
-              row_data_ptrUV2 = pSrcCurUV2 + xx_uv;
-              row_pitch_UV2 = _src_pitch_arr[2];
-            }
-            else // ref block
-            {
-              row_data_ptr = ref_data_ptr_arr[dmt_row - 1];
-              row_pitch = pitch_arr[dmt_row - 1];
-
-              row_data_ptrUV1 = ref_data_ptr_arrUV1[dmt_row - 1];
-              row_pitch_UV1 = pitch_arrUV1[dmt_row - 1];
-
-              row_data_ptrUV2 = ref_data_ptr_arrUV2[dmt_row - 1];
-              row_pitch_UV2 = pitch_arrUV2[dmt_row - 1];
-            }
-
-            if (dmt_col == 0) // src block
-            {
-              col_data_ptr = pSrcCur + xx;
-              col_pitch = _src_pitch_arr[0];
-
-              col_data_ptrUV1 = pSrcCurUV1 + xx_uv;
-              col_pitch_UV1 = _src_pitch_arr[1];
-
-              col_data_ptrUV2 = pSrcCurUV2 + xx_uv;
-              col_pitch_UV2 = _src_pitch_arr[2];
-            }
-            else // ref block
-            {
-              col_data_ptr = ref_data_ptr_arr[dmt_col - 1];
-              col_pitch = pitch_arr[dmt_col - 1];
-
-              col_data_ptrUV1 = ref_data_ptr_arrUV1[dmt_col - 1];
-              col_pitch_UV1 = pitch_arrUV1[dmt_col - 1];
-
-              col_data_ptrUV2 = ref_data_ptr_arrUV2[dmt_col - 1];
-              col_pitch_UV2 = pitch_arrUV2[dmt_col - 1];
-            }
-
-            // calculate relative dismetric of dmt_row with dmt_col blocks
-            int idm_chroma = ScaleSadChroma(DM_MEL_Chroma->GetDisMetric(row_data_ptrUV1, row_pitch_UV1, col_data_ptrUV1, col_pitch_UV1)
-              + DM_MEL_Chroma->GetDisMetric(row_data_ptrUV2, row_pitch_UV2, col_data_ptrUV2, col_pitch_UV2), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
-            int idm_luma = DM_MEL_Luma->GetDisMetric(row_data_ptr, row_pitch, col_data_ptr, col_pitch);
-            DM_table[dmt_row][dmt_col] = idm_luma + idm_chroma;
-
-          }
-        }
-
-        // find lowest sum of row in DM_table ?
-
-        int SumRows[(MAX_TEMP_RAD * 2) + 1];
-
-        for (int dmt_row = 0; dmt_row < (_trad * 2 + 1); dmt_row++)
-        {
-          int i_sum_row = 0;
-          for (int dmt_col = 0; dmt_col < (_trad * 2 + 1); dmt_col++)
-          {
-            i_sum_row += DM_table[dmt_row][dmt_col];
-          }
-
-          SumRows[dmt_row] = i_sum_row;
-        }
-
-        int i_sum_minrow = SumRows[0];
-        int i_idx_minrow = 0;
-
-        for (int dmt_row = 0; dmt_row < (_trad * 2 + 1); dmt_row++)
-        {
-          if (SumRows[dmt_row] < i_sum_minrow)
-          {
-            i_sum_minrow = SumRows[dmt_row];
-            i_idx_minrow = dmt_row;
-          }
-        }
-
-        // set block of idx_minrow as output block
-        const BYTE* best_data_ptr;
-        const BYTE* best_data_ptrUV1;
-        const BYTE* best_data_ptrUV2;
-        int best_pitch;
-        int best_pitch_UV1;
-        int best_pitch_UV2;
-
-        if (i_idx_minrow == 0) // src block
-        {
-          best_data_ptr = pSrcCur + xx;
-          best_pitch = _src_pitch_arr[0];
-
-          best_data_ptrUV1 = pSrcCurUV1 + xx_uv;
-          best_pitch_UV1 = _src_pitch_arr[1];
-
-          best_data_ptrUV2 = pSrcCurUV2 + xx_uv;
-          best_pitch_UV2 = _src_pitch_arr[2];
-        }
-        else // ref block
-        {
-          best_data_ptr = ref_data_ptr_arr[i_idx_minrow - 1];
-          best_pitch = pitch_arr[i_idx_minrow - 1];
-
-          best_data_ptrUV1 = ref_data_ptr_arrUV1[i_idx_minrow - 1];
-          best_pitch_UV1 = pitch_arrUV1[i_idx_minrow - 1];
-
-          best_data_ptrUV2 = ref_data_ptr_arrUV2[i_idx_minrow - 1];
-          best_pitch_UV2 = pitch_arrUV2[i_idx_minrow - 1];
-        }
-
-        // copy block of idx_minrow as output block
-        // luma
-        if (_out16_flag) {
-          // copy 8 bit source to 16bit target
-          plane_copy_8_to_16_c(
-            pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[0], // is +xx << pix_out_sh valid for out16 ? same below
-            best_data_ptr, best_pitch, nBlkSizeX, nBlkSizeY);
-        }
-        else
-        {
-          BitBlt(
-            pDstCur + xx, _dst_pitch_arr[0],
-            best_data_ptr, best_pitch, nBlkSizeX, nBlkSizeY);
-        }
-
-        // chroma 1
-        if (_out16_flag) {
-          // copy 8 bit source to 16bit target
-          plane_copy_8_to_16_c(
-            pDstCurUV1 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[1], 
-            best_data_ptrUV1, best_pitch_UV1,
-            rowwidthUV, rowsizeUV
-          );
-        }
-        else {
-          BitBlt(
-            pDstCurUV1 + xx_uv, _dst_pitch_arr[1],
-            best_data_ptrUV1, best_pitch_UV1,
-            rowwidthUV, rowsizeUV);
-        }
-
-        // chroma 2
-        if (_out16_flag) {
-          // copy 8 bit source to 16bit target
-          plane_copy_8_to_16_c(
-            pDstCurUV2 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[2],
-            best_data_ptrUV2, best_pitch_UV2,
-            rowwidthUV, rowsizeUV
-          );
-        }
-        else {
-          BitBlt(
-            pDstCurUV2 + xx_uv, _dst_pitch_arr[2],
-            best_data_ptrUV2, best_pitch_UV2,
-            rowwidthUV, rowsizeUV);
-        }
-
+      /*
+          BYTE* pDstCur, int iDstPitch,
+    const BYTE* pSrcCur,
+    BYTE* pDstCurUV1, int iDstUV1Pitch,
+    const BYTE* pSrcCurUV1,
+    BYTE* pDstCurUV2, int iDstUV2Pitch,
+    const BYTE* pSrcCurUV2,
+    int xx, int xx_uv, int ibx, int iby, int iBlkNum
+      */
+          MEL_LC(pDstCur, _dst_pitch_arr[0],
+            pSrcCur,
+            pDstCurUV1, _dst_pitch_arr[1],
+            pSrcCurUV1,
+            pDstCurUV2, _dst_pitch_arr[2],
+            pSrcCurUV2,
+            xx, xx_uv, bx, by, i);
       } // pmode MEL select end
 
       xx += (nBlkSizeX); // xx: indexing offset
@@ -3082,6 +2846,11 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
     }
   }	// for by
 
+#ifdef _DEBUG
+  float fRatioMEL_nz_blocks = (float)iMEL_non_zero_blocks / (float)nBlkCount;
+  fRatioMEL_nz_blocks++;
+#endif
+
 }
 
 void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
@@ -3121,6 +2890,10 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
 
   int iBlkScanDir;
   int iBlkxStart;
+
+#ifdef _DEBUG
+  iMEL_non_zero_blocks = 0;
+#endif
 
   for (int by = y_beg; by < y_end; ++by)
   {
@@ -3204,130 +2977,143 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
 
       PrefetchMVs(i);
 
-      if (bMVsAddProc)
+      if (pmode == PM_BLEND)
       {
-        FilterBlkMVs(i, bx, by);
-
-        for (int k = 0; k < _trad * 2; ++k)
+        if (bMVsAddProc)
         {
-          use_block_yuv(
-            ref_data_ptr_arr[k],
-            pitch_arr[k],
-            ref_data_ptr_arrUV1[k],
-            pitch_arrUV1[k],
-            ref_data_ptr_arrUV2[k],
-            pitch_arrUV2[k],
-            weight_arr[k + 1],
-            weight_arrUV[k + 1],
-            _usable_flag_arr[k],
-            _mv_clip_arr[k],
-            i,
-            _planes_ptr[k][0],
-            pSrcCur,
-            _planes_ptr[k][1],
-            pSrcCurUV1,
-            _planes_ptr[k][2],
-            pSrcCurUV2,
-            xx << pixelsize_super_shift,
-            xx_uv << pixelsize_super_shift,
-            _src_pitch_arr[0],
-            _src_pitch_arr[1],
-            _src_pitch_arr[2],
-            bx,
-            by,
-            (const VECTOR*)pFilteredMVsPlanesArrays[k]
-          );
+          FilterBlkMVs(i, bx, by);
+
+          for (int k = 0; k < _trad * 2; ++k)
+          {
+            use_block_yuv(
+              ref_data_ptr_arr[k],
+              pitch_arr[k],
+              ref_data_ptr_arrUV1[k],
+              pitch_arrUV1[k],
+              ref_data_ptr_arrUV2[k],
+              pitch_arrUV2[k],
+              weight_arr[k + 1],
+              weight_arrUV[k + 1],
+              _usable_flag_arr[k],
+              _mv_clip_arr[k],
+              i,
+              _planes_ptr[k][0],
+              pSrcCur,
+              _planes_ptr[k][1],
+              pSrcCurUV1,
+              _planes_ptr[k][2],
+              pSrcCurUV2,
+              xx << pixelsize_super_shift,
+              xx_uv << pixelsize_super_shift,
+              _src_pitch_arr[0],
+              _src_pitch_arr[1],
+              _src_pitch_arr[2],
+              bx,
+              by,
+              (const VECTOR*)pFilteredMVsPlanesArrays[k]
+            );
+          }
         }
-      }
-      else
-      {
-        for (int k = 0; k < _trad * 2; ++k)
+        else
         {
-          use_block_yuv(
-            ref_data_ptr_arr[k],
-            pitch_arr[k],
-            ref_data_ptr_arrUV1[k],
-            pitch_arrUV1[k],
-            ref_data_ptr_arrUV2[k],
-            pitch_arrUV2[k],
-            weight_arr[k + 1],
-            weight_arrUV[k + 1],
-            _usable_flag_arr[k],
-            _mv_clip_arr[k],
-            i,
-            _planes_ptr[k][0],
-            pSrcCur,
-            _planes_ptr[k][1],
-            pSrcCurUV1,
-            _planes_ptr[k][2],
-            pSrcCurUV2,
-            xx << pixelsize_super_shift,
-            xx_uv << pixelsize_super_shift,
-            _src_pitch_arr[0],
-            _src_pitch_arr[1],
-            _src_pitch_arr[2],
-            bx,
-            by,
-//            pMVsPlanesArrays[k]
-            pMVsWorkPlanesArrays[k]
-          );
+          for (int k = 0; k < _trad * 2; ++k)
+          {
+            use_block_yuv(
+              ref_data_ptr_arr[k],
+              pitch_arr[k],
+              ref_data_ptr_arrUV1[k],
+              pitch_arrUV1[k],
+              ref_data_ptr_arrUV2[k],
+              pitch_arrUV2[k],
+              weight_arr[k + 1],
+              weight_arrUV[k + 1],
+              _usable_flag_arr[k],
+              _mv_clip_arr[k],
+              i,
+              _planes_ptr[k][0],
+              pSrcCur,
+              _planes_ptr[k][1],
+              pSrcCurUV1,
+              _planes_ptr[k][2],
+              pSrcCurUV2,
+              xx << pixelsize_super_shift,
+              xx_uv << pixelsize_super_shift,
+              _src_pitch_arr[0],
+              _src_pitch_arr[1],
+              _src_pitch_arr[2],
+              bx,
+              by,
+              //            pMVsPlanesArrays[k]
+              pMVsWorkPlanesArrays[k]
+            );
+          }
         }
-      }
 
-      norm_weights(weight_arr, _trad);
-      if (bthLC_diff) norm_weights(weight_arrUV, _trad);
+        norm_weights(weight_arr, _trad);
+        if (bthLC_diff) norm_weights(weight_arrUV, _trad);
 
-      int* pChromaWA;
-      if (bthLC_diff)
-        pChromaWA = &weight_arrUV[0];
-      else
-        pChromaWA = &weight_arr[0];
+        int* pChromaWA;
+        if (bthLC_diff)
+          pChromaWA = &weight_arrUV[0];
+        else
+          pChromaWA = &weight_arr[0];
 
-      // luma and chroma
-/*      _degrainluma_ptr(
-        &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
-        pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-        ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-      );*/
-
-      if (MPBNumIt == 0 || !isMVsStable(pMVsWorkPlanesArrays, i, weight_arr))
-      {
-        _degrainluma_ptr(
+        // luma and chroma
+  /*      _degrainluma_ptr(
           &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
           pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
           ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-        );
+        );*/
 
-        _degrainchroma_ptr(
-          &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
-          pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-          ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad
-        );
+        if (MPBNumIt == 0 || !isMVsStable(pMVsWorkPlanesArrays, i, weight_arr))
+        {
+          _degrainluma_ptr(
+            &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
+            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+            ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+          );
 
-        _degrainchroma_ptr(
-          &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch << pixelsize_output_shift,
-          pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-          ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA, _trad
-        );
+          _degrainchroma_ptr(
+            &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
+            pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+            ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad
+          );
 
-      }
+          _degrainchroma_ptr(
+            &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch << pixelsize_output_shift,
+            pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+            ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA, _trad
+          );
+
+        }
+        else
+        {
+          MPB_LC(
+            &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
+            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+            ref_data_ptr_arr, pitch_arr,
+            &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
+            pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+            ref_data_ptr_arrUV1, pitch_arrUV1,
+            &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch << pixelsize_output_shift,
+            pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+            ref_data_ptr_arrUV2, pitch_arrUV2,
+            weight_arr, pChromaWA,
+            nBlkSizeX, nBlkSizeY, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super,
+            _mv_clip_arr[0]._clip_sptr->chromaSADScale, i
+          );
+        }
+      } // if pmode == PM_BLEND end here
       else
       {
-        MPB_LC(
-          &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
-          pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-          ref_data_ptr_arr, pitch_arr,
-          &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
-          pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-          ref_data_ptr_arrUV1, pitch_arrUV1,
-          &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch << pixelsize_output_shift,
-          pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-          ref_data_ptr_arrUV2, pitch_arrUV2,
-          weight_arr, pChromaWA,
-          nBlkSizeX, nBlkSizeY, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super,
-          _mv_clip_arr[0]._clip_sptr->chromaSADScale, i
-        );
-      }
+        MEL_LC(&tmp_block._d[0], tmpPitch << pixelsize_output_shift,
+          pSrcCur,
+          &tmp_blockUV1._d[0], tmpPitch << pixelsize_output_shift,
+          pSrcCurUV1,
+          &tmp_blockUV2._d[0], tmpPitch << pixelsize_output_shift,
+          pSrcCurUV2,
+          xx, xx_uv, bx, by, i);
+      } // pmode MEL select end
 
 
       // chroma
@@ -3473,6 +3259,11 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
     pDstShortUV2 += effective_dstShortPitchUV2; // pitch is short granularity
     pDstIntUV2 += effective_dstIntPitchUV2; // pitch is int granularity
   } // for by
+
+#ifdef _DEBUG
+  float fRatioMEL_nz_blocks = (float)iMEL_non_zero_blocks / (float)nBlkCount;
+  fRatioMEL_nz_blocks++;
+#endif
 
 }
 
@@ -6752,6 +6543,287 @@ MV_FORCEINLINE void MDegrainN::MPB_LC(
     pRefUV2, PitchUV2, WallC, _trad
   );
 }
+
+MV_FORCEINLINE void MDegrainN::MEL_LC(
+  BYTE* pDstCur, int iDstPitch,
+  const BYTE* pSrcCur,
+  BYTE* pDstCurUV1, int iDstUV1Pitch,
+  const BYTE* pSrcCurUV1,
+  BYTE* pDstCurUV2, int iDstUV2Pitch,
+  const BYTE* pSrcCurUV2,
+  int xx, int xx_uv, int ibx, int iby, int iBlkNum)
+{
+
+  const int rowsizeUV = nBlkSizeY >> nLogyRatioUV_super; // bad name. it's height really
+  const int rowwidthUV = nBlkSizeX >> nLogxRatioUV_super; // bad name. it's width really
+
+  int DM_table[MAX_TEMP_RAD * 2 + 1][MAX_TEMP_RAD * 2 + 1];
+
+  const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
+  int pitch_arr[MAX_TEMP_RAD * 2];
+  
+  const BYTE* ref_data_ptr_arrUV1[MAX_TEMP_RAD * 2]; // vs: const uint8_t *pointers[radius * 2]; // Moved by the degrain function.
+  const BYTE* ref_data_ptr_arrUV2[MAX_TEMP_RAD * 2]; // vs: const uint8_t *pointers[radius * 2]; // Moved by the degrain function. 
+  int pitch_arrUV1[MAX_TEMP_RAD * 2];
+  int pitch_arrUV2[MAX_TEMP_RAD * 2];
+
+  if (bMVsAddProc)
+  {
+    FilterBlkMVs(iBlkNum, ibx, iby);
+
+    for (int k = 0; k < _trad * 2; ++k)
+    {
+      use_block_yuv_mel(
+        ref_data_ptr_arr[k],
+        pitch_arr[k],
+        ref_data_ptr_arrUV1[k],
+        pitch_arrUV1[k],
+        ref_data_ptr_arrUV2[k],
+        pitch_arrUV2[k],
+        _usable_flag_arr[k],
+        _mv_clip_arr[k],
+        iBlkNum,
+        _planes_ptr[k][0],
+        pSrcCur,
+        _planes_ptr[k][1],
+        pSrcCurUV1,
+        _planes_ptr[k][2],
+        pSrcCurUV2,
+        xx << pixelsize_super_shift,
+        xx_uv << pixelsize_super_shift,
+        _src_pitch_arr[0],
+        _src_pitch_arr[1],
+        _src_pitch_arr[2],
+        ibx,
+        iby,
+        (const VECTOR*)pFilteredMVsPlanesArrays[k]
+      );
+    }
+  }
+  else
+  {
+    for (int k = 0; k < _trad * 2; ++k)
+    {
+      use_block_yuv_mel(
+        ref_data_ptr_arr[k],
+        pitch_arr[k],
+        ref_data_ptr_arrUV1[k],
+        pitch_arrUV1[k],
+        ref_data_ptr_arrUV2[k],
+        pitch_arrUV2[k],
+        _usable_flag_arr[k],
+        _mv_clip_arr[k],
+        iBlkNum,
+        _planes_ptr[k][0],
+        pSrcCur,
+        _planes_ptr[k][1],
+        pSrcCurUV1,
+        _planes_ptr[k][2],
+        pSrcCurUV2,
+        xx << pixelsize_super_shift,
+        xx_uv << pixelsize_super_shift,
+        _src_pitch_arr[0],
+        _src_pitch_arr[1],
+        _src_pitch_arr[2],
+        ibx,
+        iby,
+        //            pMVsPlanesArrays[k]
+        pMVsWorkPlanesArrays[k]
+      );
+    }
+  }
+
+  for (int dmt_row = 0; dmt_row < (_trad * 2 + 1); dmt_row++)
+  {
+    for (int dmt_col = 0; dmt_col < (_trad * 2 + 1); dmt_col++)
+    {
+      if (dmt_row == dmt_col)
+      {
+        DM_table[dmt_row][dmt_col] = 0; // block with itself
+        continue;
+      }
+
+      // 0 is current src block ? 1,2,3,4,... -1, +1, -2, +2, blocks in total tr-pool ?
+      const BYTE* row_data_ptr;
+      const BYTE* row_data_ptrUV1;
+      const BYTE* row_data_ptrUV2;
+      int row_pitch;
+      int row_pitch_UV1;
+      int row_pitch_UV2;
+
+      const BYTE* col_data_ptr;
+      const BYTE* col_data_ptrUV1;
+      const BYTE* col_data_ptrUV2;
+      int col_pitch;
+      int col_pitch_UV1;
+      int col_pitch_UV2;
+
+
+      if (dmt_row == 0) // src block
+      {
+        row_data_ptr = pSrcCur + xx;
+        row_pitch = _src_pitch_arr[0];
+
+        row_data_ptrUV1 = pSrcCurUV1 + xx_uv;
+        row_pitch_UV1 = _src_pitch_arr[1];
+
+        row_data_ptrUV2 = pSrcCurUV2 + xx_uv;
+        row_pitch_UV2 = _src_pitch_arr[2];
+      }
+      else // ref block
+      {
+        row_data_ptr = ref_data_ptr_arr[dmt_row - 1];
+        row_pitch = pitch_arr[dmt_row - 1];
+
+        row_data_ptrUV1 = ref_data_ptr_arrUV1[dmt_row - 1];
+        row_pitch_UV1 = pitch_arrUV1[dmt_row - 1];
+
+        row_data_ptrUV2 = ref_data_ptr_arrUV2[dmt_row - 1];
+        row_pitch_UV2 = pitch_arrUV2[dmt_row - 1];
+      }
+
+      if (dmt_col == 0) // src block
+      {
+        col_data_ptr = pSrcCur + xx;
+        col_pitch = _src_pitch_arr[0];
+
+        col_data_ptrUV1 = pSrcCurUV1 + xx_uv;
+        col_pitch_UV1 = _src_pitch_arr[1];
+
+        col_data_ptrUV2 = pSrcCurUV2 + xx_uv;
+        col_pitch_UV2 = _src_pitch_arr[2];
+      }
+      else // ref block
+      {
+        col_data_ptr = ref_data_ptr_arr[dmt_col - 1];
+        col_pitch = pitch_arr[dmt_col - 1];
+
+        col_data_ptrUV1 = ref_data_ptr_arrUV1[dmt_col - 1];
+        col_pitch_UV1 = pitch_arrUV1[dmt_col - 1];
+
+        col_data_ptrUV2 = ref_data_ptr_arrUV2[dmt_col - 1];
+        col_pitch_UV2 = pitch_arrUV2[dmt_col - 1];
+      }
+
+      // calculate relative dismetric of dmt_row with dmt_col blocks
+      int idm_chroma = ScaleSadChroma(DM_MEL_Chroma->GetDisMetric(row_data_ptrUV1, row_pitch_UV1, col_data_ptrUV1, col_pitch_UV1)
+        + DM_MEL_Chroma->GetDisMetric(row_data_ptrUV2, row_pitch_UV2, col_data_ptrUV2, col_pitch_UV2), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
+      int idm_luma = DM_MEL_Luma->GetDisMetric(row_data_ptr, row_pitch, col_data_ptr, col_pitch);
+      DM_table[dmt_row][dmt_col] = idm_luma + idm_chroma;
+
+    }
+  }
+
+  // find lowest sum of row in DM_table ?
+
+  int SumRows[(MAX_TEMP_RAD * 2) + 1];
+
+  for (int dmt_row = 0; dmt_row < (_trad * 2 + 1); dmt_row++)
+  {
+    int i_sum_row = 0;
+    for (int dmt_col = 0; dmt_col < (_trad * 2 + 1); dmt_col++)
+    {
+      i_sum_row += DM_table[dmt_row][dmt_col];
+    }
+
+    SumRows[dmt_row] = i_sum_row;
+  }
+
+  int i_sum_minrow = SumRows[0];
+  int i_idx_minrow = 0;
+
+  for (int dmt_row = 0; dmt_row < (_trad * 2 + 1); dmt_row++)
+  {
+    if (SumRows[dmt_row] < i_sum_minrow)
+    {
+      i_sum_minrow = SumRows[dmt_row];
+      i_idx_minrow = dmt_row;
+    }
+  }
+
+  // set block of idx_minrow as output block
+  const BYTE* best_data_ptr;
+  const BYTE* best_data_ptrUV1;
+  const BYTE* best_data_ptrUV2;
+  int best_pitch;
+  int best_pitch_UV1;
+  int best_pitch_UV2;
+
+  if (i_idx_minrow == 0) // src block
+  {
+    best_data_ptr = pSrcCur + xx;
+    best_pitch = _src_pitch_arr[0];
+
+    best_data_ptrUV1 = pSrcCurUV1 + xx_uv;
+    best_pitch_UV1 = _src_pitch_arr[1];
+
+    best_data_ptrUV2 = pSrcCurUV2 + xx_uv;
+    best_pitch_UV2 = _src_pitch_arr[2];
+  }
+  else // ref block
+  {
+    best_data_ptr = ref_data_ptr_arr[i_idx_minrow - 1];
+    best_pitch = pitch_arr[i_idx_minrow - 1];
+
+    best_data_ptrUV1 = ref_data_ptr_arrUV1[i_idx_minrow - 1];
+    best_pitch_UV1 = pitch_arrUV1[i_idx_minrow - 1];
+
+    best_data_ptrUV2 = ref_data_ptr_arrUV2[i_idx_minrow - 1];
+    best_pitch_UV2 = pitch_arrUV2[i_idx_minrow - 1];
+#ifdef _DEBUG
+    iMEL_non_zero_blocks++;
+#endif
+
+  }
+  
+  // copy block of idx_minrow as output block
+  // luma
+  if (_out16_flag) {
+    // copy 8 bit source to 16bit target
+    plane_copy_8_to_16_c(
+      pDstCur + (xx << pixelsize_output_shift), iDstPitch, // is +xx << pix_out_sh valid for out16 ? same below
+      best_data_ptr, best_pitch, nBlkSizeX, nBlkSizeY);
+  }
+  else
+  {
+    BitBlt(pDstCur + xx, iDstPitch,
+      best_data_ptr, best_pitch, nBlkSizeX, nBlkSizeY);
+  }
+
+  // chroma 1
+  if (_out16_flag) {
+    // copy 8 bit source to 16bit target
+    plane_copy_8_to_16_c(
+      pDstCurUV1 + (xx_uv << pixelsize_output_shift), iDstUV1Pitch,
+      best_data_ptrUV1, best_pitch_UV1,
+      rowwidthUV, rowsizeUV
+    );
+  }
+  else {
+    BitBlt(
+      pDstCurUV1 + xx_uv, iDstUV1Pitch,
+      best_data_ptrUV1, best_pitch_UV1,
+      rowwidthUV, rowsizeUV);
+  }
+
+  // chroma 2
+  if (_out16_flag) {
+    // copy 8 bit source to 16bit target
+    plane_copy_8_to_16_c(
+      pDstCurUV2 + (xx_uv << pixelsize_output_shift), iDstUV2Pitch,
+      best_data_ptrUV2, best_pitch_UV2,
+      rowwidthUV, rowsizeUV
+    );
+  }
+  else {
+    BitBlt(
+      pDstCurUV2 + xx_uv, iDstUV2Pitch,
+      best_data_ptrUV2, best_pitch_UV2,
+      rowwidthUV, rowsizeUV);
+  }
+  
+}
+
 
 // return minimal diamong angle between 2 vectors
 MV_FORCEINLINE float MDegrainN::DeltaDiAngle(VECTOR v1, VECTOR v2)

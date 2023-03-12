@@ -342,6 +342,23 @@ private:
     int iBlkNum
   );
 
+
+  // MEL select luma and chroma planes
+  MV_FORCEINLINE void MEL_LC(
+    BYTE* pDstCur, int iDstPitch,
+    const BYTE* pSrcCur,
+    BYTE* pDstCurUV1, int iDstUV1Pitch,
+    const BYTE* pSrcCurUV1,
+    BYTE* pDstCurUV2, int iDstUV2Pitch,
+    const BYTE* pSrcCurUV2,
+    int xx, int xx_uv, int ibx, int iby, int iBlkNum
+  );
+
+#ifdef _DEBUG
+  //MEL debug stat
+  int iMEL_non_zero_blocks;
+#endif
+
   MV_FORCEINLINE void CopyBlock(uint8_t* pDst, int iDstPitch, uint8_t* pSrc, int iBlkWidth, int iBlkHeight);
   MV_FORCEINLINE void norm_weights_all(int wref_arr[], int trad);
 
