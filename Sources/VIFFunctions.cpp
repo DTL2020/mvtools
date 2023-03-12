@@ -52,7 +52,7 @@ static float VIF_DWT_FULL_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* p
   }
 
   const int iN = (nBlkHeight * nBlkWidth) / 4;
-  const dwt_t isuX = (dwt_t)(((float)suX / (float)(iN)) + rounder);
+  const dwt_t isuX = (dwt_t)(((float)suX / (float)(iN)) + rounder); // C4723 warinig - need check ??? why iN can be zero ?
   const dwt_t isuY = (dwt_t)(((float)suY / (float)(iN)) + rounder);
 
   float fsX = 0.0f;
@@ -283,7 +283,7 @@ static float VIF_DWT_E_C(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef
     suYe += Ye[idx];
   }
 
-  const float fsuXe = suXe / (float)(iN);
+  const float fsuXe = suXe / (float)(iN); // C4723 warinig - need check ??? why iN can be zero ?
   const float fsuYe = suYe / (float)(iN);
 
   float fsXe = 0.0f;

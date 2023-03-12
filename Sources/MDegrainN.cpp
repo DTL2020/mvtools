@@ -762,7 +762,7 @@ MDegrainN::MDegrainN(
   int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos,
   int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
   int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR, int _MPB_MVlth,
-  int _pmode, int _MEL_DMFlags,
+  int _pmode, int _MEL_DMFlags, int _MEL_thUPD,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -838,6 +838,7 @@ MDegrainN::MDegrainN(
   , MPB_MVlth(_MPB_MVlth)
   , pmode((PMode)_pmode)
   , MEL_DMFlags(_MEL_DMFlags)
+  , MEL_thUPD(_MEL_thUPD)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -1390,6 +1391,23 @@ MDegrainN::MDegrainN(
   pMPBTempBlocksUV2 = new uint8_t[stSizeToAlloc];
 #endif
 
+  // allocate MEL IIR filter memory storage
+  if (pmode == PM_MEL)
+  {
+    SIZE_T stSizeToAlloc = nBlkSizeX * nBlkSizeY * pixelsize * nBlkCount;
+
+#ifdef _WIN32
+    pMELmemY = (uint8_t*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+    pMELmemUV1 = (uint8_t*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+    pMELmemUV2 = (uint8_t*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+#else
+    pMELmemY = new uint8_t[stSizeToAlloc];
+    pMELmemUV1 = new uint8_t[stSizeToAlloc];
+    pMELmemUV2 = new uint8_t[stSizeToAlloc];
+#endif
+
+  }
+
   // calculate limits of blx/bly once in constructor
   if (nUseSubShift == 0)
   {
@@ -1428,6 +1446,19 @@ MDegrainN::~MDegrainN()
     delete pMPBTempBlocks;
     delete pMPBTempBlocksUV1;
     delete pMPBTempBlocksUV2;
+#endif
+  }
+
+  if (pmode == PM_MEL)
+  {
+#ifdef _WIN32
+    VirtualFree((LPVOID)pMELmemY, 0, MEM_FREE);
+    VirtualFree((LPVOID)pMELmemUV1, 0, MEM_FREE);
+    VirtualFree((LPVOID)pMELmemUV2, 0, MEM_FREE);
+#else
+    delete pMELmemY;
+    delete pMELmemUV1;
+    delete pMELmemUV2;
 #endif
   }
 
@@ -2498,6 +2529,7 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
 
 #ifdef _DEBUG
   iMEL_non_zero_blocks = 0;
+  iMEL_mem_hits = 0;
 #endif
 
   for (int by = td._y_beg; by < td._y_end; ++by)
@@ -2848,7 +2880,8 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
 
 #ifdef _DEBUG
   float fRatioMEL_nz_blocks = (float)iMEL_non_zero_blocks / (float)nBlkCount;
-  fRatioMEL_nz_blocks++;
+  float fRatioMEL_hits_blocks = (float)iMEL_mem_hits / (float)nBlkCount;
+  int idbr=0;
 #endif
 
 }
@@ -2893,6 +2926,7 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
 
 #ifdef _DEBUG
   iMEL_non_zero_blocks = 0;
+  iMEL_mem_hits = 0;
 #endif
 
   for (int by = y_beg; by < y_end; ++by)
@@ -3262,7 +3296,8 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
 
 #ifdef _DEBUG
   float fRatioMEL_nz_blocks = (float)iMEL_non_zero_blocks / (float)nBlkCount;
-  fRatioMEL_nz_blocks++;
+  float fRatioMEL_mem_blocks = (float)iMEL_mem_hits / (float)nBlkCount;
+  int idbr = 0;
 #endif
 
 }
@@ -6553,6 +6588,13 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
   const BYTE* pSrcCurUV2,
   int xx, int xx_uv, int ibx, int iby, int iBlkNum)
 {
+  BYTE* pYmem = pMELmemY + iBlkNum * nBlkSizeX * nBlkSizeY * pixelsize;
+  BYTE* pUV1mem = pMELmemUV1 + iBlkNum * (nBlkSizeX >> nLogxRatioUV_super) * (nBlkSizeY >> nLogyRatioUV_super) * pixelsize;
+  BYTE* pUV2mem = pMELmemUV2 + iBlkNum * (nBlkSizeX >> nLogxRatioUV_super)* (nBlkSizeY >> nLogyRatioUV_super) * pixelsize;
+
+  int Ymem_pitch = nBlkSizeY * pixelsize;
+  int UV1mem_pitch = (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
+  int UV2mem_pitch = (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
 
   const int rowsizeUV = nBlkSizeY >> nLogyRatioUV_super; // bad name. it's height really
   const int rowwidthUV = nBlkSizeX >> nLogxRatioUV_super; // bad name. it's width really
@@ -6775,6 +6817,50 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
 #endif
 
   }
+
+  // IIR - check if memory block is still good
+  int idm_chroma = ScaleSadChroma(DM_MEL_Chroma->GetDisMetric(best_data_ptrUV1, best_pitch_UV1, pUV1mem, UV1mem_pitch)
+    + DM_MEL_Chroma->GetDisMetric(best_data_ptrUV2, best_pitch_UV1, pUV2mem, UV2mem_pitch), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
+/*  int idm_chr1 = DM_MEL_Chroma->GetDisMetric(best_data_ptrUV1, best_pitch_UV1, pUV1mem, UV1mem_pitch);
+  int idm_chr2 = DM_MEL_Chroma->GetDisMetric(best_data_ptrUV2, best_pitch_UV2, pUV2mem, UV2mem_pitch);
+  int idm_chroma = ScaleSadChroma(idm_chr1 + idm_chr2, _mv_clip_arr[0]._clip_sptr->chromaSADScale);*/
+  int idm_luma = DM_MEL_Luma->GetDisMetric(best_data_ptr, best_pitch, pYmem, Ymem_pitch);
+  int idm_mem = idm_chroma + idm_luma;
+
+  if (idm_mem < MEL_thUPD)
+  {
+    //mem still good - output mem block
+    best_data_ptr = pYmem;
+    best_pitch = Ymem_pitch;
+
+    best_data_ptrUV1 = pUV1mem;
+    best_pitch_UV1 = UV1mem_pitch;
+
+    best_data_ptrUV2 = pUV2mem;
+    best_pitch_UV2 = UV2mem_pitch;
+#ifdef _DEBUG
+    iMEL_mem_hits++;
+#endif
+  }
+  else // mem no good - update mem
+  {
+    // luma
+    BitBlt(pYmem, Ymem_pitch,
+      best_data_ptr, best_pitch, nBlkSizeX, nBlkSizeY);
+
+    // chroma1
+    BitBlt(pUV1mem, UV1mem_pitch,
+      best_data_ptrUV1, best_pitch_UV1,
+      rowwidthUV, rowsizeUV);
+
+    // chroma1
+    BitBlt(pUV2mem, UV2mem_pitch,
+      best_data_ptrUV2, best_pitch_UV2,
+      rowwidthUV, rowsizeUV);
+
+    // use best_* ptrs for output
+  }
+
   
   // copy block of idx_minrow as output block
   // luma
@@ -6800,8 +6886,7 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
     );
   }
   else {
-    BitBlt(
-      pDstCurUV1 + xx_uv, iDstUV1Pitch,
+    BitBlt(pDstCurUV1 + xx_uv, iDstUV1Pitch,
       best_data_ptrUV1, best_pitch_UV1,
       rowwidthUV, rowsizeUV);
   }

@@ -49,7 +49,7 @@ public:
     int UseSubShift, int InterpolateOverlap, ::PClip _mvmultirs, int _thFWBWmvpos,
     int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
     int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR,
-    int _MPB_MVlth, int _pmode, int _MEL_DMFlags,
+    int _MPB_MVlth, int _pmode, int _MEL_DMFlags, int _MEL_thUPD,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -287,7 +287,11 @@ private:
   COVARFunction* COVARCHROMA;
 
   PMode pmode;
-  int MEL_DMFlags; 
+  int MEL_DMFlags;
+  int MEL_thUPD;
+  uint8_t* pMELmemY;
+  uint8_t* pMELmemUV1;
+  uint8_t* pMELmemUV2;
 
   // single plane only
   MV_FORCEINLINE int AlignBlockWeights(const BYTE* pRef[], int Pitch[],
@@ -357,6 +361,7 @@ private:
 #ifdef _DEBUG
   //MEL debug stat
   int iMEL_non_zero_blocks;
+  int iMEL_mem_hits;
 #endif
 
   MV_FORCEINLINE void CopyBlock(uint8_t* pDst, int iDstPitch, uint8_t* pSrc, int iBlkWidth, int iBlkHeight);
