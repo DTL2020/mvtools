@@ -2846,8 +2846,9 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
         }
 
         // find lowest sum of row in DM_table ?
-        int i_sum_minrow = 0;
-        int i_idx_minrow = 0;
+
+        int SumRows[(MAX_TEMP_RAD * 2) + 1];
+
         for (int dmt_row = 0; dmt_row < (_trad * 2 + 1); dmt_row++)
         {
           int i_sum_row = 0;
@@ -2856,9 +2857,17 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
             i_sum_row += DM_table[dmt_row][dmt_col];
           }
 
-          if (i_sum_row < i_sum_minrow)
+          SumRows[dmt_row] = i_sum_row;
+        }
+
+        int i_sum_minrow = SumRows[0];
+        int i_idx_minrow = 0;
+
+        for (int dmt_row = 0; dmt_row < (_trad * 2 + 1); dmt_row++)
+        {
+          if (SumRows[dmt_row] < i_sum_minrow)
           {
-            i_sum_minrow = i_sum_row;
+            i_sum_minrow = SumRows[dmt_row];
             i_idx_minrow = dmt_row;
           }
         }
