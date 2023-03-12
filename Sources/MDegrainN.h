@@ -22,6 +22,12 @@
 #define CACHE_LINE_SIZE 64
 #define MVLPFKERNELSIZE 11 // 10+1 odd number, 10 - just some medium number relative to typical tr and allow to have some variance in slope
 
+enum PMode
+{
+  PM_BLEND = 0,
+  PM_MEL = 1,
+};
+
 class MVPlane;
 
 class MDegrainN
@@ -42,8 +48,8 @@ public:
     float fMVLPFCutoff, float fMVLPFSlope, float fMVLPFGauss, int thMVLPFCorr, float adjSADLPFedmv,
     int UseSubShift, int InterpolateOverlap, ::PClip _mvmultirs, int _thFWBWmvpos,
     int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
-    int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int MPB_DMFlags, int _MPBchroma, int _MPBtgtTR,
-    int _MPB_MVlth,
+    int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR,
+    int _MPB_MVlth, int _pmode, int _MEL_DMFlags,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -148,7 +154,15 @@ private:
       int i, const MVPlane* plane_ptrY, const BYTE* src_ptrY, const MVPlane* plane_ptrUV1, const BYTE* src_ptrUV1, const MVPlane* plane_ptrUV2, const BYTE* src_ptrUV2,
       int xx, int xx_uv, int src_pitchY, int src_pitchUV1, int src_pitchUV2, int ibx, int iby, const VECTOR* pMVsArray
     );
-  
+
+  MV_FORCEINLINE void
+    use_block_yuv_mel(
+      const BYTE*& pY, int& npY, const BYTE*& pUV1, int& npUV1, const BYTE*& pUV2, int& npUV2, bool usable_flag, const MvClipInfo& c_info,
+      int i, const MVPlane* plane_ptrY, const BYTE* src_ptrY, const MVPlane* plane_ptrUV1, const BYTE* src_ptrUV1, const MVPlane* plane_ptrUV2, const BYTE* src_ptrUV2,
+      int xx, int xx_uv, int src_pitchY, int src_pitchUV1, int src_pitchUV2, int ibx, int iby, const VECTOR* pMVsArray
+    );
+
+
   void(MDegrainN::* use_block_y_func)(
     const BYTE*& p, int& np, int& wref, bool usable_flag, const MvClipInfo& c_info,
     int i, const MVPlane* plane_ptr, const BYTE* src_ptr, int xx, int src_pitch, int ibx, int iby, const VECTOR* pMVsArray
@@ -219,6 +233,9 @@ private:
   DisMetric* DM_Luma;
   DisMetric* DM_Chroma;
 
+  DisMetric* DM_MEL_Luma;
+  DisMetric* DM_MEL_Chroma;
+
   bool bthLC_diff;
 
   int iInterpolateOverlap;
@@ -268,6 +285,9 @@ private:
   uint8_t* pMPBTempBlocksUV2; // single area to hold temporal single block subtracted blended results, contiguos in memory so may not cause cache aliasing
   COVARFunction* COVAR;              /* function which computes the covariance */
   COVARFunction* COVARCHROMA;
+
+  PMode pmode;
+  int MEL_DMFlags; 
 
   // single plane only
   MV_FORCEINLINE int AlignBlockWeights(const BYTE* pRef[], int Pitch[],
