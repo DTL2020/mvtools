@@ -762,7 +762,7 @@ MDegrainN::MDegrainN(
   int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos,
   int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
   int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR, int _MPB_MVlth,
-  int _pmode, int _MEL_DMFlags, int _MEL_thUPD,
+  int _pmode, int _MEL_DMFlags, int _MEL_thUPD, int _MEL_BAS,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -839,6 +839,7 @@ MDegrainN::MDegrainN(
   , pmode((PMode)_pmode)
   , MEL_DMFlags(_MEL_DMFlags)
   , MEL_thUPD(_MEL_thUPD)
+  , MEL_BAS(_MEL_BAS)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -1406,6 +1407,17 @@ MDegrainN::MDegrainN(
     pMELmemUV2 = new uint8_t[stSizeToAlloc];
 #endif
 
+    BA_Yarr = new BlockArea* [nBlkCount];
+    BA_UV1arr = new BlockArea* [nBlkCount];
+    BA_UV2arr = new BlockArea* [nBlkCount];
+
+    for (int i = 0; i < nBlkCount; i++)
+    {
+      BA_Yarr[i] = new BlockArea(nBlkSizeX, nBlkSizeY, MEL_BAS, pixelsize, nPel, arch, MEL_DMFlags);
+      BA_UV1arr[i] = new BlockArea(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, MEL_BAS, pixelsize, nPel, arch, MEL_DMFlags);
+      BA_UV2arr[i] = new BlockArea(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, MEL_BAS, pixelsize, nPel, arch, MEL_DMFlags);
+    }
+
   }
 
   // calculate limits of blx/bly once in constructor
@@ -1460,6 +1472,13 @@ MDegrainN::~MDegrainN()
     delete pMELmemUV1;
     delete pMELmemUV2;
 #endif
+
+    for (int i = 0; i < nBlkCount; ++i)
+    {
+      delete BA_Yarr[i];
+      delete BA_UV1arr[i];
+      delete BA_UV2arr[i];
+    }
   }
 
 }
@@ -5387,7 +5406,7 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeightsLC(const BYTE* pRef[], int Pitch[
   for (int k = 0; k < _trad * 2; k++)
   {
     pRef[k] -= Pitch[k] * iBlkHeight;
-    if (MPBchroma & 0x1 != 0)
+    if ((MPBchroma & 0x1) != 0)
     {
       pRefUV1[k] -= PitchUV1[k] * iBlkHeightC;
       pRefUV2[k] -= PitchUV2[k] * iBlkHeightC;
@@ -5697,7 +5716,7 @@ MV_FORCEINLINE int MDegrainN::AlignBlockWeightsLC_CV(const BYTE* pRef[], int Pit
   for (int k = 0; k < _trad * 2; k++)
   {
     pRef[k] -= Pitch[k] * iBlkHeight;
-    if (MPBchroma & 0x1 != 0)
+    if ((MPBchroma & 0x1) != 0)
     {
       pRefUV1[k] -= PitchUV1[k] * iBlkHeightC;
       pRefUV2[k] -= PitchUV2[k] * iBlkHeightC;

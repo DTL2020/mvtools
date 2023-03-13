@@ -142,6 +142,7 @@
     <ClCompile Include="VIFFunctions.cpp" />
     <ClCompile Include="DWTFunctions.cpp" />
     <ClCompile Include="COVARFunctions.cpp" />
+    <ClCompile Include="BlockArea.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MDegrainN.h">
@@ -428,6 +429,7 @@
     <ClInclude Include="VIFFunctions.h" />
     <ClInclude Include="DWTFunctions.h" />
     <ClInclude Include="COVARFunctions.h" />
+    <ClInclude Include="BlockArea.h" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="cpu.h" />

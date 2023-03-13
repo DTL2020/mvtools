@@ -15,6 +15,7 @@
 
 #include "MVInterface.h"
 #include "DisMetric.h"
+#include "BlockArea.h"
 
 #include	<memory>
 #include	<vector>
@@ -49,7 +50,7 @@ public:
     int UseSubShift, int InterpolateOverlap, ::PClip _mvmultirs, int _thFWBWmvpos,
     int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
     int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR,
-    int _MPB_MVlth, int _pmode, int _MEL_DMFlags, int _MEL_thUPD,
+    int _MPB_MVlth, int _pmode, int _MEL_DMFlags, int _MEL_thUPD, int _MEL_BAS,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -289,6 +290,11 @@ private:
   PMode pmode;
   int MEL_DMFlags;
   int MEL_thUPD;
+  int MEL_BAS;
+  BlockArea** BA_Yarr;
+  BlockArea** BA_UV1arr;
+  BlockArea** BA_UV2arr;
+
   uint8_t* pMELmemY;
   uint8_t* pMELmemUV1;
   uint8_t* pMELmemUV2;
