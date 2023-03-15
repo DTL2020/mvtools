@@ -1394,7 +1394,7 @@ MDegrainN::MDegrainN(
 #endif
 
   // allocate MEL IIR filter memory storage
-  if (pmode == PM_MEL)
+  if (TTH_thUPD > 0) // TTH in some mode enabled
   {
     SIZE_T stSizeToAlloc = nBlkSizeX * nBlkSizeY * pixelsize * nBlkCount;
 
@@ -2601,6 +2601,15 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
 
       int i = by * nBlkX + bx;
 
+      // ToDo: use BlockArea class later !
+      BYTE* pYmem = pMELmemY + i * nBlkSizeX * nBlkSizeY * pixelsize;
+      BYTE* pUV1mem = pMELmemUV1 + i * (nBlkSizeX >> nLogxRatioUV_super)* (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
+      BYTE* pUV2mem = pMELmemUV2 + i * (nBlkSizeX >> nLogxRatioUV_super)* (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
+      int Ymem_pitch = nBlkSizeY * pixelsize;
+      int UV1mem_pitch = (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
+      int UV2mem_pitch = (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
+      const int rowwidthUV = nBlkSizeX >> nLogxRatioUV_super; // bad name. it's width really
+
 #ifdef _DEBUG
       if ((bx == 0) && (by == 0) && (pmode == PM_MEL))
       {
@@ -2764,6 +2773,48 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
             ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA, _trad
           );
 
+          // Add TTH here too, use output buffer as temporal holder of current denoised block
+          if (TTH_thUPD > 0)
+          {
+            // IIR - check if memory block is still good
+            int idm_chroma = 0;
+            if (TTH_chroma)
+            {
+              idm_chroma = ScaleSadChroma(DM_TTH_Chroma->GetDisMetric(pDstCurUV1 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[1], pUV1mem, UV1mem_pitch)
+                + DM_TTH_Chroma->GetDisMetric(pDstCurUV2 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[2], pUV2mem, UV2mem_pitch), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
+            }
+            int idm_luma = DM_TTH_Luma->GetDisMetric(pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[0], pYmem, Ymem_pitch);
+            int idm_mem = idm_chroma + idm_luma;
+
+            if (idm_mem < TTH_thUPD)
+            {
+              //mem still good - output mem block
+              // luma
+              BitBlt(pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[0], pYmem, Ymem_pitch, nBlkSizeX, nBlkSizeY);
+              // chroma1
+              BitBlt(pDstCurUV1 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[1], pUV1mem, UV1mem_pitch, rowwidthUV, rowsizeUV);
+              // chroma2
+              BitBlt(pDstCurUV2 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[2], pUV2mem, UV2mem_pitch, rowwidthUV, rowsizeUV);
+
+#ifdef _DEBUG
+              iMEL_mem_hits++;
+#endif
+            }
+            else // mem no good - update mem
+            {
+              // luma
+              BitBlt(pYmem, Ymem_pitch, pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[0], nBlkSizeX, nBlkSizeY);
+              // chroma1
+              BitBlt(pUV1mem, UV1mem_pitch, pDstCurUV1 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[1], rowwidthUV, rowsizeUV);
+              // chroma2
+              BitBlt(pUV2mem, UV2mem_pitch, pDstCurUV2 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[2], rowwidthUV, rowsizeUV);
+#ifdef _DEBUG
+              iMEL_mem_updates++;
+#endif
+            }// if (idm_mem < TTH_thUPD)
+
+          } // if (TTH_thUPD > 0)
+
         }
         else
         {
@@ -2797,13 +2848,27 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
       const BYTE* pSrcCurUV2,
       int xx, int xx_uv, int ibx, int iby, int iBlkNum
         */
-        MEL_LC(pDstCur, _dst_pitch_arr[0],
-          pSrcCur,
-          pDstCurUV1, _dst_pitch_arr[1],
-          pSrcCurUV1,
-          pDstCurUV2, _dst_pitch_arr[2],
-          pSrcCurUV2,
-          xx, xx_uv, bx, by, i);
+        if (!_out16_flag)
+        {
+          MEL_LC(pDstCur + xx, _dst_pitch_arr[0],
+            pSrcCur,
+            pDstCurUV1 + xx_uv, _dst_pitch_arr[1],
+            pSrcCurUV1,
+            pDstCurUV2 + xx_uv, _dst_pitch_arr[2],
+            pSrcCurUV2,
+            xx, xx_uv, bx, by, i);
+        }
+        else
+        {
+          MEL_LC(pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[0],
+            pSrcCur,
+            pDstCurUV1 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[1],
+            pSrcCurUV1,
+            pDstCurUV2 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[2],
+            pSrcCurUV2,
+            xx, xx_uv, bx, by, i);
+
+        }
       } // pmode MEL select end
 
       xx += (nBlkSizeX); // xx: indexing offset
@@ -2989,6 +3054,10 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
 #ifdef _DEBUG
   iMEL_non_zero_blocks = 0;
   iMEL_mem_hits = 0;
+  if (pmode == PM_MEL)
+  {
+    int idbr = 0;
+  }
 #endif
 
   for (int by = y_beg; by < y_end; ++by)
@@ -3058,6 +3127,16 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
       short* winOverUV = _overwins_uv->GetWindow(wby + wbx);
 
       int i = by * nBlkX + bx;
+
+      // ToDo: use BlockArea class later !
+      BYTE* pYmem = pMELmemY + i * nBlkSizeX * nBlkSizeY * pixelsize;
+      BYTE* pUV1mem = pMELmemUV1 + i * (nBlkSizeX >> nLogxRatioUV_super)* (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
+      BYTE* pUV2mem = pMELmemUV2 + i * (nBlkSizeX >> nLogxRatioUV_super)* (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
+      int Ymem_pitch = nBlkSizeY * pixelsize;
+      int UV1mem_pitch = (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
+      int UV2mem_pitch = (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
+      const int rowwidthUV = nBlkSizeX >> nLogxRatioUV_super; // bad name. it's width really
+
 
       // luma
       const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
@@ -3180,6 +3259,49 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
             pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
             ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA, _trad
           );
+
+          // Add TTH here too, use output buffer as temporal holder of current denoised block
+          if (TTH_thUPD > 0)
+          {
+            // IIR - check if memory block is still good
+            int idm_chroma = 0;
+            if (TTH_chroma)
+            {
+              idm_chroma = ScaleSadChroma(DM_TTH_Chroma->GetDisMetric(&tmp_blockUV1._d[0], tmpPitch << pixelsize_output_shift, pUV1mem, UV1mem_pitch)
+                + DM_TTH_Chroma->GetDisMetric(&tmp_blockUV2._d[0], tmpPitch << pixelsize_output_shift, pUV2mem, UV2mem_pitch), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
+            }
+            int idm_luma = DM_TTH_Luma->GetDisMetric(&tmp_block._d[0], tmpPitch << pixelsize_output_shift, pYmem, Ymem_pitch);
+            int idm_mem = idm_chroma + idm_luma;
+
+            if (idm_mem < TTH_thUPD)
+            {
+              //mem still good - output mem block
+              // luma
+              BitBlt(&tmp_block._d[0], tmpPitch << pixelsize_output_shift, pYmem, Ymem_pitch, nBlkSizeX, nBlkSizeY);
+              // chroma1
+              BitBlt(&tmp_blockUV1._d[0], tmpPitch << pixelsize_output_shift, pUV1mem, UV1mem_pitch, rowwidthUV, rowsizeUV);
+              // chroma2
+              BitBlt(&tmp_blockUV2._d[0], tmpPitch << pixelsize_output_shift, pUV2mem, UV2mem_pitch, rowwidthUV, rowsizeUV);
+
+#ifdef _DEBUG
+              iMEL_mem_hits++;
+#endif
+            }
+            else // mem no good - update mem
+            {
+              // luma
+              BitBlt(pYmem, Ymem_pitch, &tmp_block._d[0], tmpPitch << pixelsize_output_shift, nBlkSizeX, nBlkSizeY);
+              // chroma1
+              BitBlt(pUV1mem, UV1mem_pitch, &tmp_blockUV1._d[0], tmpPitch << pixelsize_output_shift, rowwidthUV, rowsizeUV);
+              // chroma2
+              BitBlt(pUV2mem, UV2mem_pitch, &tmp_blockUV2._d[0], tmpPitch << pixelsize_output_shift, rowwidthUV, rowsizeUV);
+#ifdef _DEBUG
+              iMEL_mem_updates++;
+#endif
+            }// if (idm_mem < TTH_thUPD)
+
+          } // if (TTH_thUPD > 0)
+
 
         }
         else
@@ -6667,13 +6789,13 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
 
   int DM_table[MAX_TEMP_RAD * 2 + 1][MAX_TEMP_RAD * 2 + 1];
 
-  const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
-  int pitch_arr[MAX_TEMP_RAD * 2];
+  const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2] = { 0 };
+  int pitch_arr[MAX_TEMP_RAD * 2] = { 0 };
   
-  const BYTE* ref_data_ptr_arrUV1[MAX_TEMP_RAD * 2]; // vs: const uint8_t *pointers[radius * 2]; // Moved by the degrain function.
-  const BYTE* ref_data_ptr_arrUV2[MAX_TEMP_RAD * 2]; // vs: const uint8_t *pointers[radius * 2]; // Moved by the degrain function. 
-  int pitch_arrUV1[MAX_TEMP_RAD * 2];
-  int pitch_arrUV2[MAX_TEMP_RAD * 2];
+  const BYTE* ref_data_ptr_arrUV1[MAX_TEMP_RAD * 2] = { 0 }; // vs: const uint8_t *pointers[radius * 2]; // Moved by the degrain function.
+  const BYTE* ref_data_ptr_arrUV2[MAX_TEMP_RAD * 2] = { 0 }; // vs: const uint8_t *pointers[radius * 2]; // Moved by the degrain function. 
+  int pitch_arrUV1[MAX_TEMP_RAD * 2] = { 0 };
+  int pitch_arrUV2[MAX_TEMP_RAD * 2] = { 0 };
 
   if (bMVsAddProc)
   {
@@ -6775,13 +6897,13 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
 
       if (dmt_row == 0) // src block
       {
-        row_data_ptr = pSrcCur + xx;
+        row_data_ptr = pSrcCur + (xx << pixelsize_super_shift);
         row_pitch = _src_pitch_arr[0];
 
-        row_data_ptrUV1 = pSrcCurUV1 + xx_uv;
+        row_data_ptrUV1 = pSrcCurUV1 + (xx_uv << pixelsize_super_shift);
         row_pitch_UV1 = _src_pitch_arr[1];
 
-        row_data_ptrUV2 = pSrcCurUV2 + xx_uv;
+        row_data_ptrUV2 = pSrcCurUV2 + (xx_uv << pixelsize_super_shift);
         row_pitch_UV2 = _src_pitch_arr[2];
       }
       else // ref block
@@ -6798,13 +6920,13 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
 
       if (dmt_col == 0) // src block
       {
-        col_data_ptr = pSrcCur + xx;
+        col_data_ptr = pSrcCur + (xx << pixelsize_super_shift);
         col_pitch = _src_pitch_arr[0];
 
-        col_data_ptrUV1 = pSrcCurUV1 + xx_uv;
+        col_data_ptrUV1 = pSrcCurUV1 + (xx_uv << pixelsize_super_shift);
         col_pitch_UV1 = _src_pitch_arr[1];
 
-        col_data_ptrUV2 = pSrcCurUV2 + xx_uv;
+        col_data_ptrUV2 = pSrcCurUV2 + (xx_uv << pixelsize_super_shift);
         col_pitch_UV2 = _src_pitch_arr[2];
       }
       else // ref block
@@ -6851,7 +6973,7 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
 
   // find lowest sum of row in DM_table ?
 
-  int SumRows[(MAX_TEMP_RAD * 2) + 1];
+  int SumRows[(MAX_TEMP_RAD * 2) + 1] = { 0 };
 
   for (int dmt_row = 0; dmt_row < (_trad * 2 + 1); dmt_row++)
   {
@@ -6886,13 +7008,13 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
 
   if (i_idx_minrow == 0) // src block
   {
-    best_data_ptr = pSrcCur + xx;
+    best_data_ptr = pSrcCur + (xx << pixelsize_super_shift);
     best_pitch = _src_pitch_arr[0];
 
-    best_data_ptrUV1 = pSrcCurUV1 + xx_uv;
+    best_data_ptrUV1 = pSrcCurUV1 + (xx_uv << pixelsize_super_shift);
     best_pitch_UV1 = _src_pitch_arr[1];
 
-    best_data_ptrUV2 = pSrcCurUV2 + xx_uv;
+    best_data_ptrUV2 = pSrcCurUV2 + (xx_uv << pixelsize_super_shift);
     best_pitch_UV2 = _src_pitch_arr[2];
   }
   else // ref block
@@ -6964,12 +7086,12 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
   if (_out16_flag) {
     // copy 8 bit source to 16bit target
     plane_copy_8_to_16_c(
-      pDstCur + (xx << pixelsize_output_shift), iDstPitch, // is +xx << pix_out_sh valid for out16 ? same below
+      pDstCur, iDstPitch, // is +xx << pix_out_sh valid for out16 ? same below
       best_data_ptr, best_pitch, nBlkSizeX, nBlkSizeY);
   }
   else
   {
-    BitBlt(pDstCur + xx, iDstPitch,
+    BitBlt(pDstCur, iDstPitch,
       best_data_ptr, best_pitch, nBlkSizeX, nBlkSizeY);
   }
 
@@ -6977,13 +7099,13 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
   if (_out16_flag) {
     // copy 8 bit source to 16bit target
     plane_copy_8_to_16_c(
-      pDstCurUV1 + (xx_uv << pixelsize_output_shift), iDstUV1Pitch,
+      pDstCurUV1, iDstUV1Pitch,
       best_data_ptrUV1, best_pitch_UV1,
       rowwidthUV, rowsizeUV
     );
   }
   else {
-    BitBlt(pDstCurUV1 + xx_uv, iDstUV1Pitch,
+    BitBlt(pDstCurUV1, iDstUV1Pitch,
       best_data_ptrUV1, best_pitch_UV1,
       rowwidthUV, rowsizeUV);
   }
@@ -6992,14 +7114,14 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
   if (_out16_flag) {
     // copy 8 bit source to 16bit target
     plane_copy_8_to_16_c(
-      pDstCurUV2 + (xx_uv << pixelsize_output_shift), iDstUV2Pitch,
+      pDstCurUV2, iDstUV2Pitch,
       best_data_ptrUV2, best_pitch_UV2,
       rowwidthUV, rowsizeUV
     );
   }
   else {
     BitBlt(
-      pDstCurUV2 + xx_uv, iDstUV2Pitch,
+      pDstCurUV2, iDstUV2Pitch,
       best_data_ptrUV2, best_pitch_UV2,
       rowwidthUV, rowsizeUV);
   }
