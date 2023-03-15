@@ -50,7 +50,7 @@ public:
     int UseSubShift, int InterpolateOverlap, ::PClip _mvmultirs, int _thFWBWmvpos,
     int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
     int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR,
-    int _MPB_MVlth, int _pmode, int _MEL_DMFlags, int _MEL_thUPD, int _MEL_BAS,
+    int _MPB_MVlth, int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -234,8 +234,8 @@ private:
   DisMetric* DM_Luma;
   DisMetric* DM_Chroma;
 
-  DisMetric* DM_MEL_Luma;
-  DisMetric* DM_MEL_Chroma;
+  DisMetric* DM_TTH_Luma;
+  DisMetric* DM_TTH_Chroma;
 
   bool bthLC_diff;
 
@@ -288,9 +288,10 @@ private:
   COVARFunction* COVARCHROMA;
 
   PMode pmode;
-  int MEL_DMFlags;
-  int MEL_thUPD;
-  int MEL_BAS;
+  int TTH_DMFlags;
+  int TTH_thUPD;
+  int TTH_BAS;
+  bool TTH_chroma;
   BlockArea** BA_Yarr;
   BlockArea** BA_UV1arr;
   BlockArea** BA_UV2arr;
@@ -368,6 +369,7 @@ private:
   //MEL debug stat
   int iMEL_non_zero_blocks;
   int iMEL_mem_hits;
+  int iMEL_mem_updates;
 #endif
 
   MV_FORCEINLINE void CopyBlock(uint8_t* pDst, int iDstPitch, uint8_t* pSrc, int iBlkWidth, int iBlkHeight);

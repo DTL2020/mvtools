@@ -762,7 +762,7 @@ MDegrainN::MDegrainN(
   int UseSubShift, int InterpolateOverlap, PClip _mvmultirs, int _thFWBWmvpos,
   int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
   int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR, int _MPB_MVlth,
-  int _pmode, int _MEL_DMFlags, int _MEL_thUPD, int _MEL_BAS,
+  int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -837,9 +837,10 @@ MDegrainN::MDegrainN(
   , MPB_DMFlags(_MPB_DMFlags)
   , MPB_MVlth(_MPB_MVlth)
   , pmode((PMode)_pmode)
-  , MEL_DMFlags(_MEL_DMFlags)
-  , MEL_thUPD(_MEL_thUPD)
-  , MEL_BAS(_MEL_BAS)
+  , TTH_DMFlags(_TTH_DMFlags)
+  , TTH_thUPD(_TTH_thUPD)
+  , TTH_BAS(_TTH_BAS)
+  , TTH_chroma(_TTH_chroma)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -1193,8 +1194,8 @@ MDegrainN::MDegrainN(
   DM_Luma = new DisMetric(nBlkSizeX, nBlkSizeY, bits_per_pixel, pixelsize, arch, MPB_DMFlags);
   DM_Chroma = new DisMetric(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits_per_pixel, pixelsize, arch, MPB_DMFlags);
 
-  DM_MEL_Luma = new DisMetric(nBlkSizeX, nBlkSizeY, bits_per_pixel, pixelsize, arch, MEL_DMFlags);
-  DM_MEL_Chroma = new DisMetric(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits_per_pixel, pixelsize, arch, MEL_DMFlags);
+  DM_TTH_Luma = new DisMetric(nBlkSizeX, nBlkSizeY, bits_per_pixel, pixelsize, arch, TTH_DMFlags);
+  DM_TTH_Chroma = new DisMetric(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits_per_pixel, pixelsize, arch, TTH_DMFlags);
 
 
 // C only -> NO_SIMD
@@ -1413,9 +1414,9 @@ MDegrainN::MDegrainN(
 
     for (int i = 0; i < nBlkCount; i++)
     {
-      BA_Yarr[i] = new BlockArea(nBlkSizeX, nBlkSizeY, MEL_BAS, pixelsize, nPel, arch, MEL_DMFlags);
-      BA_UV1arr[i] = new BlockArea(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, MEL_BAS, pixelsize, nPel, arch, MEL_DMFlags);
-      BA_UV2arr[i] = new BlockArea(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, MEL_BAS, pixelsize, nPel, arch, MEL_DMFlags);
+      BA_Yarr[i] = new BlockArea(nBlkSizeX, nBlkSizeY, TTH_BAS, pixelsize, nPel, arch, TTH_DMFlags);
+      BA_UV1arr[i] = new BlockArea(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, TTH_BAS, pixelsize, nPel, arch, TTH_DMFlags);
+      BA_UV2arr[i] = new BlockArea(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, TTH_BAS, pixelsize, nPel, arch, TTH_DMFlags);
     }
 
   }
@@ -1782,6 +1783,35 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
             *this,
             &MDegrainN::process_luma_and_chroma_normal_slice 
           );
+
+          // finish and return !
+          if (_nlimit < 255)
+          {
+            nlimit_luma();
+          }
+
+          if (_nlimitc < 255)
+          {
+            nlimit_chroma(1);
+            nlimit_chroma(2);
+          }
+
+#ifndef _M_X64 
+          _mm_empty(); // (we may use double-float somewhere) Fizick
+#endif
+
+          PROFILE_STOP(MOTION_PROFILE_COMPENSATION);
+
+          if ((pixelType & VideoInfo::CS_YUY2) == VideoInfo::CS_YUY2 && !_planar_flag)
+          {
+            YUY2FromPlanes(
+              pDstYUY2, nDstPitchYUY2, nWidth, nHeight * _height_lsb_or_out16_mul,
+              _dst_ptr_arr[0], _dst_pitch_arr[0],
+              _dst_ptr_arr[1], _dst_ptr_arr[2], _dst_pitch_arr[1], _cpuFlags);
+          }
+
+          return (dst); // here is end of YUV single pass proc and GetFrame additional return
+
         }
         else
         {
@@ -2547,8 +2577,12 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
   int effective_nDstPitchUV2 = (nBlkSizeY >> nLogyRatioUV_super)* _dst_pitch_arr[2]; // pitch is short granularity
 
 #ifdef _DEBUG
-  iMEL_non_zero_blocks = 0;
-  iMEL_mem_hits = 0;
+  if (pmode == PM_MEL)
+  {
+    iMEL_non_zero_blocks = 0;
+    iMEL_mem_hits = 0;
+    iMEL_mem_updates = 0;
+  }
 #endif
 
   for (int by = td._y_beg; by < td._y_end; ++by)
@@ -2568,7 +2602,12 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
       int i = by * nBlkX + bx;
 
 #ifdef _DEBUG
-      if ((bx == 10) && (by == 10))
+      if ((bx == 0) && (by == 0) && (pmode == PM_MEL))
+      {
+        int idbr = 0;
+      }
+
+      if (pmode == PM_MEL)
       {
         int idbr = 0;
       }
@@ -2747,24 +2786,24 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
           );
         }
       } // pmode BLEND end
-      else 
+      else
       {
-      /*
-          BYTE* pDstCur, int iDstPitch,
-    const BYTE* pSrcCur,
-    BYTE* pDstCurUV1, int iDstUV1Pitch,
-    const BYTE* pSrcCurUV1,
-    BYTE* pDstCurUV2, int iDstUV2Pitch,
-    const BYTE* pSrcCurUV2,
-    int xx, int xx_uv, int ibx, int iby, int iBlkNum
-      */
-          MEL_LC(pDstCur, _dst_pitch_arr[0],
-            pSrcCur,
-            pDstCurUV1, _dst_pitch_arr[1],
-            pSrcCurUV1,
-            pDstCurUV2, _dst_pitch_arr[2],
-            pSrcCurUV2,
-            xx, xx_uv, bx, by, i);
+        /*
+            BYTE* pDstCur, int iDstPitch,
+      const BYTE* pSrcCur,
+      BYTE* pDstCurUV1, int iDstUV1Pitch,
+      const BYTE* pSrcCurUV1,
+      BYTE* pDstCurUV2, int iDstUV2Pitch,
+      const BYTE* pSrcCurUV2,
+      int xx, int xx_uv, int ibx, int iby, int iBlkNum
+        */
+        MEL_LC(pDstCur, _dst_pitch_arr[0],
+          pSrcCur,
+          pDstCurUV1, _dst_pitch_arr[1],
+          pSrcCurUV1,
+          pDstCurUV2, _dst_pitch_arr[2],
+          pSrcCurUV2,
+          xx, xx_uv, bx, by, i);
       } // pmode MEL select end
 
       xx += (nBlkSizeX); // xx: indexing offset
@@ -2788,7 +2827,7 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
             (nWidth - _covered_width) << pixelsize_super_shift, nBlkSizeY);
         }
       }
-      
+
       // first chroma plane right non-covered
       if (bx == nBlkX - 1 && _covered_width < nWidth) // right non-covered region
       {
@@ -2830,7 +2869,7 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
           );
         }
       }
-      
+
     }	// for bx
 
     pDstCur += rowsize * _dst_pitch_arr[0];
@@ -2898,9 +2937,13 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
   }	// for by
 
 #ifdef _DEBUG
-  float fRatioMEL_nz_blocks = (float)iMEL_non_zero_blocks / (float)nBlkCount;
-  float fRatioMEL_hits_blocks = (float)iMEL_mem_hits / (float)nBlkCount;
-  int idbr=0;
+  if (pmode == PM_MEL)
+  {
+    float fRatioMEL_nz_blocks = (float)iMEL_non_zero_blocks / (float)nBlkCount;
+    float fRatioMEL_hits_blocks = (float)iMEL_mem_hits / (float)nBlkCount;
+    float fRatioMEL_updates_blocks = (float)iMEL_mem_updates / (float)nBlkCount;
+    int idbr = 0;
+  }
 #endif
 
 }
@@ -3995,9 +4038,13 @@ MV_FORCEINLINE void MDegrainN::use_block_yuv_mel(const BYTE*& pY, int& npY, cons
     }
 
     // check initial dismetric - if above thSAD - replace with current src block
-    int idm_chroma = ScaleSadChroma(DM_MEL_Chroma->GetDisMetric(src_ptrUV1 + xx, src_pitchUV1, pUV1, npUV1)
-      + DM_MEL_Chroma->GetDisMetric(src_ptrUV2 + xx, src_pitchUV2, pUV2, npUV2), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
-    int idm_luma = DM_MEL_Luma->GetDisMetric(src_ptrY + xx, src_pitchY, pY, npY);
+    int idm_chroma = 0;
+    if (TTH_chroma)
+    {
+      idm_chroma = ScaleSadChroma(DM_TTH_Chroma->GetDisMetric(src_ptrUV1 + xx, src_pitchUV1, pUV1, npUV1)
+        + DM_TTH_Chroma->GetDisMetric(src_ptrUV2 + xx, src_pitchUV2, pUV2, npUV2), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
+    }
+    int idm_luma = DM_TTH_Luma->GetDisMetric(src_ptrY + xx, src_pitchY, pY, npY);
     int idm = idm_luma + idm_chroma;
 
     if (idm > c_info._thsad) // use hard thresholding, set to current frame block
@@ -6704,6 +6751,12 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
         continue;
       }
 
+      // calc table triangle first (performance optimization)
+      if ( dmt_col > dmt_row)
+      {
+        continue;
+      }
+
       // 0 is current src block ? 1,2,3,4,... -1, +1, -2, +2, blocks in total tr-pool ?
       const BYTE* row_data_ptr;
       const BYTE* row_data_ptrUV1;
@@ -6767,11 +6820,32 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
       }
 
       // calculate relative dismetric of dmt_row with dmt_col blocks
-      int idm_chroma = ScaleSadChroma(DM_MEL_Chroma->GetDisMetric(row_data_ptrUV1, row_pitch_UV1, col_data_ptrUV1, col_pitch_UV1)
-        + DM_MEL_Chroma->GetDisMetric(row_data_ptrUV2, row_pitch_UV2, col_data_ptrUV2, col_pitch_UV2), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
-      int idm_luma = DM_MEL_Luma->GetDisMetric(row_data_ptr, row_pitch, col_data_ptr, col_pitch);
+      int idm_chroma = 0;
+      if (TTH_chroma)
+      {
+        idm_chroma = ScaleSadChroma(DM_TTH_Chroma->GetDisMetric(row_data_ptrUV1, row_pitch_UV1, col_data_ptrUV1, col_pitch_UV1)
+          + DM_TTH_Chroma->GetDisMetric(row_data_ptrUV2, row_pitch_UV2, col_data_ptrUV2, col_pitch_UV2), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
+      }
+      int idm_luma = DM_TTH_Luma->GetDisMetric(row_data_ptr, row_pitch, col_data_ptr, col_pitch);
       DM_table[dmt_row][dmt_col] = idm_luma + idm_chroma;
 
+    }
+  }
+
+  // restore full table each row
+  for (int dmt_row = 0; dmt_row < (_trad * 2 + 1); dmt_row++)
+  {
+    for (int dmt_col = 0; dmt_col < (_trad * 2 + 1); dmt_col++)
+    {
+      if (dmt_row == dmt_col)
+      { // block with itself
+        continue;
+      }
+
+      if (dmt_col > dmt_row)
+      {
+        DM_table[dmt_row][dmt_col] = DM_table[dmt_col][dmt_row];
+      }
     }
   }
 
@@ -6838,15 +6912,16 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
   }
 
   // IIR - check if memory block is still good
-  int idm_chroma = ScaleSadChroma(DM_MEL_Chroma->GetDisMetric(best_data_ptrUV1, best_pitch_UV1, pUV1mem, UV1mem_pitch)
-    + DM_MEL_Chroma->GetDisMetric(best_data_ptrUV2, best_pitch_UV1, pUV2mem, UV2mem_pitch), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
-/*  int idm_chr1 = DM_MEL_Chroma->GetDisMetric(best_data_ptrUV1, best_pitch_UV1, pUV1mem, UV1mem_pitch);
-  int idm_chr2 = DM_MEL_Chroma->GetDisMetric(best_data_ptrUV2, best_pitch_UV2, pUV2mem, UV2mem_pitch);
-  int idm_chroma = ScaleSadChroma(idm_chr1 + idm_chr2, _mv_clip_arr[0]._clip_sptr->chromaSADScale);*/
-  int idm_luma = DM_MEL_Luma->GetDisMetric(best_data_ptr, best_pitch, pYmem, Ymem_pitch);
+  int idm_chroma = 0;
+  if (TTH_chroma)
+  {
+    idm_chroma = ScaleSadChroma(DM_TTH_Chroma->GetDisMetric(best_data_ptrUV1, best_pitch_UV1, pUV1mem, UV1mem_pitch)
+      + DM_TTH_Chroma->GetDisMetric(best_data_ptrUV2, best_pitch_UV1, pUV2mem, UV2mem_pitch), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
+  }
+  int idm_luma = DM_TTH_Luma->GetDisMetric(best_data_ptr, best_pitch, pYmem, Ymem_pitch);
   int idm_mem = idm_chroma + idm_luma;
 
-  if (idm_mem < MEL_thUPD)
+  if (idm_mem < TTH_thUPD)
   {
     //mem still good - output mem block
     best_data_ptr = pYmem;
@@ -6878,10 +6953,13 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
       rowwidthUV, rowsizeUV);
 
     // use best_* ptrs for output
+#ifdef _DEBUG
+    iMEL_mem_updates++;
+#endif
   }
 
   
-  // copy block of idx_minrow as output block
+  // copy block of best_ ptrs as output block
   // luma
   if (_out16_flag) {
     // copy 8 bit source to 16bit target
