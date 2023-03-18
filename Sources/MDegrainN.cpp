@@ -1412,11 +1412,15 @@ MDegrainN::MDegrainN(
     BA_UV1arr = new BlockArea* [nBlkCount];
     BA_UV2arr = new BlockArea* [nBlkCount];
 
+    DM_cache_arr = new DM_cache * [nBlkCount];
+
     for (int i = 0; i < nBlkCount; i++)
     {
       BA_Yarr[i] = new BlockArea(nBlkSizeX, nBlkSizeY, TTH_BAS, pixelsize, nPel, arch, TTH_DMFlags);
       BA_UV1arr[i] = new BlockArea(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, TTH_BAS, pixelsize, nPel, arch, TTH_DMFlags);
       BA_UV2arr[i] = new BlockArea(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, TTH_BAS, pixelsize, nPel, arch, TTH_DMFlags);
+
+      DM_cache_arr[i] = new DM_cache(((trad * 2 + 1) * (trad * 2 + 1)) / 2);
     }
 
   }
@@ -1507,6 +1511,8 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
   const unsigned char *pSrcYUY2;
   int nDstPitchYUY2;
   int nSrcPitchYUY2;
+
+  iFrameNumRequested = n;// save to local var to use in DM cache
 
   for (int k2 = 0; k2 < _trad * 2; ++k2)
   {
@@ -6767,6 +6773,19 @@ MV_FORCEINLINE void MDegrainN::MPB_LC(
   );
 }
 
+MV_FORCEINLINE int MDegrainN::abs_frame_offset(int index)
+{
+  assert(index >= 0);
+  assert(index <= _trad * 2);
+  // 0 is current frame,
+  // convert 1,2,3,4 to
+  // -1, +1, -2, +2,...
+  const int iSign = (index & 0x1) ? -1 : 1;
+
+  return ((index + 1) >> 1) * iSign;
+
+}
+
 MV_FORCEINLINE void MDegrainN::MEL_LC(
   BYTE* pDstCur, int iDstPitch,
   const BYTE* pSrcCur,
@@ -6783,6 +6802,8 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
   int Ymem_pitch = nBlkSizeY * pixelsize;
   int UV1mem_pitch = (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
   int UV2mem_pitch = (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
+
+  DM_cache* dmc = DM_cache_arr[iBlkNum];
 
   const int rowsizeUV = nBlkSizeY >> nLogyRatioUV_super; // bad name. it's height really
   const int rowwidthUV = nBlkSizeX >> nLogxRatioUV_super; // bad name. it's width really
@@ -6941,15 +6962,30 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
         col_pitch_UV2 = pitch_arrUV2[dmt_col - 1];
       }
 
-      // calculate relative dismetric of dmt_row with dmt_col blocks
-      int idm_chroma = 0;
-      if (TTH_chroma)
+      // check cached DM:
+      int iFr0 = iFrameNumRequested + abs_frame_offset(dmt_row);
+      int iFr1 = iFrameNumRequested + abs_frame_offset(dmt_col);
+
+      int iDM;
+
+      if (!dmc->Get(iFr0, iFr1, &iDM)) // frame pair DM not yet cached
       {
-        idm_chroma = ScaleSadChroma(DM_TTH_Chroma->GetDisMetric(row_data_ptrUV1, row_pitch_UV1, col_data_ptrUV1, col_pitch_UV1)
-          + DM_TTH_Chroma->GetDisMetric(row_data_ptrUV2, row_pitch_UV2, col_data_ptrUV2, col_pitch_UV2), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
+        // calculate relative dismetric of dmt_row with dmt_col blocks
+        int idm_chroma = 0;
+        if (TTH_chroma)
+        {
+          idm_chroma = ScaleSadChroma(DM_TTH_Chroma->GetDisMetric(row_data_ptrUV1, row_pitch_UV1, col_data_ptrUV1, col_pitch_UV1)
+            + DM_TTH_Chroma->GetDisMetric(row_data_ptrUV2, row_pitch_UV2, col_data_ptrUV2, col_pitch_UV2), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
+        }
+        int idm_luma = DM_TTH_Luma->GetDisMetric(row_data_ptr, row_pitch, col_data_ptr, col_pitch);
+        iDM = idm_luma + idm_chroma;
+
+        // also push new value to cache
+        dmc->PushNew(iFr0, iFr1, iDM);
       }
-      int idm_luma = DM_TTH_Luma->GetDisMetric(row_data_ptr, row_pitch, col_data_ptr, col_pitch);
-      DM_table[dmt_row][dmt_col] = idm_luma + idm_chroma;
+
+//      DM_table[dmt_row][dmt_col] = idm_luma + idm_chroma;
+        DM_table[dmt_row][dmt_col] = iDM;
 
     }
   }

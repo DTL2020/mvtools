@@ -16,6 +16,7 @@
 #include "MVInterface.h"
 #include "DisMetric.h"
 #include "BlockArea.h"
+#include "dm_cache.h"
 
 #include	<memory>
 #include	<vector>
@@ -295,6 +296,10 @@ private:
   BlockArea** BA_Yarr;
   BlockArea** BA_UV1arr;
   BlockArea** BA_UV2arr;
+
+  DM_cache** DM_cache_arr;
+  int iFrameNumRequested;
+  MV_FORCEINLINE int abs_frame_offset(int index);
 
   uint8_t* pMELmemY;
   uint8_t* pMELmemUV1;
