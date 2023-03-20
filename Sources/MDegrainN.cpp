@@ -1420,7 +1420,7 @@ MDegrainN::MDegrainN(
       BA_UV1arr[i] = new BlockArea(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, TTH_BAS, pixelsize, nPel, arch, TTH_DMFlags);
       BA_UV2arr[i] = new BlockArea(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, TTH_BAS, pixelsize, nPel, arch, TTH_DMFlags);
 
-      DM_cache_arr[i] = new DM_cache(((trad * 2 + 1) * (trad * 2 + 1)) / 2);
+      DM_cache_arr[i] = new DM_cache(((_trad * 2 + 1) * (_trad * 2 + 1)) / 2);
     }
 
   }
@@ -1483,6 +1483,8 @@ MDegrainN::~MDegrainN()
       delete BA_Yarr[i];
       delete BA_UV1arr[i];
       delete BA_UV2arr[i];
+
+      delete DM_cache_arr[i];
     }
   }
 
@@ -6804,6 +6806,9 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
   int UV2mem_pitch = (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
 
   DM_cache* dmc = DM_cache_arr[iBlkNum];
+#ifdef _DEBUG
+  iDM_cache_hits = 0;
+#endif
 
   const int rowsizeUV = nBlkSizeY >> nLogyRatioUV_super; // bad name. it's height really
   const int rowwidthUV = nBlkSizeX >> nLogxRatioUV_super; // bad name. it's width really
@@ -6968,6 +6973,7 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
 
       int iDM;
 
+      // DM-cached process
       if (!dmc->Get(iFr0, iFr1, &iDM)) // frame pair DM not yet cached
       {
         // calculate relative dismetric of dmt_row with dmt_col blocks
@@ -6983,10 +6989,27 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
         // also push new value to cache
         dmc->PushNew(iFr0, iFr1, iDM);
       }
+      else
+      {
+#ifdef _DEBUG
+        iDM_cache_hits++;
+#endif
+      }
 
-//      DM_table[dmt_row][dmt_col] = idm_luma + idm_chroma;
         DM_table[dmt_row][dmt_col] = iDM;
 
+#if 0
+        // test no-DM cache
+        int idm_chroma = 0;
+        if (TTH_chroma)
+        {
+          idm_chroma = ScaleSadChroma(DM_TTH_Chroma->GetDisMetric(row_data_ptrUV1, row_pitch_UV1, col_data_ptrUV1, col_pitch_UV1)
+            + DM_TTH_Chroma->GetDisMetric(row_data_ptrUV2, row_pitch_UV2, col_data_ptrUV2, col_pitch_UV2), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
+        }
+        int idm_luma = DM_TTH_Luma->GetDisMetric(row_data_ptr, row_pitch, col_data_ptr, col_pitch);
+
+        DM_table[dmt_row][dmt_col] = idm_luma + idm_chroma;
+#endif
     }
   }
 

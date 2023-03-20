@@ -16,32 +16,33 @@
 // http://www.gnu.org/copyleft/gpl.html .
 
 #include "dm_cache.h"
+#include <malloc.h>
 
-DM_cache::DM_cache(int size)
+DM_cache::DM_cache(int _size)
 {
-  pBuff = new DM2FRAMES[size];
+  size = _size;
+  pBuff = (DM2FRAMES*)malloc(sizeof(DM2FRAMES) * size);
 
   Invalidate();
 }
 
 DM_cache::~DM_cache()
 {
-  delete pBuff;
+  free(pBuff);
 }
 
 void DM_cache::Invalidate(void)
 {
-  for (int i = 0; i < size; ++i)
+  for (int i = 0; i < size; i++)
   {
     pBuff[i].bValid = false;
   }
 }
 
-
 bool DM_cache::Get(int iFr0, int iFr1, int *iDM)
 {
   // search over all buff to find this frames pair (both forward or backward DM)
-  for (int i = 0; i < size; ++i)
+  for (int i = 0; i < size; i++)
   {
     if (((pBuff[i].fr0 == iFr0) && (pBuff[i].fr1 == iFr1) || (pBuff[i].fr0 == iFr1) && (pBuff[i].fr1 == iFr0)) && pBuff[i].bValid)
     {
@@ -57,7 +58,7 @@ void DM_cache::PushNew(int iFr0, int iFr1, int iDM)
 {
   // make shift to 1 value to the beginning of list
   // skip first storage
-  for (int i = 0; i < size - 2; ++i)
+  for (int i = 0; i < size - 1; i++)
   {
     pBuff[i] = pBuff[i + 1]; // do = opertor copy all ?
   }

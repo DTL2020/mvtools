@@ -39,7 +39,7 @@ class DM_cache
   DM2FRAMES* pBuff;
 
 public:
-  DM_cache(int size);
+  DM_cache(int _size);
   ~DM_cache();
 
 bool Get(int iFr0, int iFr1, int* iDM);

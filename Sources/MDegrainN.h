@@ -375,6 +375,7 @@ private:
   int iMEL_non_zero_blocks;
   int iMEL_mem_hits;
   int iMEL_mem_updates;
+  int iDM_cache_hits;
 #endif
 
   MV_FORCEINLINE void CopyBlock(uint8_t* pDst, int iDstPitch, uint8_t* pSrc, int iBlkWidth, int iBlkHeight);

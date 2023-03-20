@@ -1741,6 +1741,7 @@
     <ClCompile Include="DCTINT.cpp" />
     <ClCompile Include="DescriptorHeap.cpp" />
     <ClCompile Include="DisMetric.cpp" />
+    <ClCompile Include="dm_cache.cpp" />
     <ClCompile Include="DWTFunctions.cpp" />
     <ClCompile Include="FakeBlockData.cpp" />
     <ClCompile Include="FakeGroupOfPlanes.cpp" />
@@ -1926,6 +1927,7 @@
     <ClInclude Include="def.h" />
     <ClInclude Include="DescriptorHeap.h" />
     <ClInclude Include="DisMetric.h" />
+    <ClInclude Include="dm_cache.h" />
     <ClInclude Include="DWTFunctions.h" />
     <ClInclude Include="FakeBlockData.h" />
     <ClInclude Include="FakeGroupOfPlanes.h" />
