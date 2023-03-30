@@ -34,6 +34,8 @@
 #include <cassert>
 #include "emmintrin.h"
 
+MV_FORCEINLINE unsigned int SADABS(int x) { return (x < 0) ? -x : x; }
+
 unsigned int mvt_pixel_sad_8x8_avx512(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
 unsigned int mvt_pixel_sad_16x16_avx512(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
 

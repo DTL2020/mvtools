@@ -7,7 +7,7 @@
 #include "def.h"
 #include <immintrin.h>
 
-MV_FORCEINLINE unsigned int SADABS(int x) {	return ( x < 0 ) ? -x : x; }
+//MV_FORCEINLINE unsigned int SADABS(int x) {	return ( x < 0 ) ? -x : x; } - moved to header for MCompensate and MDegrainN
 //inline unsigned int SADABS(int x) {	return ( x < -16 ) ? 16 : ( x < 0 ) ? -x : ( x > 16) ? 16 : x; }
 
 template<int nBlkWidth, int nBlkHeight, typename pixel_t>

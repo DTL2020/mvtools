@@ -9,9 +9,10 @@
 #include "overlap.h"
 #include "SharedPtr.h"
 #include "yuy2planes.h"
+#include "info.h"
+#include "SADFunctions.h"
 
 #include	<vector>
-
 
 
 class MVGroupOfFrames;
@@ -29,7 +30,7 @@ public:
   MVCompensate(
     PClip _child, PClip _super, PClip vectors, bool sc, double _recursionPercent,
     sad_t thsad, bool _fields, double _time100, sad_t nSCD1, int nSCD2, bool isse2, bool _planar,
-    bool mt_flag, int trad, bool center_flag, PClip cclip_sptr, sad_t thsad2,
+    bool mt_flag, int trad, bool center_flag, PClip cclip_sptr, sad_t thsad2, bool showRNB,
     IScriptEnvironment* env_ptr
   );
   ~MVCompensate();
@@ -105,6 +106,8 @@ private:
   bool           _center_flag;  // Indicates if the output frames should be in the order -tr, ..., -1, C, +1, ..., +tr (true) or -1, +1, -2, +2,..., -tr, +tr (false).
 
   bool           _mt_flag;
+
+  bool           _RNB; // 2.7.46 - residual noise bitrate calculate and display
 
   // Processing variables
   MVClip *       _mv_clip_ptr;  // Vector clip used to process this frame

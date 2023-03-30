@@ -6967,6 +6967,7 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
         col_pitch_UV2 = pitch_arrUV2[dmt_col - 1];
       }
 
+#if 0 // cache usage temporarily excluded from release - need cache fetching (management) method improuvement, esa search too slow
       // check cached DM:
       int iFr0 = iFrameNumRequested + abs_frame_offset(dmt_row);
       int iFr1 = iFrameNumRequested + abs_frame_offset(dmt_col);
@@ -6997,9 +6998,10 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
       }
 
         DM_table[dmt_row][dmt_col] = iDM;
+#endif
 
-#if 0
-        // test no-DM cache
+//#if 0
+        // no-DM cache
         int idm_chroma = 0;
         if (TTH_chroma)
         {
@@ -7009,7 +7011,7 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
         int idm_luma = DM_TTH_Luma->GetDisMetric(row_data_ptr, row_pitch, col_data_ptr, col_pitch);
 
         DM_table[dmt_row][dmt_col] = idm_luma + idm_chroma;
-#endif
+//#endif
     }
   }
 

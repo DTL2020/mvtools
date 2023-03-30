@@ -17,6 +17,7 @@
 #include "DisMetric.h"
 #include "BlockArea.h"
 #include "dm_cache.h"
+#include "SADFunctions.h"
 
 #include	<memory>
 #include	<vector>
@@ -449,8 +450,6 @@ private:
 };
 
 MV_FORCEINLINE int DegrainWeightN(int thSAD, double thSAD_pow, int blockSAD, int wpow);
-
-MV_FORCEINLINE unsigned int SADABS(int x) { return (x < 0) ? -x : x; }
 
 
 #endif
