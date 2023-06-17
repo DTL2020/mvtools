@@ -1451,12 +1451,18 @@ MDegrainN::MDegrainN(
     if (!vi_dnmask.IsY8())
       env_ptr->ThrowError("MDegrainN: dnmask clip must be Y8 format only!");
 
+    /* TODO - make samples mode also
     if ((vi_dnmask.width == nWidth) && (vi_dnmask.height == nHeight))
       dn_mm = DN_MM_SAMPLES;
     else if ((vi_dnmask.width == nBlkX) && (vi_dnmask.height == nBlkY))
       dn_mm = DN_MM_BLOCKS;
     else
-      env_ptr->ThrowError("MDegrainN: dnmask clip size must be either equal to super clip size for sample-based mode or block W and H count in block-based mode (full block count with overlap) !");
+      env_ptr->ThrowError("MDegrainN: dnmask clip size must be either equal to input clip size for sample-based mode or block W and H count in block-based mode (full block count with overlap) !");
+      */
+    if ((vi_dnmask.width == nBlkX) && (vi_dnmask.height == nBlkY))
+      dn_mm = DN_MM_BLOCKS;
+    else
+      env_ptr->ThrowError("MDegrainN: dnmask clip frame size must be of blocks horizontal and vertical count in block-based mode (full block count in current overlap mode used) ! \n Current blocks count H=%d V=%d", nBlkX, nBlkY);
   }
   else
     dn_mm = DN_MM_NONE;
@@ -1566,6 +1572,8 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
   if (dn_mm != DN_MM_NONE)
   {
     src_dnmask = dnmask->GetFrame(n, env_ptr);
+    dnmask_pitch = YPITCH(src_dnmask);
+    pDNMask = (BYTE*)YRPLAN(src_dnmask);
   }
 
   PVideoFrame src = child->GetFrame(n, env_ptr);
@@ -2175,14 +2183,6 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
   BYTE *pDstCur = _dst_ptr_arr[0] + td._y_beg * rowsize * _dst_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
   const BYTE *pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
 
-  BYTE* pDNMask;
-  int dnmask_pitch;
-  if (dn_mm != DN_MM_NONE)
-  {
-    dnmask_pitch = YPITCH(src_dnmask);
-    pDNMask = (BYTE*)YRPLAN(src_dnmask);
-  }
-
   for (int by = td._y_beg; by < td._y_end; ++by)
   {
     int xx = 0; // logical offset. Mul by 2 for pixelsize_super==2. Don't mul for indexing int* array
@@ -2450,14 +2450,6 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
   const int tmpPitch = nBlkSizeX;
   assert(tmpPitch <= TmpBlock::MAX_SIZE);
 
-  BYTE* pDNMask;
-  int dnmask_pitch;
-  if (dn_mm != DN_MM_NONE)
-  {
-    dnmask_pitch = YPITCH(src_dnmask);
-    pDNMask = (BYTE*)YRPLAN(src_dnmask);
-  }
-
   for (int by = y_beg; by < y_end; ++by)
   {
     // indexing overlap windows weighting table: top=0 middle=3 bottom=6
@@ -2622,14 +2614,6 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
   const int rowsize = nBlkSizeY;
   BYTE* pDstCur = _dst_ptr_arr[0] + td._y_beg * rowsize * _dst_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
   const BYTE* pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
-
-  BYTE* pDNMask;
-  int dnmask_pitch;
-  if (dn_mm != DN_MM_NONE)
-  {
-    dnmask_pitch = YPITCH(src_dnmask);
-    pDNMask = (BYTE*)YRPLAN(src_dnmask);
-  }
 
   const int rowsizeUV = nBlkSizeY >> nLogyRatioUV_super; // bad name. it's height really
   BYTE* pDstCurUV1 = _dst_ptr_arr[1] + td._y_beg * rowsizeUV * _dst_pitch_arr[1];
@@ -3100,14 +3084,6 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
   int* pDstInt = (_dst_int.empty()) ? 0 : &_dst_int[0] + y_beg * rowsize * _dst_int_pitch;
   const int tmpPitch = nBlkSizeX;
   assert(tmpPitch <= TmpBlock::MAX_SIZE);
-
-  BYTE* pDNMask;
-  int dnmask_pitch;
-  if (dn_mm != DN_MM_NONE)
-  {
-    dnmask_pitch = YPITCH(src_dnmask);
-    pDNMask = (BYTE*)YRPLAN(src_dnmask);
-  }
   
   // chroma
  
@@ -3587,14 +3563,6 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
   BYTE *pDstCur = _dst_ptr_arr[P] + td._y_beg * rowsize * _dst_pitch_arr[P];
   const BYTE *pSrcCur = _src_ptr_arr[P] + td._y_beg * rowsize * _src_pitch_arr[P];
 
-  BYTE* pDNMask;
-  int dnmask_pitch;
-  if (dn_mm != DN_MM_NONE)
-  {
-    dnmask_pitch = YPITCH(src_dnmask);
-    pDNMask = (BYTE*)YRPLAN(src_dnmask);
-  }
-
   int effective_nSrcPitch = (nBlkSizeY >> nLogyRatioUV_super) * _src_pitch_arr[P]; // pitch is byte granularity
   int effective_nDstPitch = (nBlkSizeY >> nLogyRatioUV_super) * _dst_pitch_arr[P]; // pitch is short granularity
 
@@ -3800,14 +3768,6 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
 
   const int rowsize = (nBlkSizeY - nOverlapY) >> nLogyRatioUV_super; // bad name. it's height really
   const BYTE *pSrcCur = _src_ptr_arr[P] + y_beg * rowsize * _src_pitch_arr[P];
-
-  BYTE* pDNMask;
-  int dnmask_pitch;
-  if (dn_mm != DN_MM_NONE)
-  {
-    dnmask_pitch = YPITCH(src_dnmask);
-    pDNMask = (BYTE*)YRPLAN(src_dnmask);
-  }
 
   uint16_t *pDstShort = (_dst_short.empty()) ? 0 : &_dst_short[0] + y_beg * rowsize * _dst_short_pitch;
   int *pDstInt = (_dst_int.empty()) ? 0 : &_dst_int[0] + y_beg * rowsize * _dst_int_pitch;

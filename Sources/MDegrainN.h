@@ -280,6 +280,9 @@ private:
   PClip dnmask;
   DN_Mask_Mode dn_mm;
   PVideoFrame src_dnmask;
+  BYTE* pDNMask;
+  int dnmask_pitch;
+
   static MV_FORCEINLINE void apply_dn_mask_weights(int wref_arr[], int trad, int iDN_MM_weight);
 
 
