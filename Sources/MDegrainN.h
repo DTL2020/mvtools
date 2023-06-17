@@ -31,6 +31,13 @@ enum PMode
   PM_MEL = 1,
 };
 
+enum DN_Mask_Mode
+{
+  DN_MM_NONE = 0,
+  DN_MM_BLOCKS = 1,
+  DN_MM_SAMPLES = 2,
+};
+
 class MVPlane;
 
 class MDegrainN
@@ -52,7 +59,7 @@ public:
     int UseSubShift, int InterpolateOverlap, ::PClip _mvmultirs, int _thFWBWmvpos,
     int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
     int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR,
-    int _MPB_MVlth, int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma,
+    int _MPB_MVlth, int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, ::PClip _dnmask,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -269,6 +276,12 @@ private:
   PClip mvmultivs;
   MV_FORCEINLINE void ProcessRSMVdata(void);
   int thFWBWmvpos;
+
+  PClip dnmask;
+  DN_Mask_Mode dn_mm;
+  PVideoFrame src_dnmask;
+  static MV_FORCEINLINE void apply_dn_mask_weights(int wref_arr[], int trad, int iDN_MM_weight);
+
 
   // Multi Pass Blending
   int MPBthSub;
