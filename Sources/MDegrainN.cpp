@@ -1398,16 +1398,34 @@ MDegrainN::MDegrainN(
   if (TTH_thUPD > 0) // TTH in some mode enabled
   {
     SIZE_T stSizeToAlloc = nBlkSizeX * nBlkSizeY * pixelsize * nBlkCount;
+    SIZE_T stSizeToAllocSum = nBlkCount * sizeof(int);
 
 #ifdef _WIN32
     pMELmemY = (uint8_t*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
     pMELmemUV1 = (uint8_t*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
     pMELmemUV2 = (uint8_t*)VirtualAlloc(0, stSizeToAlloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+
+    pMELmemYSum = (int*)VirtualAlloc(0, stSizeToAllocSum, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+    pMELmemUV1Sum = (int*)VirtualAlloc(0, stSizeToAllocSum, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+    pMELmemUV2Sum = (int*)VirtualAlloc(0, stSizeToAllocSum, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); // 4KByte page aligned address
+
 #else
     pMELmemY = new uint8_t[stSizeToAlloc];
     pMELmemUV1 = new uint8_t[stSizeToAlloc];
     pMELmemUV2 = new uint8_t[stSizeToAlloc];
+
+    pMELmemYSum = new int[stSizeToAllocSum];
+    pMELmemUV1Sum = new int[stSizeToAllocSum];
+    pMELmemUV2Sum = new int[stSizeToAllocSum];
 #endif
+
+    int iMaxSum = (trad * 2 + 1) * veryBigSAD; // do not overflow 32bit int ?
+    for (int i = 0; i < nBlkCount; i++)
+    {
+      pMELmemYSum[i] = iMaxSum;
+      pMELmemUV1Sum[i] = iMaxSum;
+      pMELmemUV2Sum[i] = iMaxSum;
+    }
 
     BA_Yarr = new BlockArea* [nBlkCount];
     BA_UV1arr = new BlockArea* [nBlkCount];
@@ -1496,10 +1514,20 @@ MDegrainN::~MDegrainN()
     VirtualFree((LPVOID)pMELmemY, 0, MEM_FREE);
     VirtualFree((LPVOID)pMELmemUV1, 0, MEM_FREE);
     VirtualFree((LPVOID)pMELmemUV2, 0, MEM_FREE);
+
+    VirtualFree((LPVOID)pMELmemYSum, 0, MEM_FREE);
+    VirtualFree((LPVOID)pMELmemUV1Sum, 0, MEM_FREE);
+    VirtualFree((LPVOID)pMELmemUV2Sum, 0, MEM_FREE);
+
 #else
     delete pMELmemY;
     delete pMELmemUV1;
     delete pMELmemUV2;
+
+    delete pMELmemYSum;
+    delete pMELmemUV1Sum;
+    delete pMELmemUV2Sum;
+
 #endif
 
     for (int i = 0; i < nBlkCount; ++i)
@@ -7191,7 +7219,7 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
   int idm_luma = DM_TTH_Luma->GetDisMetric(best_data_ptr, best_pitch, pYmem, Ymem_pitch);
   int idm_mem = idm_chroma + idm_luma;
 
-  if (idm_mem < TTH_thUPD)
+  if (idm_mem < TTH_thUPD && (i_sum_minrow >= pMELmemYSum[iby*nBlkX + ibx]))
   {
     //mem still good - output mem block
     best_data_ptr = pYmem;
@@ -7221,6 +7249,9 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
     BitBlt(pUV2mem, UV2mem_pitch,
       best_data_ptrUV2, best_pitch_UV2,
       rowwidthUV, rowsizeUV);
+
+    // update sum memory with lowest sum
+    pMELmemYSum[iby * nBlkX + ibx] = i_sum_minrow;
 
     // use best_* ptrs for output
 #ifdef _DEBUG

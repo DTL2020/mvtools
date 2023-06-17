@@ -322,6 +322,11 @@ private:
   uint8_t* pMELmemUV1;
   uint8_t* pMELmemUV2;
 
+  // memory for current stored blocks MEL sums (may be better to make structure with pMELmem, or add to BlockArea class ?)
+  int* pMELmemYSum;
+  int* pMELmemUV1Sum;
+  int* pMELmemUV2Sum;
+
   // single plane only
   MV_FORCEINLINE int AlignBlockWeights(const BYTE* pRef[], int Pitch[],
     const BYTE* pCurr, int iCurrPitch, int Wall[], int iBlkWidth,
