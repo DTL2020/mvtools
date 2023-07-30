@@ -763,6 +763,7 @@ MDegrainN::MDegrainN(
   int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
   int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR, int _MPB_MVlth,
   int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, PClip _dnmask,
+  float _thSADA_a, float _thSADA_b,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -842,6 +843,8 @@ MDegrainN::MDegrainN(
   , TTH_BAS(_TTH_BAS)
   , TTH_chroma(_TTH_chroma)
   , dnmask(_dnmask)
+  , thSADA_a(_thSADA_a)
+  , thSADA_b(_thSADA_b)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -993,6 +996,15 @@ MDegrainN::MDegrainN(
   thsadc = (uint64_t)thsadc  * mv_thscd1 / nscd1;	// chroma
   thsad2 = (uint64_t)thsad2  * mv_thscd1 / nscd1;
   thsadc2 = (uint64_t)thsadc2 * mv_thscd1 / nscd1;
+
+  thSAD_param_norm = thsad;
+  thSAD2_param_norm = thsad2;
+  thSADC_param_norm = thsadc;
+  thSADC2_param_norm = thsadc2;
+  fthSAD12_ratio = (float)thSAD2_param_norm / (float)thSAD_param_norm;
+  fthSADC12_ratio = (float)thSADC2_param_norm / (float)thSADC_param_norm;
+  fthSAD_LC_ratio = (float)thSADC_param_norm / (float)thSAD_param_norm;
+  thSCD1 = nscd1;
 
   if ((thsad != thsadc) || (thsad2 != thsadc2))
     bthLC_diff = true; // thSAD luma and chroma different - use separate DegrainWeight and normweights proc in YUV single pass processing
@@ -1606,7 +1618,7 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
 
   PVideoFrame src = child->GetFrame(n, env_ptr);
   PVideoFrame dst = has_at_least_v8 ? env_ptr->NewVideoFrameP(vi, &src) : env_ptr->NewVideoFrame(vi); // frame property support
-
+   
   if ((pixelType & VideoInfo::CS_YUY2) == VideoInfo::CS_YUY2)
   {
     if (!_planar_flag)
@@ -1805,6 +1817,10 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
 //  const BYTE* pSrcCur = _src_ptr_arr[0] + td._y_beg * rowsize * _src_pitch_arr[0]; // P.F. why *rowsize? (*nBlkSizeY)
 
   bYUVProc = (_planes_ptr[0][1] != 0) && (_planes_ptr[0][2] != 0);// colour planes exist, use single pass YUV proc for colour formats with colour processing
+
+   // check if auto-thSAD required
+  if ((thSADA_a != 0) || (thSADA_b != 0))
+    CalcAutothSADs();
 
     // it is currently faster to call once because of interconnectin of Y+UV via chroma blocks SADs,
   // will be faster with per-block processing may be only in the combined Y+UV colour data processing (possibly).
@@ -7330,4 +7346,78 @@ MV_FORCEINLINE float MDegrainN::DeltaDiAngle(VECTOR v1, VECTOR v2)
 
   return fmin(b - a, a - b + 4.0f);
 
+}
+
+MV_FORCEINLINE void MDegrainN::CalcAutothSADs(void)
+{
+  sad_t curr_thSAD = thSAD_param_norm;
+  sad_t curr_thSAD2 = thSAD2_param_norm;
+  sad_t curr_thSADC = thSADC_param_norm;
+  sad_t curr_thSADC2 = thSADC2_param_norm;
+
+  int k;
+  bool bNearFramesUsable = false;
+  if (_usable_flag_arr[0]) // try +1 frame
+  {
+    k = 0;
+    bNearFramesUsable = true;
+  }
+  else if (_usable_flag_arr[1]) // try -1 frame
+  {
+    k = 1;
+    bNearFramesUsable = true;
+  }
+
+  if (bNearFramesUsable)
+  {
+     VECTOR *pMV = pMVsWorkPlanesArrays[k];
+
+     int iSumSADs = 0;
+     int iCntSADs = 0;
+
+     for (int i = 0; i < nBlkCount; i++)
+     {
+       if (pMV[i].sad < thSCD1)
+       {
+         iSumSADs += pMV[i].sad;
+         iCntSADs++;
+       }
+     }
+
+     float fMeanBelowthSCD1_SAD = 0;
+
+     if (iCntSADs > 0)
+     {
+       fMeanBelowthSCD1_SAD = (float)iSumSADs / (float)iCntSADs;
+
+       float fthSAD = fMeanBelowthSCD1_SAD * thSADA_a + thSADA_b;
+
+       curr_thSAD = (int)(fthSAD);
+       curr_thSAD2 = (int)(fthSAD * fthSAD12_ratio);
+
+       curr_thSADC = (int)(fthSAD * fthSAD_LC_ratio);
+       curr_thSADC2 = (int)(fthSAD * fthSAD_LC_ratio * fthSADC12_ratio);
+
+     }
+  }
+
+  for (int k = 0; k < _trad * 2; ++k)
+  {
+    MvClipInfo& c_info = _mv_clip_arr[k];
+
+    // Computes the SAD thresholds for this source frame, a cosine-shaped
+    // smooth transition between thsad(c) and thsad(c)2.
+    const int		d = k / 2 + 1;
+    c_info._thsad = ClipFnc::interpolate_thsad(curr_thSAD, curr_thSAD2, d, _trad);
+    c_info._thsadc = ClipFnc::interpolate_thsad(curr_thSADC, curr_thSADC2, d, _trad);
+    //    c_info._thsad_sq = double(c_info._thsad) * double(c_info._thsad); // 2.7.46
+    //    c_info._thsadc_sq = double(c_info._thsadc) * double(c_info._thsadc);
+    c_info._thsad_sq = double(c_info._thsad);
+    c_info._thsadc_sq = double(c_info._thsadc);
+    for (int i = 0; i < _wpow - 1; i++)
+    {
+      c_info._thsad_sq *= double(c_info._thsad);
+      c_info._thsadc_sq *= double(c_info._thsadc);
+    }
+  }
 }

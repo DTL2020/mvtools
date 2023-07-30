@@ -60,6 +60,7 @@ public:
     int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
     int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR,
     int _MPB_MVlth, int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, ::PClip _dnmask,
+    float _thSADA_a, float _thSADA_b,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -67,7 +68,9 @@ public:
   ::PVideoFrame __stdcall GetFrame(int n, ::IScriptEnvironment* env_ptr) override;
 
   int __stdcall SetCacheHints(int cachehints, int frame_range) override {
-    return cachehints == CACHE_GET_MTMODE ? MT_MULTI_INSTANCE : 0;
+    //    return cachehints == CACHE_GET_MTMODE ? MT_MULTI_INSTANCE : 0;
+    // if any IIR-type processing enabled - set MT_SERIALIZED
+    return cachehints == CACHE_GET_MTMODE ? ((TTH_thUPD > 0 ) ? MT_SERIALIZED : MT_MULTI_INSTANCE) : 0;
   }
 
 
@@ -407,6 +410,19 @@ private:
   MV_FORCEINLINE float DeltaDiAngle(VECTOR v1, VECTOR v2);
   //pMVsPlanesArrays may be not work (interfiltered, prefiltered or other but separately provided with most noised and most noise-search Manalyse settings
   //like truemotion=false, low lambda and lsad, zero penalties
+
+  // auto-thSAD
+  float thSADA_a; // a-param (multiplier) of auto-thSAD calculation
+  float thSADA_b; // b-param (additive) of auto-thSAD calculation
+  int thSAD_param_norm;
+  int thSAD2_param_norm;
+  float fthSAD12_ratio;
+  int thSADC_param_norm;
+  int thSADC2_param_norm;
+  float fthSADC12_ratio;
+  float fthSAD_LC_ratio;
+  int thSCD1;
+  MV_FORCEINLINE void CalcAutothSADs(void);
 
   std::unique_ptr <YUY2Planes> _dst_planes;
   std::unique_ptr <YUY2Planes> _src_planes;
