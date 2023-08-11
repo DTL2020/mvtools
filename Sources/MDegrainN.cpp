@@ -623,7 +623,7 @@ MDegrainN::MDegrainN(
   fthSAD12_ratio = (float)thSAD2_param_norm / (float)thSAD_param_norm;
   fthSADC12_ratio = (float)thSADC2_param_norm / (float)thSADC_param_norm;
   fthSAD_LC_ratio = (float)thSADC_param_norm / (float)thSAD_param_norm;
-  thSCD1 = nscd1;
+  thSCD1_norm = mv_thscd1; // is it correct ?
 
   const ::VideoInfo &vi_super = _super->GetVideoInfo();
 
@@ -2036,7 +2036,7 @@ MV_FORCEINLINE void MDegrainN::CalcAutothSADs(void)
       const FakeBlockData& block = _mv_clip_arr[k]._clip_sptr->GetBlock(0, i);
       const sad_t block_sad = block.GetSAD();
 
-      if (block_sad < thSCD1)
+      if (block_sad < thSCD1_norm)
       {
         iSumSADs += block_sad;
         iCntSADs++;

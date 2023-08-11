@@ -152,7 +152,7 @@ private:
   int thSADC2_param_norm;
   float fthSADC12_ratio;
   float fthSAD_LC_ratio;
-  int thSCD1;
+  int thSCD1_norm;
   MV_FORCEINLINE void CalcAutothSADs(void);
 
   std::unique_ptr <YUY2Planes> _dst_planes;
