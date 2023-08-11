@@ -533,7 +533,8 @@ MDegrainN::MDegrainN(
   PClip child, PClip super, PClip mvmulti, int trad,
   sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
   sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
-  sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, IScriptEnvironment* env_ptr
+  sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag,
+  float _thSADA_a, float _thSADA_b, IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
   , MVFilter(mvmulti, "MDegrainN", env_ptr, 1, 0)
@@ -577,6 +578,8 @@ MDegrainN::MDegrainN(
   , _covered_width(0)
   , _covered_height(0)
   , _boundary_cnt_arr()
+  , thSADA_a(_thSADA_a)
+  , thSADA_b(_thSADA_b)
 {
   has_at_least_v8 = true;
   try { env_ptr->CheckVersion(8); }
@@ -612,6 +615,15 @@ MDegrainN::MDegrainN(
   thsadc = (uint64_t)thsadc  * mv_thscd1 / nscd1;	// chroma
   thsad2 = (uint64_t)thsad2  * mv_thscd1 / nscd1;
   thsadc2 = (uint64_t)thsadc2 * mv_thscd1 / nscd1;
+
+  thSAD_param_norm = thsad;
+  thSAD2_param_norm = thsad2;
+  thSADC_param_norm = thsadc;
+  thSADC2_param_norm = thsadc2;
+  fthSAD12_ratio = (float)thSAD2_param_norm / (float)thSAD_param_norm;
+  fthSADC12_ratio = (float)thSADC2_param_norm / (float)thSADC_param_norm;
+  fthSAD_LC_ratio = (float)thSADC_param_norm / (float)thSAD_param_norm;
+  thSCD1 = nscd1;
 
   const ::VideoInfo &vi_super = _super->GetVideoInfo();
 
@@ -1033,6 +1045,10 @@ static void plane_copy_8_to_16_c(uint8_t *dstp, int dstpitch, const uint8_t *src
       _planes_ptr[k][2] = gof.GetFrame(0)->GetPlane(VPLANE);
     }
   }
+
+  // check if auto-thSAD required
+  if ((thSADA_a != 0) || (thSADA_b != 0))
+    CalcAutothSADs();
 
   PROFILE_START(MOTION_PROFILE_COMPENSATION);
 
@@ -1990,3 +2006,70 @@ void MDegrainN::norm_weights(int wref_arr[], int trad)
   wref_arr[0] = wsrc;
 }
 
+MV_FORCEINLINE void MDegrainN::CalcAutothSADs(void)
+{
+  sad_t curr_thSAD = thSAD_param_norm;
+  sad_t curr_thSAD2 = thSAD2_param_norm;
+  sad_t curr_thSADC = thSADC_param_norm;
+  sad_t curr_thSADC2 = thSADC2_param_norm;
+
+  int k = 0;
+  bool bNearFramesUsable = false;
+  if (_usable_flag_arr[0]) // try +1 frame
+  {
+    k = 0;
+    bNearFramesUsable = true;
+  }
+  else if (_usable_flag_arr[1]) // try -1 frame
+  {
+    k = 1;
+    bNearFramesUsable = true;
+  }
+
+  if (bNearFramesUsable)
+  {
+    int iSumSADs = 0;
+    int iCntSADs = 0;
+
+    for (int i = 0; i < nBlkCount; i++)
+    {
+      const FakeBlockData& block = _mv_clip_arr[k]._clip_sptr->GetBlock(0, i);
+      const sad_t block_sad = block.GetSAD();
+
+      if (block_sad < thSCD1)
+      {
+        iSumSADs += block_sad;
+        iCntSADs++;
+      }
+    }
+
+    float fMeanBelowthSCD1_SAD = 0;
+
+    if (iCntSADs > 0)
+    {
+      fMeanBelowthSCD1_SAD = (float)iSumSADs / (float)iCntSADs;
+
+      float fthSAD = fMeanBelowthSCD1_SAD * thSADA_a + thSADA_b;
+
+      curr_thSAD = (int)(fthSAD);
+      curr_thSAD2 = (int)(fthSAD * fthSAD12_ratio);
+
+      curr_thSADC = (int)(fthSAD * fthSAD_LC_ratio);
+      curr_thSADC2 = (int)(fthSAD * fthSAD_LC_ratio * fthSADC12_ratio);
+
+    }
+  }
+
+  for (int k = 0; k < _trad * 2; ++k)
+  {
+    MvClipInfo& c_info = _mv_clip_arr[k];
+
+    // Computes the SAD thresholds for this source frame, a cosine-shaped
+    // smooth transition between thsad(c) and thsad(c)2.
+    const int		d = k / 2 + 1;
+    c_info._thsad = ClipFnc::interpolate_thsad(curr_thSAD, curr_thSAD2, d, _trad);
+    c_info._thsadc = ClipFnc::interpolate_thsad(curr_thSADC, curr_thSADC2, d, _trad);
+    c_info._thsad_sq = double(c_info._thsad) * double(c_info._thsad); 
+    c_info._thsadc_sq = double(c_info._thsadc) * double(c_info._thsadc);
+  }
+}

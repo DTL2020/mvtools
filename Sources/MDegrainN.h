@@ -33,7 +33,8 @@ public:
     ::PClip child, ::PClip super, ::PClip mvmulti, int trad,
     sad_t thsad, sad_t thsadc, int yuvplanes, float nlimit, float nlimitc,
     sad_t nscd1, int nscd2, bool isse_flag, bool planar_flag, bool lsb_flag,
-    sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag, ::IScriptEnvironment* env_ptr
+    sad_t thsad2, sad_t thsadc2, bool mt_flag, bool out16_flag,
+    float _thSADA_a, float _thSADA_b, ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
 
@@ -141,6 +142,18 @@ private:
 
   int _nsupermodeyuv;
 
+  // auto-thSAD
+  float thSADA_a; // a-param (multiplier) of auto-thSAD calculation
+  float thSADA_b; // b-param (additive) of auto-thSAD calculation
+  int thSAD_param_norm;
+  int thSAD2_param_norm;
+  float fthSAD12_ratio;
+  int thSADC_param_norm;
+  int thSADC2_param_norm;
+  float fthSADC12_ratio;
+  float fthSAD_LC_ratio;
+  int thSCD1;
+  MV_FORCEINLINE void CalcAutothSADs(void);
 
   std::unique_ptr <YUY2Planes> _dst_planes;
   std::unique_ptr <YUY2Planes> _src_planes;
