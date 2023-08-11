@@ -124,7 +124,7 @@ public:
     int _overlapx, int _overlapy, const char* _outfilename, int _dctmode,
     int _divide, int _sadx264, sad_t _badSAD, int _badrange, bool _isse,
     bool _meander, bool temporal_flag, bool _tryMany, bool multi_flag,
-    bool mt_flag, int _chromaSADScale, int _optSearchOption, int _predictorType, IScriptEnvironment* env);
+    bool mt_flag, int _chromaSADScale, int _optSearchOption, int _predictorType, PClip _child_cur, IScriptEnvironment* env);
   ~MVAnalyse();
 
   ::PVideoFrame __stdcall	GetFrame(int n, ::IScriptEnvironment* env) override;
@@ -138,6 +138,8 @@ public:
 private:
 
   void load_src_frame(MVGroupOfFrames &gof, ::PVideoFrame &src, const MVAnalysisData &ana_data);
+
+  PClip child_cur;
 };
 
 #endif
