@@ -4741,6 +4741,7 @@ void MDegrainN::FilterMVs(void)
 MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
 {
   VECTOR filteredp2fvectors[(MAX_TEMP_RAD * 2) + 1];
+  VECTOR filteredp2fvectors2[(MAX_TEMP_RAD * 2) + 1];
 
   VECTOR p2fvectors[(MAX_TEMP_RAD * 2) + 1];
   // convert +1, -1, +2, -2, +3, -3 ... to
@@ -4761,33 +4762,23 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
 
   if (iMVMedF > 0) // Median-like temporal filtering enabled
   {
-    ProcessMVMedF(&p2fvectors[0], &filteredp2fvectors[0]);
+    if (fMVLPFCutoff < 1.0f || fMVLPFGauss > 0.0f) // dual pass filtering
+    {
+      ProcessMVMedF(&p2fvectors[0], &filteredp2fvectors2[0]);
+    }
+    else // single pass filtering
+      ProcessMVMedF(&p2fvectors[0], &filteredp2fvectors[0]);
   }
 
   if (fMVLPFCutoff < 1.0f || fMVLPFGauss > 0.0f)
   {
-    ProcessMVLPF(&p2fvectors[0], &filteredp2fvectors[0]);
-  }
-  /*
-  // perform lpf of all good vectors in tr-scope
-  for (int pos = 0; pos < (_trad * 2 + 1); pos++)
-  {
-    float fSumX = 0.0f;
-    float fSumY = 0.0f;
-    for (int kpos = 0; kpos < MVLPFKERNELSIZE; kpos++)
+    if (iMVMedF > 0) // Median-like temporal filtering enabled
     {
-      int src_pos = pos + kpos - MVLPFKERNELSIZE / 2;
-      if (src_pos < 0) src_pos = 0;
-      if (src_pos > _trad * 2) src_pos = (_trad * 2); // total valid samples in vector of VECTORs is _trad*2+1
-      fSumX += p2fvectors[src_pos].x * fMVLPFKernel[kpos];
-      fSumY += p2fvectors[src_pos].y * fMVLPFKernel[kpos];
+      ProcessMVLPF(&filteredp2fvectors2[0], &filteredp2fvectors[0]);
     }
-
-    filteredp2fvectors[pos].x = (int)(fSumX);
-    filteredp2fvectors[pos].y = (int)(fSumY);
-    filteredp2fvectors[pos].sad = p2fvectors[pos].sad;
+    else // single pass filtering
+      ProcessMVLPF(&p2fvectors[0], &filteredp2fvectors[0]);
   }
-  */
 
   // final copy output
   VECTOR vLPFed, vOrig;
@@ -4852,11 +4843,6 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
       }
     }
 
-    // TEMP DEBUG 
-/*    vZeroMV.x = 0;
-    vZeroMV.y = 0;
-    vZeroMV.sad = vLPFed.sad;
-    pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vZeroMV;*/
   }
 }
 
@@ -4891,7 +4877,7 @@ MV_FORCEINLINE void MDegrainN::ProcessMVMedF(VECTOR* pVin, VECTOR* pVout)
   {
     VECTOR vOut = pVin[pos];
 
-    if ((pos >= iMVMedF) && (pos <= (_trad * 2 + 1) - iMVMedF)) // iMVMedF - temporal radius 1,2,3,.. 
+    if ((pos >= iMVMedF) && (pos < (_trad * 2 + 1) - iMVMedF)) // iMVMedF - temporal radius 1,2,3,.. 
     {
       // fill temporal vector of VECTORs for median filtering of single step
       for (int kpos = 0; kpos < (iMVMedF * 2 + 1); kpos++)
@@ -4986,8 +4972,7 @@ MV_FORCEINLINE void MDegrainN::MVMedF_vl(VECTOR* pVin, VECTOR* pVout)
       }
 
       //difference vector squared length
-//      int idv_sq_l = (pVin[dmt_row].x - pVin[dmt_col].x) * (pVin[dmt_row].x - pVin[dmt_col].x) + (pVin[dmt_row].y - pVin[dmt_col].y) * (pVin[dmt_row].y - pVin[dmt_col].y);
-      int idv_sq_l = std::abs(pVin[dmt_row].x - pVin[dmt_col].x) + std::abs(pVin[dmt_row].y - pVin[dmt_col].y);
+      int idv_sq_l = (pVin[dmt_row].x - pVin[dmt_col].x) * (pVin[dmt_row].x - pVin[dmt_col].x) + (pVin[dmt_row].y - pVin[dmt_col].y) * (pVin[dmt_row].y - pVin[dmt_col].y);
 
       sum_row += idv_sq_l;
     }
