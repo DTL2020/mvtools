@@ -237,8 +237,8 @@ private:
   float fMVLPFGauss;
   int ithMVLPFCorr;
   int iMVMedF; // MV Median - like filterting radius, 0 - default disabled
-  int iMVMedF_em; // MV Median-like filterting temportal edges processing mode: 0 - use all edge MVs, 1 - skip non-filtered MVs (invalidate SAD)
-  int iMVMedF_cm; // MV Median-like filterting temportal coordinates processing mode: 0 - use separated x,y filtering, 1 - use vector length dismetric
+  int iMVMedF_em; // MV Median-like filterting temporal edges processing mode: 0 - use all edge MVs, 1 - skip non-filtered MVs (invalidate SAD)
+  int iMVMedF_cm; // MV Median-like filterting temporal coordinates processing mode: 0 - use separated x,y filtering, 1 - use vector length dismetric
   bool bMVsAddProc; // bool indicate if additional processing of incoming MVs were performed and read must be from pFilteredMVsPlanesArrays (or even later in the future ?)
   float fMVLPFKernel[MVLPFKERNELSIZE];// 10+1 odd numbered
   MV_FORCEINLINE void ProcessMVLPF(VECTOR* pVin, VECTOR* pVout);

@@ -4800,7 +4800,9 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
     vLPFed = filteredp2fvectors[k];
     int idx_mvto = (_trad - k - 1) * 2 + 1;
 
-    vLPFed.sad = CheckSAD(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
+    if (vLPFed.sad != veryBigSAD)
+      vLPFed.sad = CheckSAD(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
+    // else - block invalidated - do not recheck sad again
 
     vOrig = pMVsWorkPlanesArrays[(_trad - k - 1) * 2 + 1][i];
     if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
@@ -4809,14 +4811,17 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
       pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vLPFed;
     }
     else // place original vector
-      pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vOrig;
+    {
+      if (vLPFed.sad != veryBigSAD)
+        pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vOrig;
+      else
+      {
+        pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i].x = vOrig.x;
+        pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i].y = vOrig.y;
+        pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i].sad = veryBigSAD; // invalidate block
+      }
+    }
 
-    // TEMP DEBUG 
-/*    vZeroMV.x = 0;
-    vZeroMV.y = 0;
-    vZeroMV.sad = vLPFed.sad;
-    pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vZeroMV;
-    */
   }
 
   for (int k = 1; k < _trad + 1; ++k)
@@ -4825,7 +4830,9 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
     vLPFed = filteredp2fvectors[k + _trad];
     int idx_mvto = (k - 1) * 2;
 
-    vLPFed.sad = CheckSAD(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
+    if (vLPFed.sad != veryBigSAD)
+      vLPFed.sad = CheckSAD(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
+    //else - block invalidated - do not recheck sad
 
     vOrig = pMVsWorkPlanesArrays[(k - 1) * 2][i];
     if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
@@ -4834,7 +4841,16 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
       pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vLPFed;
     }
     else
-      pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vOrig;
+    {
+      if (vLPFed.sad != veryBigSAD)
+        pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vOrig;
+      else
+      {
+        pFilteredMVsPlanesArrays[(k - 1) * 2][i].x = vOrig.x;
+        pFilteredMVsPlanesArrays[(k - 1) * 2][i].y = vOrig.y;
+        pFilteredMVsPlanesArrays[(k - 1) * 2][i].sad = veryBigSAD; // invalidate block
+      }
+    }
 
     // TEMP DEBUG 
 /*    vZeroMV.x = 0;
@@ -4878,7 +4894,7 @@ MV_FORCEINLINE void MDegrainN::ProcessMVMedF(VECTOR* pVin, VECTOR* pVout)
     if ((pos >= iMVMedF) && (pos <= (_trad * 2 + 1) - iMVMedF)) // iMVMedF - temporal radius 1,2,3,.. 
     {
       // fill temporal vector of VECTORs for median filtering of single step
-      for (int kpos = 0; kpos < iMVMedF; kpos++)
+      for (int kpos = 0; kpos < (iMVMedF * 2 + 1); kpos++)
       {
         int src_pos = pos + kpos - iMVMedF;
         MedF_vect[kpos] = pVin[src_pos];
@@ -4888,7 +4904,6 @@ MV_FORCEINLINE void MDegrainN::ProcessMVMedF(VECTOR* pVin, VECTOR* pVout)
         MVMedF_xy(&MedF_vect[0], &vOut);
       else
         MVMedF_vl(&MedF_vect[0], &vOut);
-
     }
     else // non-processed edges
     {
@@ -4920,7 +4935,7 @@ MV_FORCEINLINE void MDegrainN::MVMedF_xy(VECTOR* pVin, VECTOR* pVout)
     for (int dmt_col = 0; dmt_col < (iMVMedF * 2 + 1); dmt_col++)
     {
       if (dmt_row == dmt_col)
-      { // block with itself => DM=0
+      { // with itself => DM=0
         continue;
       }
 
@@ -4939,11 +4954,12 @@ MV_FORCEINLINE void MDegrainN::MVMedF_xy(VECTOR* pVin, VECTOR* pVout)
       sum_minrow_y = sum_row_y;
       i_idx_minrow_y = dmt_row;
     }
+
   }
 
   pVout[0].x = pVin[i_idx_minrow_x].x;
   pVout[0].y = pVin[i_idx_minrow_y].y;
-  pVout[0].sad = std::min(pVin[i_idx_minrow_x].sad, pVin[i_idx_minrow_y].sad); // or max for more safety ? to be checked in testing
+  pVout[0].sad = pVin[iMVMedF].sad; // pick central (current sample ?), it is not used later
 
 }
 
@@ -4965,12 +4981,13 @@ MV_FORCEINLINE void MDegrainN::MVMedF_vl(VECTOR* pVin, VECTOR* pVout)
     for (int dmt_col = 0; dmt_col < (iMVMedF * 2 + 1); dmt_col++)
     {
       if (dmt_row == dmt_col)
-      { // block with itself => DM=0
+      { // with itself => DM=0
         continue;
       }
 
       //difference vector squared length
-      int idv_sq_l = (pVin[dmt_row].x - pVin[dmt_col].x) * (pVin[dmt_row].x - pVin[dmt_col].x) + (pVin[dmt_row].y - pVin[dmt_col].y) * (pVin[dmt_row].y - pVin[dmt_col].y);
+//      int idv_sq_l = (pVin[dmt_row].x - pVin[dmt_col].x) * (pVin[dmt_row].x - pVin[dmt_col].x) + (pVin[dmt_row].y - pVin[dmt_col].y) * (pVin[dmt_row].y - pVin[dmt_col].y);
+      int idv_sq_l = std::abs(pVin[dmt_row].x - pVin[dmt_col].x) + std::abs(pVin[dmt_row].y - pVin[dmt_col].y);
 
       sum_row += idv_sq_l;
     }

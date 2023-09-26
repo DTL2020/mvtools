@@ -555,8 +555,8 @@ AVSValue __cdecl Create_MDegrainN(AVSValue args, void*, IScriptEnvironment* env)
     args[50].AsFloat(0), // thSADA_a - a-param (multiplier) of auto-thSAD calculation
     args[51].AsFloat(0), // thSADA_b - b-param (additive) of auto-thSAD calculation
     args[52].AsInt(0), // MVDedF - MV Median-like filterting radius, 0 - default disabled
-    args[53].AsInt(0), // MVMedF_em - MV Median-like filterting temportal edges processing mode: 0 - use all edge MVs, 1 - skip non-filtered MVs (invalidate SAD)
-    args[54].AsInt(0), // MVMedF_cm - MV Median-like filterting temportal coordinates processing mode: 0 - use separated x,y filtering, 1 - use vector length dismetric
+    args[53].AsInt(0), // MVMedF_em - MV Median-like filterting temporal edges processing mode: 0 - use all edge MVs, 1 - skip non-filtered MVs (invalidate SAD)
+    args[54].AsInt(0), // MVMedF_cm - MV Median-like filterting temporal coordinates processing mode: 0 - use separated x,y filtering, 1 - use vector length dismetric
                        // fixme: out32
     env
   );
