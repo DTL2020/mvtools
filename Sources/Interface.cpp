@@ -554,7 +554,10 @@ AVSValue __cdecl Create_MDegrainN(AVSValue args, void*, IScriptEnvironment* env)
     args[49].AsClip(), // dnmask - Y8 (?) mask clip to control ref frames additional weight (to reduce degrain at masked blocks or samples ? (depend on mask clip frame size ?))
     args[50].AsFloat(0), // thSADA_a - a-param (multiplier) of auto-thSAD calculation
     args[51].AsFloat(0), // thSADA_b - b-param (additive) of auto-thSAD calculation
-    // fixme: out32
+    args[52].AsInt(0), // MVDedF - MV Median-like filterting radius, 0 - default disabled
+    args[53].AsInt(0), // MVMedF_em - MV Median-like filterting temportal edges processing mode: 0 - use all edge MVs, 1 - skip non-filtered MVs (invalidate SAD)
+    args[54].AsInt(0), // MVMedF_cm - MV Median-like filterting temportal coordinates processing mode: 0 - use separated x,y filtering, 1 - use vector length dismetric
+                       // fixme: out32
     env
   );
 }
@@ -739,7 +742,7 @@ AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Linkage* const vectors) {
   env->AddFunction("MDegrain4", "cccccccccc[thSAD]i[thSADC]i[plane]i[limit]f[limitC]f[thSCD1]i[thSCD2]i[isse]b[planar]b[lsb]b[mt]b[out16]b[out32]b", Create_MVDegrainX, (void *)4);
   env->AddFunction("MDegrain5", "cccccccccccc[thSAD]i[thSADC]i[plane]i[limit]f[limitC]f[thSCD1]i[thSCD2]i[isse]b[planar]b[lsb]b[mt]b[out16]b[out32]b", Create_MVDegrainX, (void *)5);
   env->AddFunction("MDegrain6", "cccccccccccccc[thSAD]i[thSADC]i[plane]i[limit]f[limitC]f[thSCD1]i[thSCD2]i[isse]b[planar]b[lsb]b[mt]b[out16]b[out32]b", Create_MVDegrainX, (void *)6);
-  env->AddFunction("MDegrainN", "ccci[thSAD]i[thSADC]i[plane]i[limit]f[limitC]f[thSCD1]i[thSCD2]i[isse]b[planar]b[lsb]b[thsad2]i[thsadc2]i[mt]b[out16]b[wpow]i[adjSADzeromv]f[adjSADcohmv]f[thCohMV]i[MVLPFCutoff]f[MVLPFSlope]f[MVLPFGauss]f[thMVLPFCorr]i[adjSADLPFedmv]f[UseSubShift]i[IntOvlp]i[mvmultirs]c[thFWBWmvpos]i[MPBthSub]i[MPBthAdd]i[MPBNumIt]i[MPB_SPCsub]f[MPB_SPCadd]f[MPB_PartBlend]b[MPBthIVS]i[showIVSmask]b[mvmultivs]c[MPB_DMFlags]i[MPBchroma]i[MPBtgtTR]i[MPB_MVlth]i[pmode]i[TTH_DMFlags]i[TTH_thUPD]i[TTH_BAS]i[TTH_chroma]b[dnmask]c[thSADA_a]f[thSADA_b]f", Create_MDegrainN, 0);
+  env->AddFunction("MDegrainN", "ccci[thSAD]i[thSADC]i[plane]i[limit]f[limitC]f[thSCD1]i[thSCD2]i[isse]b[planar]b[lsb]b[thsad2]i[thsadc2]i[mt]b[out16]b[wpow]i[adjSADzeromv]f[adjSADcohmv]f[thCohMV]i[MVLPFCutoff]f[MVLPFSlope]f[MVLPFGauss]f[thMVLPFCorr]i[adjSADLPFedmv]f[UseSubShift]i[IntOvlp]i[mvmultirs]c[thFWBWmvpos]i[MPBthSub]i[MPBthAdd]i[MPBNumIt]i[MPB_SPCsub]f[MPB_SPCadd]f[MPB_PartBlend]b[MPBthIVS]i[showIVSmask]b[mvmultivs]c[MPB_DMFlags]i[MPBchroma]i[MPBtgtTR]i[MPB_MVlth]i[pmode]i[TTH_DMFlags]i[TTH_thUPD]i[TTH_BAS]i[TTH_chroma]b[dnmask]c[thSADA_a]f[thSADA_b]f[MVMedF]i[MVMedF_em]i[MVMedF_cm]i", Create_MDegrainN, 0);
   env->AddFunction("MRecalculate", "cc[thsad]i[smooth]i[blksize]i[blksizeV]i[search]i[searchparam]i[lambda]i[chroma]b[truemotion]b[pnew]i[overlap]i[overlapV]i[outfile]s[dct]i[divide]i[sadx264]i[isse]b[meander]b[tr]i[mt]b[scaleCSAD]i[optsearchoption]i[optpredictortype]i[DMFlags]i", Create_MVRecalculate, 0);
   env->AddFunction("MBlockFps", "cccc[num]i[den]i[mode]i[ml]f[blend]b[thSCD1]i[thSCD2]i[isse]b[planar]b[mt]b", Create_MVBlockFps, 0);
   env->AddFunction("MSuper", "c[hpad]i[vpad]i[pel]i[levels]i[chroma]b[sharp]i[rfilter]i[pelclip]c[isse]b[planar]b[mt]b[pelrefine]b", Create_MVSuper, 0);

@@ -60,7 +60,7 @@ public:
     int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
     int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR,
     int _MPB_MVlth, int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, ::PClip _dnmask,
-    float _thSADA_a, float _thSADA_b,
+    float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -236,8 +236,17 @@ private:
   float fMVLPFSlope;
   float fMVLPFGauss;
   int ithMVLPFCorr;
+  int iMVMedF; // MV Median - like filterting radius, 0 - default disabled
+  int iMVMedF_em; // MV Median-like filterting temportal edges processing mode: 0 - use all edge MVs, 1 - skip non-filtered MVs (invalidate SAD)
+  int iMVMedF_cm; // MV Median-like filterting temportal coordinates processing mode: 0 - use separated x,y filtering, 1 - use vector length dismetric
   bool bMVsAddProc; // bool indicate if additional processing of incoming MVs were performed and read must be from pFilteredMVsPlanesArrays (or even later in the future ?)
   float fMVLPFKernel[MVLPFKERNELSIZE];// 10+1 odd numbered
+  MV_FORCEINLINE void ProcessMVLPF(VECTOR* pVin, VECTOR* pVout);
+  MV_FORCEINLINE void ProcessMVMedF(VECTOR* pVin, VECTOR* pVout);
+  MV_FORCEINLINE void MVMedF_xy(VECTOR* pVin, VECTOR* pVout);
+  MV_FORCEINLINE void MVMedF_vl(VECTOR* pVin, VECTOR* pVout);
+
+
   VECTOR* pFilteredMVsPlanesArrays[MAX_TEMP_RAD * 2];
   const uint8_t* pFilteredMVsPlanesArrays_a[MAX_TEMP_RAD * 2]; // pointers to aligned memory pages to free
   SADFunction* SAD;              /* function which computes the sad */

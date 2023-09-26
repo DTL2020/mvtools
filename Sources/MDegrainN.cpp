@@ -763,7 +763,7 @@ MDegrainN::MDegrainN(
   int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
   int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR, int _MPB_MVlth,
   int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, PClip _dnmask,
-  float _thSADA_a, float _thSADA_b,
+  float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -845,6 +845,9 @@ MDegrainN::MDegrainN(
   , dnmask(_dnmask)
   , thSADA_a(_thSADA_a)
   , thSADA_b(_thSADA_b)
+  , iMVMedF(_MVMedF)
+  , iMVMedF_em(_MVMedF_em)
+  , iMVMedF_cm(_MVMedF_cm)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -1300,7 +1303,7 @@ MDegrainN::MDegrainN(
 
   // calculate MV LPF filter kernel (from fMVLPFCutoff and (in future) fMVLPFSlope params)
   // for interlaced field-based content the +-0.5 V shift should be added after filtering ?
-  if (fMVLPFCutoff < 1.0f || fMVLPFGauss > 0.0f)
+  if (fMVLPFCutoff < 1.0f || fMVLPFGauss > 0.0f || iMVMedF > 0)
     bMVsAddProc = true;
   else
     bMVsAddProc = false;
@@ -4664,6 +4667,12 @@ void MDegrainN::FilterMVs(void)
         p2fvectors[k + _trad] = pMVsWorkPlanesArrays[(k - 1) * 2][i];
       }
 
+      if (fMVLPFCutoff < 1.0f || fMVLPFGauss > 0.0f)
+      {
+        ProcessMVLPF(&p2fvectors[0], &filteredp2fvectors[0]);
+      }
+
+      /*
       // perform lpf of all good vectors in tr-scope
       for (int pos = 0; pos < (_trad * 2 + 1); pos++)
       {
@@ -4682,6 +4691,7 @@ void MDegrainN::FilterMVs(void)
         filteredp2fvectors[pos].y = (int)(fSumY);
         filteredp2fvectors[pos].sad = p2fvectors[pos].sad;
       }
+      */
 
       // final copy output
       VECTOR vLPFed, vOrig;
@@ -4749,6 +4759,16 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
     p2fvectors[k + _trad] = pMVsWorkPlanesArrays[(k - 1) * 2][i];
   }
 
+  if (iMVMedF > 0) // Median-like temporal filtering enabled
+  {
+    ProcessMVMedF(&p2fvectors[0], &filteredp2fvectors[0]);
+  }
+
+  if (fMVLPFCutoff < 1.0f || fMVLPFGauss > 0.0f)
+  {
+    ProcessMVLPF(&p2fvectors[0], &filteredp2fvectors[0]);
+  }
+  /*
   // perform lpf of all good vectors in tr-scope
   for (int pos = 0; pos < (_trad * 2 + 1); pos++)
   {
@@ -4767,6 +4787,7 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
     filteredp2fvectors[pos].y = (int)(fSumY);
     filteredp2fvectors[pos].sad = p2fvectors[pos].sad;
   }
+  */
 
   // final copy output
   VECTOR vLPFed, vOrig;
@@ -4823,6 +4844,150 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
   }
 }
 
+MV_FORCEINLINE void MDegrainN::ProcessMVLPF(VECTOR* pVin, VECTOR* pVout)
+{
+  // perform lpf of all good vectors in tr-scope
+  for (int pos = 0; pos < (_trad * 2 + 1); pos++)
+  {
+    float fSumX = 0.0f;
+    float fSumY = 0.0f;
+    for (int kpos = 0; kpos < MVLPFKERNELSIZE; kpos++)
+    {
+      int src_pos = pos + kpos - MVLPFKERNELSIZE / 2;
+      if (src_pos < 0) src_pos = 0;
+      if (src_pos > _trad * 2) src_pos = (_trad * 2); // total valid samples in vector of VECTORs is _trad*2+1
+      fSumX += pVin[src_pos].x * fMVLPFKernel[kpos];
+      fSumY += pVin[src_pos].y * fMVLPFKernel[kpos];
+    }
+
+    pVout[pos].x = (int)(fSumX);
+    pVout[pos].y = (int)(fSumY);
+    pVout[pos].sad = pVin[pos].sad;
+  }
+
+}
+
+MV_FORCEINLINE void MDegrainN::ProcessMVMedF(VECTOR* pVin, VECTOR* pVout)
+{
+  VECTOR MedF_vect[(MAX_TEMP_RAD * 2) + 1];
+
+  for (int pos = 0; pos < (_trad * 2 + 1); pos++) 
+  {
+    VECTOR vOut = pVin[pos];
+
+    if ((pos >= iMVMedF) && (pos <= (_trad * 2 + 1) - iMVMedF)) // iMVMedF - temporal radius 1,2,3,.. 
+    {
+      // fill temporal vector of VECTORs for median filtering of single step
+      for (int kpos = 0; kpos < iMVMedF; kpos++)
+      {
+        int src_pos = pos + kpos - iMVMedF;
+        MedF_vect[kpos] = pVin[src_pos];
+      }
+
+      if (iMVMedF_cm == 0)
+        MVMedF_xy(&MedF_vect[0], &vOut);
+      else
+        MVMedF_vl(&MedF_vect[0], &vOut);
+
+    }
+    else // non-processed edges
+    {
+      if (iMVMedF_em == 1) vOut.sad = veryBigSAD; // invalidate block - check for this in FilterX() functions to skip SAD re-check
+    }
+
+    pVout[pos] = vOut;
+  }
+}
+
+// Median-like MVs filtering with separated x,y coordinates of vectors
+MV_FORCEINLINE void MDegrainN::MVMedF_xy(VECTOR* pVin, VECTOR* pVout)
+{
+  // process dual coords in scalar C ?
+  int iMaxMVlength = std::max(nWidth, nHeight) * 2 * nPel; // hope it is enough ?
+  int MaxSumDM = (_trad * 2 + 1) * iMaxMVlength;
+
+  // find lowest sum of row in DM_table and index of row in single DM scan with DM calc
+  int sum_minrow_x = MaxSumDM;
+  int sum_minrow_y = MaxSumDM;
+  int i_idx_minrow_x = 0;
+  int i_idx_minrow_y = 0;
+
+  for (int dmt_row = 0; dmt_row < (iMVMedF * 2 + 1); dmt_row++)
+  {
+    int sum_row_x = 0;
+    int sum_row_y = 0;
+
+    for (int dmt_col = 0; dmt_col < (iMVMedF * 2 + 1); dmt_col++)
+    {
+      if (dmt_row == dmt_col)
+      { // block with itself => DM=0
+        continue;
+      }
+
+      sum_row_x += std::abs(pVin[dmt_row].x - pVin[dmt_col].x);
+      sum_row_y += std::abs(pVin[dmt_row].y - pVin[dmt_col].y);
+    }
+
+    if (sum_row_x < sum_minrow_x)
+    {
+      sum_minrow_x = sum_row_x;
+      i_idx_minrow_x = dmt_row;
+    }
+
+    if (sum_row_y < sum_minrow_y)
+    {
+      sum_minrow_y = sum_row_y;
+      i_idx_minrow_y = dmt_row;
+    }
+  }
+
+  pVout[0].x = pVin[i_idx_minrow_x].x;
+  pVout[0].y = pVin[i_idx_minrow_y].y;
+  pVout[0].sad = std::min(pVin[i_idx_minrow_x].sad, pVin[i_idx_minrow_y].sad); // or max for more safety ? to be checked in testing
+
+}
+
+// Median-like MVs filtering using single difference vector length dismetric
+MV_FORCEINLINE void MDegrainN::MVMedF_vl(VECTOR* pVin, VECTOR* pVout)
+{
+  // process dual coords in scalar C ?
+  int iMaxMVlength = std::max(nWidth, nHeight) * 2 * nPel; // hope it is enough ?
+  int MaxSumDM = (_trad * 2 + 1) * iMaxMVlength * (_trad * 2 + 1) * iMaxMVlength; // squared length ?
+
+  // find lowest sum of row in DM_table and index of row in single DM scan with DM calc
+  int sum_minrow = MaxSumDM;
+  int i_idx_minrow = 0;
+
+  for (int dmt_row = 0; dmt_row < (iMVMedF * 2 + 1); dmt_row++)
+  {
+    int sum_row = 0;
+
+    for (int dmt_col = 0; dmt_col < (iMVMedF * 2 + 1); dmt_col++)
+    {
+      if (dmt_row == dmt_col)
+      { // block with itself => DM=0
+        continue;
+      }
+
+      //difference vector squared length
+      int idv_sq_l = (pVin[dmt_row].x - pVin[dmt_col].x) * (pVin[dmt_row].x - pVin[dmt_col].x) + (pVin[dmt_row].y - pVin[dmt_col].y) * (pVin[dmt_row].y - pVin[dmt_col].y);
+
+      sum_row += idv_sq_l;
+    }
+
+    if (sum_row < sum_minrow)
+    {
+      sum_minrow = sum_row;
+      i_idx_minrow = dmt_row;
+    }
+
+  }
+
+  pVout[0].x = pVin[i_idx_minrow].x;
+  pVout[0].y = pVin[i_idx_minrow].y;
+  pVout[0].sad = pVin[i_idx_minrow].sad;
+  
+}
 
 
 MV_FORCEINLINE void MDegrainN::PrefetchMVs(int i)
