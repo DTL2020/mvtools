@@ -763,7 +763,7 @@ MDegrainN::MDegrainN(
   int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
   int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR, int _MPB_MVlth,
   int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, PClip _dnmask,
-  float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm,
+  float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm, int _MVF_fm,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -848,6 +848,7 @@ MDegrainN::MDegrainN(
   , iMVMedF(_MVMedF)
   , iMVMedF_em(_MVMedF_em)
   , iMVMedF_cm(_MVMedF_cm)
+  , iMVF_fm(_MVF_fm)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -4813,6 +4814,8 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
       }
     }
 
+    if ((vLPFed.sad > _mv_clip_arr[idx_mvto]._thsad) && (iMVF_fm == 1))
+      pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i].sad = veryBigSAD; // invalidate block
   }
 
   for (int k = 1; k < _trad + 1; ++k)
@@ -4842,6 +4845,9 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
         pFilteredMVsPlanesArrays[(k - 1) * 2][i].sad = veryBigSAD; // invalidate block
       }
     }
+
+    if ((vLPFed.sad > _mv_clip_arr[idx_mvto]._thsad) && (iMVF_fm == 1))
+      pFilteredMVsPlanesArrays[(k - 1) * 2][i].sad = veryBigSAD; // invalidate block
 
   }
 }

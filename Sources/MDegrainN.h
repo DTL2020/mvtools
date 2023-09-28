@@ -60,7 +60,7 @@ public:
     int _MPBthSub, int _MPBthAdd, int _MPBNumIt, float _MPB_SPC_sub, float _MPB_SPC_add, bool _MPB_PartBlend,
     int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR,
     int _MPB_MVlth, int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, ::PClip _dnmask,
-    float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm,
+    float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm, int _MVF_fm,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -239,6 +239,7 @@ private:
   int iMVMedF; // MV Median - like filterting radius, 0 - default disabled
   int iMVMedF_em; // MV Median-like filterting temporal edges processing mode: 0 - use all edge MVs, 1 - skip non-filtered MVs (invalidate SAD)
   int iMVMedF_cm; // MV Median-like filterting temporal coordinates processing mode: 0 - use separated x,y filtering, 1 - use vector length dismetric
+  int iMVF_fm; // MVF_fm - MV filtering blocks fail mode: 0 - pass blocks with too bad filtered MVs SADs to blending, 1 - invalidate blocks with too bad filtered MVs SADs (skip from blending)
   bool bMVsAddProc; // bool indicate if additional processing of incoming MVs were performed and read must be from pFilteredMVsPlanesArrays (or even later in the future ?)
   float fMVLPFKernel[MVLPFKERNELSIZE];// 10+1 odd numbered
   MV_FORCEINLINE void ProcessMVLPF(VECTOR* pVin, VECTOR* pVout);
