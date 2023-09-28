@@ -4640,103 +4640,18 @@ float MDegrainN::fSinc(float x)
   else return 1.0f;
 }
 
-void MDegrainN::FilterMVs(void)
+void MDegrainN::FilterMVs(void) 
 {
-  VECTOR filteredp2fvectors[(MAX_TEMP_RAD * 2) + 1];
-
-  VECTOR p2fvectors[(MAX_TEMP_RAD * 2) + 1];
-
   for (int by = 0; by < nBlkY; by++)
   {
     for (int bx = 0; bx < nBlkX; bx++)
     {
       int i = by * nBlkX + bx;
-
-      // convert +1, -1, +2, -2, +3, -3 ... to
-      // -3, -2, -1, 0, +1, +2, +3 timed sequence
-      for (int k = 0; k < _trad; ++k)
-      {
-        p2fvectors[k] = pMVsWorkPlanesArrays[(_trad - k - 1) * 2 + 1][i];
-      }
-
-      p2fvectors[_trad].x = 0; // zero trad - source block itself
-      p2fvectors[_trad].y = 0;
-      p2fvectors[_trad].sad = 0;
-
-      for (int k = 1; k < _trad + 1; ++k)
-      {
-        p2fvectors[k + _trad] = pMVsWorkPlanesArrays[(k - 1) * 2][i];
-      }
-
-      if (fMVLPFCutoff < 1.0f || fMVLPFGauss > 0.0f)
-      {
-        ProcessMVLPF(&p2fvectors[0], &filteredp2fvectors[0]);
-      }
-
-      /*
-      // perform lpf of all good vectors in tr-scope
-      for (int pos = 0; pos < (_trad * 2 + 1); pos++)
-      {
-        float fSumX = 0.0f;
-        float fSumY = 0.0f;
-        for (int kpos = 0; kpos < MVLPFKERNELSIZE; kpos++)
-        {
-          int src_pos = pos + kpos - MVLPFKERNELSIZE / 2;
-          if (src_pos < 0) src_pos = 0;
-          if (src_pos > _trad * 2) src_pos = (_trad * 2); // total valid samples in vector of VECTORs is _trad*2+1
-          fSumX += p2fvectors[src_pos].x * fMVLPFKernel[kpos];
-          fSumY += p2fvectors[src_pos].y * fMVLPFKernel[kpos];
-        }
-
-        filteredp2fvectors[pos].x = (int)(fSumX);
-        filteredp2fvectors[pos].y = (int)(fSumY);
-        filteredp2fvectors[pos].sad = p2fvectors[pos].sad;
-      }
-      */
-
-      // final copy output
-      VECTOR vLPFed, vOrig;
-
-      for (int k = 0; k < _trad; ++k)
-      {
-        // recheck SAD:
-        vLPFed = filteredp2fvectors[k];
-        int idx_mvto = (_trad - k - 1) * 2 + 1;
-
-        vLPFed.sad = CheckSAD(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
-
-        vOrig = pMVsWorkPlanesArrays[(_trad - k - 1) * 2 + 1][i];
-        if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
-        {
-          vLPFed.sad = (int)((float)vLPFed.sad * fadjSADLPFedmv); // make some boost of weight for filtered because they typically have worse SAD
-          pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vLPFed;
-        }
-        else // place original vector
-          pFilteredMVsPlanesArrays[(_trad - k - 1) * 2 + 1][i] = vOrig;
-      }
-
-      for (int k = 1; k < _trad + 1; ++k)
-      {
-        // recheck SAD
-        vLPFed = filteredp2fvectors[k + _trad];
-        int idx_mvto = (k - 1) * 2;
-
-        vLPFed.sad = CheckSAD(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
-
-        vOrig = pMVsWorkPlanesArrays[(k - 1) * 2][i];
-        if ((abs(vLPFed.x - vOrig.x) <= ithMVLPFCorr) && (abs(vLPFed.y - vOrig.y) <= ithMVLPFCorr) && (vLPFed.sad < _mv_clip_arr[idx_mvto]._thsad))
-        {
-          vLPFed.sad = (int)((float)vLPFed.sad * fadjSADLPFedmv); // make some boost of weight for filtered because they typically have worse SAD
-          pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vLPFed;
-        }
-        else
-          pFilteredMVsPlanesArrays[(k - 1) * 2][i] = vOrig;
-      }
+      FilterBlkMVs(i, bx, by);
     } // bx
   } // by
 
 }
-
 
 // single block processing FilterMVs to allow to use cached subshifted block
 MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
@@ -4783,7 +4698,6 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
 
   // final copy output
   VECTOR vLPFed, vOrig;
-  VECTOR vZeroMV;// TEMP DEBUG
 
   for (int k = 0; k < _trad; ++k)
   {
