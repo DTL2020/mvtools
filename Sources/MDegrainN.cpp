@@ -764,6 +764,7 @@ MDegrainN::MDegrainN(
   int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR, int _MPB_MVlth,
   int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, PClip _dnmask,
   float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm, int _MVF_fm,
+  int _MGR, int _MGR_sr, int _MGR_st,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -849,6 +850,9 @@ MDegrainN::MDegrainN(
   , iMVMedF_em(_MVMedF_em)
   , iMVMedF_cm(_MVMedF_cm)
   , iMVF_fm(_MVF_fm)
+  , iMGR(_MGR)
+  , iMGR_sr(_MGR_sr)
+  , iMGR_st(_MGR_st)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -2700,15 +2704,6 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
 
       int i = by * nBlkX + bx;
 
-      // ToDo: use BlockArea class later !
-      BYTE* pYmem = pMELmemY + i * nBlkSizeX * nBlkSizeY * pixelsize;
-      BYTE* pUV1mem = pMELmemUV1 + i * (nBlkSizeX >> nLogxRatioUV_super)* (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
-      BYTE* pUV2mem = pMELmemUV2 + i * (nBlkSizeX >> nLogxRatioUV_super)* (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
-      int Ymem_pitch = nBlkSizeY * pixelsize;
-      int UV1mem_pitch = (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
-      int UV2mem_pitch = (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
-      const int rowwidthUV = nBlkSizeX >> nLogxRatioUV_super; // bad name. it's width really
-
 #ifdef _DEBUG
       if ((bx == 0) && (by == 0) && (pmode == PM_MEL))
       {
@@ -2720,229 +2715,32 @@ void	MDegrainN::process_luma_and_chroma_normal_slice(Slicer::TaskData& td)
         int idbr = 0;
       }
 #endif
-
-      const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
-      int pitch_arr[MAX_TEMP_RAD * 2];
-      int weight_arr[1 + MAX_TEMP_RAD * 2];
-      int weight_arrUV[1 + MAX_TEMP_RAD * 2];
-
-      const BYTE* ref_data_ptr_arrUV1[MAX_TEMP_RAD * 2]; // vs: const uint8_t *pointers[radius * 2]; // Moved by the degrain function.
-      const BYTE* ref_data_ptr_arrUV2[MAX_TEMP_RAD * 2]; // vs: const uint8_t *pointers[radius * 2]; // Moved by the degrain function. 
-      int pitch_arrUV1[MAX_TEMP_RAD * 2];
-      int pitch_arrUV2[MAX_TEMP_RAD * 2];
-
       PrefetchMVs(i);
 
       if (pmode == PM_BLEND)
       {
+        DegrainBlendBlock_LC(
+          pDstCur + (xx << pixelsize_output_shift), pDstCur +_lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
+          pSrcCur,
+          pDstCurUV1 + (xx_uv << pixelsize_output_shift), pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
+          pSrcCurUV1,
+          pDstCurUV2 + (xx_uv << pixelsize_output_shift), pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
+          pSrcCurUV2,
+          i, bx, by, xx, xx_uv);
 
-        if (bMVsAddProc)
+        if (iMGR > 0)
         {
-          FilterBlkMVs(i, bx, by);
-
-          for (int k = 0; k < _trad * 2; ++k)
-          {
-            use_block_yuv(
-              ref_data_ptr_arr[k],
-              pitch_arr[k],
-              ref_data_ptr_arrUV1[k],
-              pitch_arrUV1[k],
-              ref_data_ptr_arrUV2[k],
-              pitch_arrUV2[k],
-              weight_arr[k + 1],
-              weight_arrUV[k + 1],
-              _usable_flag_arr[k],
-              _mv_clip_arr[k],
-              i,
-              _planes_ptr[k][0],
-              pSrcCur,
-              _planes_ptr[k][1],
-              pSrcCurUV1,
-              _planes_ptr[k][2],
-              pSrcCurUV2,
-              xx << pixelsize_super_shift,
-              xx_uv << pixelsize_super_shift,
-              _src_pitch_arr[0],
-              _src_pitch_arr[1],
-              _src_pitch_arr[2],
-              bx,
-              by,
-              (const VECTOR*)pFilteredMVsPlanesArrays[k]
-            );
-          }
-        }
-        else
-        {
-          for (int k = 0; k < _trad * 2; ++k)
-          {
-            use_block_yuv(
-              ref_data_ptr_arr[k],
-              pitch_arr[k],
-              ref_data_ptr_arrUV1[k],
-              pitch_arrUV1[k],
-              ref_data_ptr_arrUV2[k],
-              pitch_arrUV2[k],
-              weight_arr[k + 1],
-              weight_arrUV[k + 1],
-              _usable_flag_arr[k],
-              _mv_clip_arr[k],
-              i,
-              _planes_ptr[k][0],
-              pSrcCur,
-              _planes_ptr[k][1],
-              pSrcCurUV1,
-              _planes_ptr[k][2],
-              pSrcCurUV2,
-              xx << pixelsize_super_shift,
-              xx_uv << pixelsize_super_shift,
-              _src_pitch_arr[0],
-              _src_pitch_arr[1],
-              _src_pitch_arr[2],
-              bx,
-              by,
-              //            pMVsPlanesArrays[k]
-              pMVsWorkPlanesArrays[k]
-            );
-          }
-        }
-
-        if (dn_mm == DN_MM_BLOCKS)
-        {
-          int iDN_MM_Weight = 255 - pDNMask[by * dnmask_pitch + bx]; // invert mask - 255 is zero refs weight - no denoise 
-          apply_dn_mask_weights(weight_arr, _trad, iDN_MM_Weight);
-
-          if (bthLC_diff) apply_dn_mask_weights(weight_arrUV, _trad, iDN_MM_Weight);
-        }
-
-        norm_weights(weight_arr, _trad);
-        if (bthLC_diff) norm_weights(weight_arrUV, _trad);
-
-        int* pChromaWA;
-        if (bthLC_diff)
-          pChromaWA = &weight_arrUV[0];
-        else
-          pChromaWA = &weight_arr[0];
-
-        // luma
-  /*      _degrainluma_ptr(
-          pDstCur + (xx << pixelsize_output_shift),
-          pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
-          pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-          ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-        );
-
-        // chroma
-        int* pChromaWA;
-        if (bthLC_diff)
-          pChromaWA = &weight_arrUV[0];
-        else
-          pChromaWA = &weight_arr[0];
-
-        // single weight for luma and chroma
-        // chroma first plane
-        _degrainchroma_ptr(
-          pDstCurUV1 + (xx_uv << pixelsize_output_shift),
-          pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
-          pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-          ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad
-        );
-
-        // chroma second plane
-        _degrainchroma_ptr(
-          pDstCurUV2 + (xx_uv << pixelsize_output_shift),
-          pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
-          pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-          ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA, _trad
-        );
-        */
-        if (MPBNumIt == 0 || !isMVsStable(pMVsWorkPlanesArrays, i, weight_arr))
-        {
-          _degrainluma_ptr(
-            pDstCur + (xx << pixelsize_output_shift),
-            pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
-            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-            ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-          );
-
-          // chroma first plane
-          _degrainchroma_ptr(
-            pDstCurUV1 + (xx_uv << pixelsize_output_shift),
-            pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
-            pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-            ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad
-          );
-
-          // chroma second plane
-          _degrainchroma_ptr(
-            pDstCurUV2 + (xx_uv << pixelsize_output_shift),
-            pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
-            pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-            ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA, _trad
-          );
-
-          // Add TTH here too, use output buffer as temporal holder of current denoised block
-          if (TTH_thUPD > 0)
-          {
-            // IIR - check if memory block is still good
-            int idm_chroma = 0;
-            if (TTH_chroma)
-            {
-              idm_chroma = ScaleSadChroma(DM_TTH_Chroma->GetDisMetric(pDstCurUV1 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[1], pUV1mem, UV1mem_pitch)
-                + DM_TTH_Chroma->GetDisMetric(pDstCurUV2 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[2], pUV2mem, UV2mem_pitch), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
-            }
-            int idm_luma = DM_TTH_Luma->GetDisMetric(pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[0], pYmem, Ymem_pitch);
-            int idm_mem = idm_chroma + idm_luma;
-
-            if (idm_mem < TTH_thUPD)
-            {
-              //mem still good - output mem block
-              // luma
-              BitBlt(pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[0], pYmem, Ymem_pitch, nBlkSizeX, nBlkSizeY);
-              // chroma1
-              BitBlt(pDstCurUV1 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[1], pUV1mem, UV1mem_pitch, rowwidthUV, rowsizeUV);
-              // chroma2
-              BitBlt(pDstCurUV2 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[2], pUV2mem, UV2mem_pitch, rowwidthUV, rowsizeUV);
-
-#ifdef _DEBUG
-              iMEL_mem_hits++;
-#endif
-            }
-            else // mem no good - update mem
-            {
-              // luma
-              BitBlt(pYmem, Ymem_pitch, pDstCur + (xx << pixelsize_output_shift), _dst_pitch_arr[0], nBlkSizeX, nBlkSizeY);
-              // chroma1
-              BitBlt(pUV1mem, UV1mem_pitch, pDstCurUV1 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[1], rowwidthUV, rowsizeUV);
-              // chroma2
-              BitBlt(pUV2mem, UV2mem_pitch, pDstCurUV2 + (xx_uv << pixelsize_output_shift), _dst_pitch_arr[2], rowwidthUV, rowsizeUV);
-#ifdef _DEBUG
-              iMEL_mem_updates++;
-#endif
-            }// if (idm_mem < TTH_thUPD)
-
-          } // if (TTH_thUPD > 0)
-
-        }
-        else
-        {
-          MPB_LC(
-            pDstCur + (xx << pixelsize_output_shift),
-            pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
-            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-            ref_data_ptr_arr, pitch_arr,
-            pDstCurUV1 + (xx_uv << pixelsize_output_shift),
-            pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
-            pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-            ref_data_ptr_arrUV1, pitch_arrUV1,
-            pDstCurUV2 + (xx_uv << pixelsize_output_shift),
-            pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
-            pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-            ref_data_ptr_arrUV2, pitch_arrUV2,
-            weight_arr, pChromaWA,
-            nBlkSizeX, nBlkSizeY, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super,
-            _mv_clip_arr[0]._clip_sptr->chromaSADScale, i
+          MGR_LC(
+            pDstCur + (xx << pixelsize_output_shift), pDstCur + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
+            pSrcCur,
+            pDstCurUV1 + (xx_uv << pixelsize_output_shift), pDstCurUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
+            pSrcCurUV1,
+            pDstCurUV2 + (xx_uv << pixelsize_output_shift), pDstCurUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
+            pSrcCurUV2,
+            i, bx, by, xx, xx_uv
           );
         }
+
       } // pmode BLEND end
       else
       {
@@ -3235,207 +3033,32 @@ void	MDegrainN::process_luma_and_chroma_overlap_slice(int y_beg, int y_end)
 
       int i = by * nBlkX + bx;
 
-      // ToDo: use BlockArea class later !
-      BYTE* pYmem = pMELmemY + i * nBlkSizeX * nBlkSizeY * pixelsize;
-      BYTE* pUV1mem = pMELmemUV1 + i * (nBlkSizeX >> nLogxRatioUV_super)* (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
-      BYTE* pUV2mem = pMELmemUV2 + i * (nBlkSizeX >> nLogxRatioUV_super)* (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
-      int Ymem_pitch = nBlkSizeY * pixelsize;
-      int UV1mem_pitch = (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
-      int UV2mem_pitch = (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
-      const int rowwidthUV = nBlkSizeX >> nLogxRatioUV_super; // bad name. it's width really
-
-
-      // luma
-      const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
-      int pitch_arr[MAX_TEMP_RAD * 2];
-      int weight_arr[1 + MAX_TEMP_RAD * 2];
-
-      // chroma
-      const BYTE* ref_data_ptr_arrUV1[MAX_TEMP_RAD * 2];
-      const BYTE* ref_data_ptr_arrUV2[MAX_TEMP_RAD * 2];
-      int pitch_arrUV1[MAX_TEMP_RAD * 2];
-      int pitch_arrUV2[MAX_TEMP_RAD * 2];
-      int weight_arrUV[1 + MAX_TEMP_RAD * 2];
-
       PrefetchMVs(i);
 
       if (pmode == PM_BLEND)
       {
-        if (bMVsAddProc)
-        {
-          FilterBlkMVs(i, bx, by);
 
-          for (int k = 0; k < _trad * 2; ++k)
-          {
-            use_block_yuv(
-              ref_data_ptr_arr[k],
-              pitch_arr[k],
-              ref_data_ptr_arrUV1[k],
-              pitch_arrUV1[k],
-              ref_data_ptr_arrUV2[k],
-              pitch_arrUV2[k],
-              weight_arr[k + 1],
-              weight_arrUV[k + 1],
-              _usable_flag_arr[k],
-              _mv_clip_arr[k],
-              i,
-              _planes_ptr[k][0],
-              pSrcCur,
-              _planes_ptr[k][1],
-              pSrcCurUV1,
-              _planes_ptr[k][2],
-              pSrcCurUV2,
-              xx << pixelsize_super_shift,
-              xx_uv << pixelsize_super_shift,
-              _src_pitch_arr[0],
-              _src_pitch_arr[1],
-              _src_pitch_arr[2],
-              bx,
-              by,
-              (const VECTOR*)pFilteredMVsPlanesArrays[k]
-            );
-          }
-        }
-        else
-        {
-          for (int k = 0; k < _trad * 2; ++k)
-          {
-            use_block_yuv(
-              ref_data_ptr_arr[k],
-              pitch_arr[k],
-              ref_data_ptr_arrUV1[k],
-              pitch_arrUV1[k],
-              ref_data_ptr_arrUV2[k],
-              pitch_arrUV2[k],
-              weight_arr[k + 1],
-              weight_arrUV[k + 1],
-              _usable_flag_arr[k],
-              _mv_clip_arr[k],
-              i,
-              _planes_ptr[k][0],
-              pSrcCur,
-              _planes_ptr[k][1],
-              pSrcCurUV1,
-              _planes_ptr[k][2],
-              pSrcCurUV2,
-              xx << pixelsize_super_shift,
-              xx_uv << pixelsize_super_shift,
-              _src_pitch_arr[0],
-              _src_pitch_arr[1],
-              _src_pitch_arr[2],
-              bx,
-              by,
-              //            pMVsPlanesArrays[k]
-              pMVsWorkPlanesArrays[k]
-            );
-          }
-        }
-
-        if (dn_mm == DN_MM_BLOCKS)
-        {
-          int iDN_MM_Weight = 255 - pDNMask[by * dnmask_pitch + bx]; // invert mask - 255 is zero refs weight - no denoise 
-          apply_dn_mask_weights(weight_arr, _trad, iDN_MM_Weight);
-
-          if (bthLC_diff) apply_dn_mask_weights(weight_arrUV, _trad, iDN_MM_Weight);
-        }
-
-        norm_weights(weight_arr, _trad);
-        if (bthLC_diff) norm_weights(weight_arrUV, _trad);
-
-        int* pChromaWA;
-        if (bthLC_diff)
-          pChromaWA = &weight_arrUV[0];
-        else
-          pChromaWA = &weight_arr[0];
-
-        // luma and chroma
-  /*      _degrainluma_ptr(
+        DegrainBlendBlock_LC(
           &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
-          pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-          ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-        );*/
+          pSrcCur,
+          &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
+          pSrcCurUV1,
+          &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch << pixelsize_output_shift,
+          pSrcCurUV2,
+          i, bx, by, xx, xx_uv);
 
-        if (MPBNumIt == 0 || !isMVsStable(pMVsWorkPlanesArrays, i, weight_arr))
+        if (iMGR > 0)
         {
-          _degrainluma_ptr(
+          MGR_LC(
             &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
-            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-            ref_data_ptr_arr, pitch_arr, weight_arr, _trad
-          );
-
-          _degrainchroma_ptr(
+            pSrcCur,
             &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
-            pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-            ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad
-          );
-
-          _degrainchroma_ptr(
+            pSrcCurUV1,
             &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch << pixelsize_output_shift,
-            pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-            ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA, _trad
-          );
-
-          // Add TTH here too, use output buffer as temporal holder of current denoised block
-          if (TTH_thUPD > 0)
-          {
-            // IIR - check if memory block is still good
-            int idm_chroma = 0;
-            if (TTH_chroma)
-            {
-              idm_chroma = ScaleSadChroma(DM_TTH_Chroma->GetDisMetric(&tmp_blockUV1._d[0], tmpPitch << pixelsize_output_shift, pUV1mem, UV1mem_pitch)
-                + DM_TTH_Chroma->GetDisMetric(&tmp_blockUV2._d[0], tmpPitch << pixelsize_output_shift, pUV2mem, UV2mem_pitch), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
-            }
-            int idm_luma = DM_TTH_Luma->GetDisMetric(&tmp_block._d[0], tmpPitch << pixelsize_output_shift, pYmem, Ymem_pitch);
-            int idm_mem = idm_chroma + idm_luma;
-
-            if (idm_mem < TTH_thUPD)
-            {
-              //mem still good - output mem block
-              // luma
-              BitBlt(&tmp_block._d[0], tmpPitch << pixelsize_output_shift, pYmem, Ymem_pitch, nBlkSizeX, nBlkSizeY);
-              // chroma1
-              BitBlt(&tmp_blockUV1._d[0], tmpPitch << pixelsize_output_shift, pUV1mem, UV1mem_pitch, rowwidthUV, rowsizeUV);
-              // chroma2
-              BitBlt(&tmp_blockUV2._d[0], tmpPitch << pixelsize_output_shift, pUV2mem, UV2mem_pitch, rowwidthUV, rowsizeUV);
-
-#ifdef _DEBUG
-              iMEL_mem_hits++;
-#endif
-            }
-            else // mem no good - update mem
-            {
-              // luma
-              BitBlt(pYmem, Ymem_pitch, &tmp_block._d[0], tmpPitch << pixelsize_output_shift, nBlkSizeX, nBlkSizeY);
-              // chroma1
-              BitBlt(pUV1mem, UV1mem_pitch, &tmp_blockUV1._d[0], tmpPitch << pixelsize_output_shift, rowwidthUV, rowsizeUV);
-              // chroma2
-              BitBlt(pUV2mem, UV2mem_pitch, &tmp_blockUV2._d[0], tmpPitch << pixelsize_output_shift, rowwidthUV, rowsizeUV);
-#ifdef _DEBUG
-              iMEL_mem_updates++;
-#endif
-            }// if (idm_mem < TTH_thUPD)
-
-          } // if (TTH_thUPD > 0)
-
-
+            pSrcCurUV2,
+            i, bx, by, xx, xx_uv);
         }
-        else
-        {
-          MPB_LC(
-            &tmp_block._d[0], tmp_block._lsb_ptr, tmpPitch << pixelsize_output_shift,
-            pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0],
-            ref_data_ptr_arr, pitch_arr,
-            &tmp_blockUV1._d[0], tmp_blockUV1._lsb_ptr, tmpPitch << pixelsize_output_shift,
-            pSrcCurUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
-            ref_data_ptr_arrUV1, pitch_arrUV1,
-            &tmp_blockUV2._d[0], tmp_blockUV2._lsb_ptr, tmpPitch << pixelsize_output_shift,
-            pSrcCurUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
-            ref_data_ptr_arrUV2, pitch_arrUV2,
-            weight_arr, pChromaWA,
-            nBlkSizeX, nBlkSizeY, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super,
-            _mv_clip_arr[0]._clip_sptr->chromaSADScale, i
-          );
-        }
+
       } // if pmode == PM_BLEND end here
       else
       {
@@ -7508,3 +7131,270 @@ MV_FORCEINLINE void MDegrainN::CalcAutothSADs(void)
     }
   }
 }
+
+MV_FORCEINLINE void MDegrainN::DegrainBlendBlock_LC(
+  BYTE* pDst, BYTE* pDstLsb, int iDstPitch,
+  const BYTE* pSrc,
+  BYTE* pDstUV1, BYTE* pDstLsbUV1, int iDstPitchUV1,
+  const BYTE* pSrcUV1,
+  BYTE* pDstUV2, BYTE* pDstLsbUV2, int iDstPitchUV2,
+  const BYTE* pSrcUV2,
+  int iBlkNum, int ibx, int iby, int xx, int xx_uv
+)
+{
+  // ToDo: use BlockArea class later !
+  BYTE* pYmem = pMELmemY + iBlkNum * nBlkSizeX * nBlkSizeY * pixelsize;
+  BYTE* pUV1mem = pMELmemUV1 + iBlkNum * (nBlkSizeX >> nLogxRatioUV_super)* (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
+  BYTE* pUV2mem = pMELmemUV2 + iBlkNum * (nBlkSizeX >> nLogxRatioUV_super)* (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
+  int Ymem_pitch = nBlkSizeY * pixelsize;
+  int UV1mem_pitch = (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
+  int UV2mem_pitch = (nBlkSizeY >> nLogyRatioUV_super)* pixelsize;
+  const int rowwidthUV = nBlkSizeX >> nLogxRatioUV_super; // bad name. it's width really
+  const int rowsizeUV = nBlkSizeY >> nLogyRatioUV_super; // bad name. it's height really
+
+  const BYTE* ref_data_ptr_arr[MAX_TEMP_RAD * 2];
+  int pitch_arr[MAX_TEMP_RAD * 2];
+  int weight_arr[1 + MAX_TEMP_RAD * 2];
+  int weight_arrUV[1 + MAX_TEMP_RAD * 2];
+
+  const BYTE* ref_data_ptr_arrUV1[MAX_TEMP_RAD * 2]; // vs: const uint8_t *pointers[radius * 2]; // Moved by the degrain function.
+  const BYTE* ref_data_ptr_arrUV2[MAX_TEMP_RAD * 2]; // vs: const uint8_t *pointers[radius * 2]; // Moved by the degrain function. 
+  int pitch_arrUV1[MAX_TEMP_RAD * 2];
+  int pitch_arrUV2[MAX_TEMP_RAD * 2];
+
+  if (bMVsAddProc)
+  {
+    FilterBlkMVs(iBlkNum, ibx, iby);
+
+    for (int k = 0; k < _trad * 2; ++k)
+    {
+      use_block_yuv(
+        ref_data_ptr_arr[k],
+        pitch_arr[k],
+        ref_data_ptr_arrUV1[k],
+        pitch_arrUV1[k],
+        ref_data_ptr_arrUV2[k],
+        pitch_arrUV2[k],
+        weight_arr[k + 1],
+        weight_arrUV[k + 1],
+        _usable_flag_arr[k],
+        _mv_clip_arr[k],
+        iBlkNum,
+        _planes_ptr[k][0],
+        pSrc,
+        _planes_ptr[k][1],
+        pSrcUV1,
+        _planes_ptr[k][2],
+        pSrcUV2,
+        xx << pixelsize_super_shift,
+        xx_uv << pixelsize_super_shift,
+        _src_pitch_arr[0],
+        _src_pitch_arr[1],
+        _src_pitch_arr[2],
+        ibx,
+        iby,
+        (const VECTOR*)pFilteredMVsPlanesArrays[k]
+      );
+    }
+  }
+  else
+  {
+    for (int k = 0; k < _trad * 2; ++k)
+    {
+      use_block_yuv(
+        ref_data_ptr_arr[k],
+        pitch_arr[k],
+        ref_data_ptr_arrUV1[k],
+        pitch_arrUV1[k],
+        ref_data_ptr_arrUV2[k],
+        pitch_arrUV2[k],
+        weight_arr[k + 1],
+        weight_arrUV[k + 1],
+        _usable_flag_arr[k],
+        _mv_clip_arr[k],
+        iBlkNum,
+        _planes_ptr[k][0],
+        pSrc,
+        _planes_ptr[k][1],
+        pSrcUV1,
+        _planes_ptr[k][2],
+        pSrcUV2,
+        xx << pixelsize_super_shift,
+        xx_uv << pixelsize_super_shift,
+        _src_pitch_arr[0],
+        _src_pitch_arr[1],
+        _src_pitch_arr[2],
+        ibx,
+        iby,
+        //            pMVsPlanesArrays[k]
+        pMVsWorkPlanesArrays[k]
+      );
+    }
+  }
+
+  if (dn_mm == DN_MM_BLOCKS)
+  {
+    int iDN_MM_Weight = 255 - pDNMask[iby * dnmask_pitch + ibx]; // invert mask - 255 is zero refs weight - no denoise 
+    apply_dn_mask_weights(weight_arr, _trad, iDN_MM_Weight);
+
+    if (bthLC_diff) apply_dn_mask_weights(weight_arrUV, _trad, iDN_MM_Weight);
+  }
+
+  norm_weights(weight_arr, _trad);
+  if (bthLC_diff) norm_weights(weight_arrUV, _trad);
+
+  int* pChromaWA;
+  if (bthLC_diff)
+  pChromaWA = &weight_arrUV[0];
+  else
+  pChromaWA = &weight_arr[0];
+
+  // luma
+  if (MPBNumIt == 0 || !isMVsStable(pMVsWorkPlanesArrays, iBlkNum, weight_arr))
+  {
+    _degrainluma_ptr(
+      pDst,
+      pDstLsb, iDstPitch,
+      pSrc + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+      ref_data_ptr_arr, pitch_arr, weight_arr, _trad
+    );
+
+    // chroma first plane
+    _degrainchroma_ptr(
+      pDstUV1,
+      pDstLsbUV1, iDstPitchUV1,
+      pSrcUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+      ref_data_ptr_arrUV1, pitch_arrUV1, pChromaWA, _trad
+    );
+
+    // chroma second plane
+    _degrainchroma_ptr(
+      pDstUV2,
+      pDstLsbUV2, iDstPitchUV2,
+      pSrcUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+      ref_data_ptr_arrUV2, pitch_arrUV2, pChromaWA, _trad
+    );
+
+    // Add TTH here too, use output buffer as temporal holder of current denoised block
+    if (TTH_thUPD > 0)
+    {
+      // IIR - check if memory block is still good
+      int idm_chroma = 0;
+      if (TTH_chroma)
+      {
+        idm_chroma = ScaleSadChroma(DM_TTH_Chroma->GetDisMetric(pDstUV1, iDstPitchUV1, pUV1mem, UV1mem_pitch)
+          + DM_TTH_Chroma->GetDisMetric(pDstUV2, iDstPitchUV2, pUV2mem, UV2mem_pitch), _mv_clip_arr[0]._clip_sptr->chromaSADScale);
+      }
+      int idm_luma = DM_TTH_Luma->GetDisMetric(pDst, iDstPitch, pYmem, Ymem_pitch);
+      int idm_mem = idm_chroma + idm_luma;
+
+      if (idm_mem < TTH_thUPD)
+      {
+        //mem still good - output mem block
+        // luma
+        BitBlt(pDst, iDstPitch, pYmem, Ymem_pitch, nBlkSizeX, nBlkSizeY);
+        // chroma1
+        BitBlt(pDstUV1, iDstPitchUV1, pUV1mem, UV1mem_pitch, rowwidthUV, rowsizeUV);
+        // chroma2
+        BitBlt(pDstUV2, iDstPitchUV2, pUV2mem, UV2mem_pitch, rowwidthUV, rowsizeUV);
+
+  #ifdef _DEBUG
+        iMEL_mem_hits++;
+  #endif
+      }
+      else // mem no good - update mem
+      {
+        // luma
+        BitBlt(pYmem, Ymem_pitch, pDst, iDstPitch, nBlkSizeX, nBlkSizeY);
+        // chroma1
+        BitBlt(pUV1mem, UV1mem_pitch, pDstUV1, iDstPitchUV1, rowwidthUV, rowsizeUV);
+        // chroma2
+        BitBlt(pUV2mem, UV2mem_pitch, pDstUV2, iDstPitchUV2, rowwidthUV, rowsizeUV);
+  #ifdef _DEBUG
+        iMEL_mem_updates++;
+  #endif
+      }// if (idm_mem < TTH_thUPD)
+
+    } // if (TTH_thUPD > 0)
+
+  } // No MPB
+  else
+  {
+    /*
+    MPB_LC(
+      pDst + (xx << pixelsize_output_shift),
+      pDst + _lsb_offset_arr[0] + (xx << pixelsize_super_shift), _dst_pitch_arr[0],
+      pSrc + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+      ref_data_ptr_arr, pitch_arr,
+      pDstUV1 + (xx_uv << pixelsize_output_shift),
+      pDstUV1 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[1], _dst_pitch_arr[1],
+      pSrcUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+      ref_data_ptr_arrUV1, pitch_arrUV1,
+      pDstUV2 + (xx_uv << pixelsize_output_shift),
+      pDstUV2 + (xx_uv << pixelsize_super_shift) + _lsb_offset_arr[2], _dst_pitch_arr[2],
+      pSrcUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+      ref_data_ptr_arrUV2, pitch_arrUV2,
+      weight_arr, pChromaWA,
+      nBlkSizeX, nBlkSizeY, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super,
+      _mv_clip_arr[0]._clip_sptr->chromaSADScale, iBlkNum
+    );
+    */
+    MPB_LC(
+      pDst,
+      pDstLsb, iDstPitch,
+      pSrc + (xx << pixelsize_super_shift), _src_pitch_arr[0],
+      ref_data_ptr_arr, pitch_arr,
+      pDstUV1,
+      pDstLsbUV1, iDstPitchUV1,
+      pSrcUV1 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1],
+      ref_data_ptr_arrUV1, pitch_arrUV1,
+      pDstUV2,
+      pDstLsbUV2, iDstPitchUV2,
+      pSrcUV2 + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2],
+      ref_data_ptr_arrUV2, pitch_arrUV2,
+      weight_arr, pChromaWA,
+      nBlkSizeX, nBlkSizeY, nBlkSizeX >> nLogxRatioUV_super, nBlkSizeY >> nLogyRatioUV_super,
+      _mv_clip_arr[0]._clip_sptr->chromaSADScale, iBlkNum
+    );
+
+  }
+}
+
+// Multi-generation MVs refining, called after first normal blend using current working MVs
+MV_FORCEINLINE void MDegrainN::MGR_LC(
+  BYTE* pDst, BYTE* pDstLsb, int iDstPitch,
+  const BYTE* pSrc,
+  BYTE* pDstUV1, BYTE* pDstLsbUV1, int iDstPitchUV1,
+  const BYTE* pSrcUV1,
+  BYTE* pDstUV2, BYTE* pDstLsbUV2, int iDstPitchUV2,
+  const BYTE* pSrcUV2,
+  int iBlkNum, int ibx, int iby, int xx, int xx_uv
+)
+{
+  int iNumItCurr = iMGR;
+
+  do
+  {
+    // Make refined MVs search
+
+    // Make new degrain blend
+    DegrainBlendBlock_LC(
+      pDst, pDstLsb, iDstPitch,
+      pSrc,
+      pDstUV1, pDstLsbUV1, iDstPitchUV1,
+      pSrcUV1,
+      pDstUV2, pDstLsbUV2, iDstPitchUV2,
+      pSrcUV2,
+      iBlkNum, ibx, iby, xx, xx_uv);
+
+    iNumItCurr--;
+
+    if (iNumItCurr == 0)
+    {
+      break;
+    }
+
+  } while (1);
+
+}
+

@@ -61,6 +61,7 @@ public:
     int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR,
     int _MPB_MVlth, int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, ::PClip _dnmask,
     float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm, int _MVF_fm,
+    int _MGR, int _MGR_sr, int _MGR_st,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -232,6 +233,7 @@ private:
   float fadjSADLPFedmv;
   int ithCohMV;
 
+  // MVs temporal filtering
   float fMVLPFCutoff;
   float fMVLPFSlope;
   float fMVLPFGauss;
@@ -247,11 +249,39 @@ private:
   MV_FORCEINLINE void MVMedF_xy(VECTOR* pVin, VECTOR* pVout);
   MV_FORCEINLINE void MVMedF_vl(VECTOR* pVin, VECTOR* pVout);
 
-
   VECTOR* pFilteredMVsPlanesArrays[MAX_TEMP_RAD * 2];
   const uint8_t* pFilteredMVsPlanesArrays_a[MAX_TEMP_RAD * 2]; // pointers to aligned memory pages to free
   SADFunction* SAD;              /* function which computes the sad */
   SADFunction* SADCHROMA;
+
+
+  // Multi-generation MVs refining
+  int iMGR;
+  int iMGR_sr;
+  int iMGR_st;
+
+  // Single iteration degrain blend (support both normal and overlap blending modes)
+  MV_FORCEINLINE void DegrainBlendBlock_LC(
+    BYTE* pDst, BYTE* pDstLsb, int iDstPitch,
+    const BYTE* pSrc, 
+    BYTE* pDstUV1, BYTE* pDstLsbUV1, int iDstPitchUV1,
+    const BYTE* pSrcUV1, 
+    BYTE* pDstUV2, BYTE* pDstLsbUV2, int iDstPitchUV2,
+    const BYTE* pSrcUV2, 
+    int iBlkNum, int ibx, int iby, int xx, int xx_uv
+  );
+
+
+  // multi-pass blending luma and chroma planes
+  MV_FORCEINLINE void MGR_LC(
+    BYTE* pDst, BYTE* pDstLsb, int nDstPitch,
+    const BYTE* pSrc,
+    BYTE* pDstUV1, BYTE* pDstLsbUV1, int nDstPitchUV1,
+    const BYTE* pSrcUV1,
+    BYTE* pDstUV2, BYTE* pDstLsbUV2, int nDstPitchUV2,
+    const BYTE* pSrcUV2,
+    int iBlkNum,int ibx, int iby, int xx, int xx_uv
+  );
 
   DisMetric* DM_Luma;
   DisMetric* DM_Chroma;
