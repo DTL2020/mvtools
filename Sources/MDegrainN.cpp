@@ -764,7 +764,7 @@ MDegrainN::MDegrainN(
   int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR, int _MPB_MVlth,
   int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, PClip _dnmask,
   float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm, int _MVF_fm,
-  int _MGR, int _MGR_sr, int _MGR_st,
+  int _MGR, int _MGR_sr, int _MGR_st, int _MGR_pm,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -853,6 +853,7 @@ MDegrainN::MDegrainN(
   , iMGR(_MGR)
   , iMGR_sr(_MGR_sr)
   , iMGR_st(_MGR_st)
+  , iMGR_pm(_MGR_pm)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -7376,6 +7377,14 @@ MV_FORCEINLINE void MDegrainN::MGR_LC(
   do
   {
     // Make refined MVs search
+    RefineMVs(
+      pDst, pDstLsb, iDstPitch,
+      pSrc,
+      pDstUV1, pDstLsbUV1, iDstPitchUV1,
+      pSrcUV1,
+      pDstUV2, pDstLsbUV2, iDstPitchUV2,
+      pSrcUV2,
+      iBlkNum, ibx, iby, xx, xx_uv);
 
     // Make new degrain blend
     DegrainBlendBlock_LC(
@@ -7389,12 +7398,198 @@ MV_FORCEINLINE void MDegrainN::MGR_LC(
 
     iNumItCurr--;
 
-    if (iNumItCurr == 0)
-    {
-      break;
-    }
-
-  } while (1);
+  } while (iNumItCurr != 0);
 
 }
 
+MV_FORCEINLINE void MDegrainN::RefineMVs(
+  BYTE* pDst, BYTE* pDstLsb, int nDstPitch,
+  const BYTE* pSrc,
+  BYTE* pDstUV1, BYTE* pDstLsbUV1, int nDstPitchUV1,
+  const BYTE* pSrcUV1,
+  BYTE* pDstUV2, BYTE* pDstLsbUV2, int nDstPitchUV2,
+  const BYTE* pSrcUV2,
+  int iBlkNum, int ibx, int iby, int xx, int xx_uv
+)
+{
+  // search of ref frames around current working (or source MVs) as a predictors using current Dst blended block as source
+  TEMPORAL_MVS Predictors[2];// currently 2 predictors - source InputMVs and filtered (WorkingMVs)
+  TEMPORAL_MVS Refined;
+
+  // gather predictors
+  // input MVs
+  for (int k = 0; k < _trad * 2; k++)
+  {
+    Predictors[0].vMVs[k] = pMVsWorkPlanesArrays[k][iBlkNum];
+  }
+
+  //filtered (if present)
+  if (bMVsAddProc)
+  {
+    for (int k = 0; k < _trad * 2; k++)
+    {
+      Predictors[1].vMVs[k] = pFilteredMVsPlanesArrays[k][iBlkNum];
+    }
+  }
+
+  /*
+  // init Refined as 0,0,maxSAD
+  // write back refined MVs to input
+  for (int k = 0; k < _trad * 2; k++)
+  {
+    Refined.vMVs[k].x = 0;
+    Refined.vMVs[k].y = 0;
+    Refined.vMVs[k].x = veryBigSAD;
+  }
+  */
+
+  for (int k = 0; k < _trad * 2; k++)
+  {
+    RefineMV(
+      pDst, pDstLsb, nDstPitch,
+      pDstUV1, pDstLsbUV1, nDstPitchUV1,
+      pDstUV2, pDstLsbUV2, nDstPitchUV2,
+      &Predictors[0], &Predictors[1], &Refined, k,
+      ibx, iby
+    );
+  }
+
+  // write back refined MVs to input
+  for (int k = 0; k < _trad * 2; k++)
+  {
+    pMVsWorkPlanesArrays[k][iBlkNum] = Refined.vMVs[k];
+  }
+}
+
+MV_FORCEINLINE void MDegrainN::RefineMV(
+  BYTE* pDst, BYTE* pDstLsb, int iDstPitch,
+  BYTE* pDstUV1, BYTE* pDstLsbUV1, int iDstPitchUV1,
+  BYTE* pDstUV2, BYTE* pDstLsbUV2, int iDstPitchUV2,
+  TEMPORAL_MVS* Predictors0, TEMPORAL_MVS* Predictors1, TEMPORAL_MVS* Refined, int k,
+  int ibx, int iby
+)
+{
+  // no need to limit min/max coordinates because limited in GetSAD ?
+  Refined->vMVs[k].sad = veryBigSAD;
+
+  // ESA refine around P0
+  for (int dx = (Predictors0->vMVs[k].x - iMGR_sr); dx <= (Predictors0->vMVs[k].x + iMGR_sr); dx++)
+  {
+    for (int dy = (Predictors0->vMVs[k].y - iMGR_sr); dy <= (Predictors0->vMVs[k].y + iMGR_sr); dy++)
+    {
+      sad_t currSAD = GetSAD(pDst, iDstPitch, pDstUV1, iDstPitchUV1, pDstUV2, iDstPitchUV2, ibx, iby, k, dx, dy);
+      if (currSAD < Refined->vMVs[k].sad)
+      {
+        Refined->vMVs[k].x = dx;
+        Refined->vMVs[k].y = dy;
+        Refined->vMVs[k].sad = currSAD;
+      }
+    }
+  }
+
+  // predictor 1 if present - ESA around P1
+  if (bMVsAddProc)
+  {
+    // ESA refine around P0
+    for (int dx = (Predictors1->vMVs[k].x - iMGR_sr); dx <= (Predictors1->vMVs[k].x + iMGR_sr); dx++)
+    {
+      for (int dy = (Predictors1->vMVs[k].y - iMGR_sr); dy <= (Predictors1->vMVs[k].y + iMGR_sr); dy++)
+      {
+        sad_t currSAD = GetSAD(pDst, iDstPitch, pDstUV1, iDstPitchUV1, pDstUV2, iDstPitchUV2, ibx, iby, k, dx, dy);
+        if (currSAD < Refined->vMVs[k].sad)
+        {
+          Refined->vMVs[k].x = dx;
+          Refined->vMVs[k].y = dy;
+          Refined->vMVs[k].sad = currSAD;
+        }
+      }
+    }
+  } // if bMVsAddProc
+
+}
+
+MV_FORCEINLINE sad_t MDegrainN::GetSAD(
+  BYTE* pSrc, int iSrcPitch,
+  BYTE* pSrcUV1, int iSrcPitchUV1,
+  BYTE* pSrcUV2, int iSrcPitchUV2,
+  int bx_src, int by_src, // numbers of blocks
+  int ref_idx, int dx_ref, int dy_ref)
+{
+  sad_t sad_out;
+
+  if (!_usable_flag_arr[ref_idx]) // nothing to process
+  {
+    return veryBigSAD;
+  }
+
+//  const int  rowsize = nBlkSizeY - nOverlapY; // num of lines in row of blocks = block height - overlap ?
+
+//  const int effective_nSrcPitch = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _src_pitch_arr[1]; // pitch is byte granularity, from 1st chroma plane
+
+  const int xx = bx_src * (nBlkSizeX - nOverlapX); // xx: indexing offset, - overlap ?
+  const int xx_uv = bx_src * ((nBlkSizeX - nOverlapX) >> nLogxRatioUV_super); // xx_uv: indexing offset
+
+  bool bChroma = (_nsupermodeyuv & UPLANE) && (_nsupermodeyuv & VPLANE); // chroma present in super clip ?
+// scaleCSAD in the MVclip props
+  int chromaSADscale = _mv_clip_arr[0]._clip_sptr->chromaSADScale; // from 1st ?
+
+  const uint8_t* pRef;
+  int npitchRef;
+
+  int blx = bx_src * (nBlkSizeX - nOverlapX) * nPel + dx_ref;
+  int bly = by_src * (nBlkSizeY - nOverlapY) * nPel + dy_ref;
+
+  ClipBlxBly
+
+    if (nPel != 1 && nUseSubShift != 0)
+    {
+      pRef = _planes_ptr[ref_idx][0]->GetPointerSubShift(blx, bly, npitchRef);
+    }
+    else
+    {
+      pRef = _planes_ptr[ref_idx][0]->GetPointer(blx, bly);
+      npitchRef = _planes_ptr[ref_idx][0]->GetPitch();
+    }
+
+  sad_t sad_chroma = 0;
+
+  if (bChroma)
+  {
+    const uint8_t* pRefU;
+    const uint8_t* pRefV;
+    int npitchRefU, npitchRefV;
+
+    if (/*nPel != 1 && */nUseSubShift != 0)
+    {
+      if (nLogxRatioUV_super == 1) blx++; // add bias for integer division for 4:2:x formats
+      if (nLogyRatioUV_super == 1) bly++; // add bias for integer division for 4:2:x formats
+      pRefU = _planes_ptr[ref_idx][1]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefU);
+      pRefV = _planes_ptr[ref_idx][2]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefV);
+      //      pRefU = _planes_ptr[ref_idx][1]->GetPointerSubShiftUV(blx, bly, npitchRefU, nLogxRatioUV_super, nLogyRatioUV_super);
+      //      pRefV = _planes_ptr[ref_idx][2]->GetPointerSubShiftUV(blx, bly, npitchRefV, nLogxRatioUV_super, nLogyRatioUV_super);
+    }
+    else
+    {
+      if (nLogxRatioUV_super == 1) blx++; // add bias for integer division for 4:2:x formats
+      if (nLogyRatioUV_super == 1) bly++; // add bias for integer division for 4:2:x formats
+      pRefU = _planes_ptr[ref_idx][1]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
+      npitchRefU = _planes_ptr[ref_idx][1]->GetPitch();
+      pRefV = _planes_ptr[ref_idx][2]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
+      npitchRefV = _planes_ptr[ref_idx][2]->GetPitch();
+    }
+
+    sad_chroma = ScaleSadChroma(SADCHROMA(pSrcUV1, iSrcPitchUV1, pRefU, npitchRefU)
+      + SADCHROMA(pSrcUV1, iSrcPitchUV1, pRefV, npitchRefV), chromaSADscale);
+
+    sad_t luma_sad = SAD(pSrc, iSrcPitch, pRef, npitchRef);
+
+    sad_out = luma_sad + sad_chroma;
+
+  }
+  else
+  {
+    sad_out = SAD(pSrc, iSrcPitch, pRef, npitchRef);
+  }
+
+  return sad_out;
+}

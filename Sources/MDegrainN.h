@@ -38,6 +38,12 @@ enum DN_Mask_Mode
   DN_MM_SAMPLES = 2,
 };
 
+enum PN_Mask_Mode
+{
+  PM_INPUT = 0x01, // Input MVs
+  PM_MVF = 0x02,   // MVF output MVs
+};
+
 class MVPlane;
 
 class MDegrainN
@@ -61,7 +67,7 @@ public:
     int _MPBthIVS, bool _showIVSmask, ::PClip _mvmultivs, int _MPB_DMFlags, int _MPBchroma, int _MPBtgtTR,
     int _MPB_MVlth, int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, ::PClip _dnmask,
     float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm, int _MVF_fm,
-    int _MGR, int _MGR_sr, int _MGR_st,
+    int _MGR, int _MGR_sr, int _MGR_st, int _MGR_pm,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -256,9 +262,10 @@ private:
 
 
   // Multi-generation MVs refining
-  int iMGR;
-  int iMGR_sr;
-  int iMGR_st;
+  int iMGR; // multi-generation MVs refining processing. Integer number of additional refining generations. 0 - disabled.
+  int iMGR_sr; // search radius
+  int iMGR_st; // search type, 0 - NStepSearch, 1 - Logariphmic/Diamond, 2 - Exhaustive, 3 - Hexagon, 4 - UMH ?
+  int iMGR_pm;  // predictors bitmask (1 - input source, 2 - after MVF)
 
   // Single iteration degrain blend (support both normal and overlap blending modes)
   MV_FORCEINLINE void DegrainBlendBlock_LC(
@@ -282,6 +289,36 @@ private:
     const BYTE* pSrcUV2,
     int iBlkNum,int ibx, int iby, int xx, int xx_uv
   );
+
+  MV_FORCEINLINE void RefineMVs(
+    BYTE* pDst, BYTE* pDstLsb, int nDstPitch,
+    const BYTE* pSrc,
+    BYTE* pDstUV1, BYTE* pDstLsbUV1, int nDstPitchUV1,
+    const BYTE* pSrcUV1,
+    BYTE* pDstUV2, BYTE* pDstLsbUV2, int nDstPitchUV2,
+    const BYTE* pSrcUV2,
+    int iBlkNum, int ibx, int iby, int xx, int xx_uv
+  );
+
+  struct TEMPORAL_MVS
+  {
+    VECTOR vMVs[MAX_TEMP_RAD * 2];
+  };
+
+  MV_FORCEINLINE void RefineMV(
+    BYTE* pDst, BYTE* pDstLsb, int iDstPitch,
+    BYTE* pDstUV1, BYTE* pDstLsbUV1, int iDstPitchUV1,
+    BYTE* pDstUV2, BYTE* pDstLsbUV2, int iDstPitchUV2,
+    TEMPORAL_MVS* Predictors0, TEMPORAL_MVS* Predictors1, TEMPORAL_MVS* Refined, int k,
+    int ibx, int iby
+  );
+
+  MV_FORCEINLINE sad_t GetSAD(
+    BYTE* pSrc, int iSrcPitch,
+    BYTE* pSrcUV1, int iSrcPitchUV1,
+    BYTE* pSrcUV2, int iSrcPitchUV2,
+    int bx_src, int by_src,
+    int ref_idx, int dx_ref, int dy_ref);
 
   DisMetric* DM_Luma;
   DisMetric* DM_Chroma;
