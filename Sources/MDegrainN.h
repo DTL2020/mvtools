@@ -309,7 +309,7 @@ private:
     BYTE* pDst, BYTE* pDstLsb, int iDstPitch,
     BYTE* pDstUV1, BYTE* pDstLsbUV1, int iDstPitchUV1,
     BYTE* pDstUV2, BYTE* pDstLsbUV2, int iDstPitchUV2,
-    TEMPORAL_MVS* Predictors0, TEMPORAL_MVS* Predictors1, TEMPORAL_MVS* Refined, int k,
+    VECTOR Predictor0, VECTOR Predictor1, VECTOR* Refined, int k,
     int ibx, int iby
   );
 

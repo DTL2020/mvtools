@@ -7432,24 +7432,13 @@ MV_FORCEINLINE void MDegrainN::RefineMVs(
     }
   }
 
-  /*
-  // init Refined as 0,0,maxSAD
-  // write back refined MVs to input
-  for (int k = 0; k < _trad * 2; k++)
-  {
-    Refined.vMVs[k].x = 0;
-    Refined.vMVs[k].y = 0;
-    Refined.vMVs[k].x = veryBigSAD;
-  }
-  */
-
   for (int k = 0; k < _trad * 2; k++)
   {
     RefineMV(
       pDst, pDstLsb, nDstPitch,
       pDstUV1, pDstLsbUV1, nDstPitchUV1,
       pDstUV2, pDstLsbUV2, nDstPitchUV2,
-      &Predictors[0], &Predictors[1], &Refined, k,
+      Predictors[0].vMVs[k], Predictors[1].vMVs[k], &Refined.vMVs[k], k,
       ibx, iby
     );
   }
@@ -7465,42 +7454,50 @@ MV_FORCEINLINE void MDegrainN::RefineMV(
   BYTE* pDst, BYTE* pDstLsb, int iDstPitch,
   BYTE* pDstUV1, BYTE* pDstLsbUV1, int iDstPitchUV1,
   BYTE* pDstUV2, BYTE* pDstLsbUV2, int iDstPitchUV2,
-  TEMPORAL_MVS* Predictors0, TEMPORAL_MVS* Predictors1, TEMPORAL_MVS* Refined, int k,
+  VECTOR Predictor0, VECTOR Predictor1, VECTOR* Refined, int k,
   int ibx, int iby
 )
 {
-  // no need to limit min/max coordinates because limited in GetSAD ?
-  Refined->vMVs[k].sad = veryBigSAD;
+
+  if (!_usable_flag_arr[k]) // nothing to process
+  {
+    Refined->x = 0;
+    Refined->y = 0;
+    Refined->sad = veryBigSAD;
+    return;
+  }
+
+  Refined->sad = veryBigSAD;
 
   // ESA refine around P0
-  for (int dx = (Predictors0->vMVs[k].x - iMGR_sr); dx <= (Predictors0->vMVs[k].x + iMGR_sr); dx++)
+  for (int dx = (Predictor0.x - iMGR_sr); dx <= (Predictor0.x + iMGR_sr); dx++)
   {
-    for (int dy = (Predictors0->vMVs[k].y - iMGR_sr); dy <= (Predictors0->vMVs[k].y + iMGR_sr); dy++)
+    for (int dy = (Predictor0.y - iMGR_sr); dy <= (Predictor0.y + iMGR_sr); dy++)
     {
       sad_t currSAD = GetSAD(pDst, iDstPitch, pDstUV1, iDstPitchUV1, pDstUV2, iDstPitchUV2, ibx, iby, k, dx, dy);
-      if (currSAD < Refined->vMVs[k].sad)
+      if (currSAD < Refined->sad)
       {
-        Refined->vMVs[k].x = dx;
-        Refined->vMVs[k].y = dy;
-        Refined->vMVs[k].sad = currSAD;
+        Refined->x = dx;
+        Refined->y = dy;
+        Refined->sad = currSAD;
       }
     }
   }
 
-  // predictor 1 if present - ESA around P1
+  // predictor 1 if present
   if (bMVsAddProc)
   {
-    // ESA refine around P0
-    for (int dx = (Predictors1->vMVs[k].x - iMGR_sr); dx <= (Predictors1->vMVs[k].x + iMGR_sr); dx++)
+    // ESA refine around P1
+    for (int dx = (Predictor1.x - iMGR_sr); dx <= (Predictor1.x + iMGR_sr); dx++)
     {
-      for (int dy = (Predictors1->vMVs[k].y - iMGR_sr); dy <= (Predictors1->vMVs[k].y + iMGR_sr); dy++)
+      for (int dy = (Predictor1.y - iMGR_sr); dy <= (Predictor1.y + iMGR_sr); dy++)
       {
         sad_t currSAD = GetSAD(pDst, iDstPitch, pDstUV1, iDstPitchUV1, pDstUV2, iDstPitchUV2, ibx, iby, k, dx, dy);
-        if (currSAD < Refined->vMVs[k].sad)
+        if (currSAD < Refined->sad)
         {
-          Refined->vMVs[k].x = dx;
-          Refined->vMVs[k].y = dy;
-          Refined->vMVs[k].sad = currSAD;
+          Refined->x = dx;
+          Refined->y = dy;
+          Refined->sad = currSAD;
         }
       }
     }
@@ -7521,10 +7518,6 @@ MV_FORCEINLINE sad_t MDegrainN::GetSAD(
   {
     return veryBigSAD;
   }
-
-//  const int  rowsize = nBlkSizeY - nOverlapY; // num of lines in row of blocks = block height - overlap ?
-
-//  const int effective_nSrcPitch = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _src_pitch_arr[1]; // pitch is byte granularity, from 1st chroma plane
 
   const int xx = bx_src * (nBlkSizeX - nOverlapX); // xx: indexing offset, - overlap ?
   const int xx_uv = bx_src * ((nBlkSizeX - nOverlapX) >> nLogxRatioUV_super); // xx_uv: indexing offset
