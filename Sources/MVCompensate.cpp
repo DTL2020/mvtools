@@ -36,7 +36,7 @@
 MVCompensate::MVCompensate(
   PClip _child, PClip _super, PClip vectors, bool sc, double _recursionPercent,
   sad_t _thsad, bool _fields, double _time100, sad_t _nSCD1, int _nSCD2, bool _isse2, bool _planar,
-  bool mt_flag, int trad, bool center_flag, PClip cclip_sptr, sad_t _thsad2, bool showRNB,
+  bool mt_flag, int trad, bool center_flag, PClip cclip_sptr, sad_t _thsad2,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(_child)
@@ -51,7 +51,6 @@ MVCompensate::MVCompensate(
   //,	nLogxRatioUV (( xRatioUV == 2) ? 1 : 0) MVFilter has nLogxRatioUV
   //,	nLogyRatioUV ((yRatioUV == 2) ? 1 : 0)
   , _boundary_cnt_arr()
-  , _RNB(showRNB)
 {
   has_at_least_v8 = true;
   try { env_ptr->CheckVersion(8); }
@@ -636,66 +635,7 @@ PVideoFrame __stdcall MVCompensate::GetFrame(int n, IScriptEnvironment* env_ptr)
   _mm_empty(); // (we may use double-float somewhere) Fizick
 #endif
 
-  // Residual noise bitrate compute and display if requested, planar only
-  if (_RNB)
-  {
-    char buf[256];
-    int iRNB = 0;
-    int iSumNzBits = 0;
-
-    nOffset[0] = nHPadding * pixelsize_super + nVPadding * nSrcPitches[0];
-    nOffset[1] = nOffset[2] = (nHPadding >> nLogxRatioUV)* pixelsize_super + (nVPadding >> nLogyRatioUVs[1])* nSrcPitches[1];
-
-    // Y plane
-    for (int y = 0; y < nHeight; y++)
-    {
-      uint8_t* pDstFrame = pDst[0] + nDstPitches[0] * y;
-      uint8_t* pSrcFrame = (uint8_t*)pSrc[0] + nSrcPitches[0] * y + nOffset[0];
-      for (int x = 0; x < nWidth; x++)
-      {
-/*        unsigned int s_diff = SADABS((int)pSrcFrame[x] - (int)pDstFrame[x]);
-        unsigned int lzc = __lzcnt(s_diff); // some log2 simulation - expected asm optimizing by compiler
-        int i_num_nz_bits = 32 - lzc; // assume __lzcnt is 32bit counted ?
-        iSumNzBits += i_num_nz_bits;*/
-        iSumNzBits += 32 - __lzcnt(SADABS((int)pSrcFrame[x] - (int)pDstFrame[x]));
-      }
-    }
-
-    if (planecount > 1) // UV assumed present
-    {
-      // U plane
-      for (int y = 0; y < nHeight >> nLogxRatioUVs[1]; y++)
-      {
-        uint8_t* pDstFrame = pDst[1] + nDstPitches[1] * y;
-        uint8_t* pSrcFrame = (uint8_t*)pSrc[1] + nSrcPitches[1] * y  + nOffset[1];
-        for (int x = 0; x < nWidth >> nLogxRatioUVs[1]; x++)
-        {
-          iSumNzBits += 32 - __lzcnt(SADABS((int)pSrcFrame[x] - (int)pDstFrame[x]));
-        }
-      }
-
-      // V plane
-      for (int y = 0; y < nHeight >> nLogxRatioUVs[2]; y++)
-      {
-        uint8_t* pDstFrame = pDst[2] + nDstPitches[2] * y;
-        uint8_t* pSrcFrame = (uint8_t*)pSrc[2] + nSrcPitches[2] * y + nOffset[2];
-        for (int x = 0; x < nWidth >> nLogxRatioUVs[1]; x++)
-        {
-          iSumNzBits += 32 - __lzcnt(SADABS((int)pSrcFrame[x] - (int)pDstFrame[x]));
-        }
-      }
-    }
-
-    // get frame rate ?
-
-    // display
-    snprintf(buf, sizeof(buf), "RNB: %d bits/frame", iSumNzBits);
-    DrawString(dst, vi, 0, 0, buf);
-
-  }
-
   _mv_clip_ptr = 0;
-
 
   return dst;
 }

@@ -31,27 +31,7 @@
 #include <memory>
 #include <vector>
 
-#if defined _WIN32 && defined DX12_ME
 
-#include <initguid.h>
-#include <d3d12.h>
-#include <dxgi1_6.h>
-#include <D3Dcompiler.h>
-#include <DirectXMath.h>
-#include "d3dx12.h"
-#include "d3d12video.h"
-#include "DirectXHelpers.h"
-#include "ReadData.h"
-#include "DescriptorHeap.h"
-
-#include <string>
-#include <wrl.h>
-#include <shellapi.h>
-
-using Microsoft::WRL::ComPtr;
-using namespace DirectX;
-
-#endif
 
 class MVAnalyse
   : public GenericVideoFilter
@@ -114,11 +94,6 @@ protected:
   // 'opt' beginning until live during tests
   int optSearchOption; // DTL test
   int optPredictorType; // DTL test
-  float scaleCSADfine;// DTL test
-  int iUseSubShift; // DTL test
-  int _cpuFlags; // DTL test
-  int iSearchDirMode; // DTL test, 0 - standard search from current to ref (default), 1 - reverse search from ref to current, 2 - two searches to single output MVClip
-  int DMFlags; // DTL test - DisMetric flags
 
   int pixelsize; // PF
   int bits_per_pixel;
@@ -140,8 +115,6 @@ protected:
 
   int _delta_max;
 
-  int iUploadedCurrentFrameNum;
-
 public:
 
   MVAnalyse(
@@ -151,9 +124,7 @@ public:
     int _overlapx, int _overlapy, const char* _outfilename, int _dctmode,
     int _divide, int _sadx264, sad_t _badSAD, int _badrange, bool _isse,
     bool _meander, bool temporal_flag, bool _tryMany, bool multi_flag,
-    bool mt_flag, int _chromaSADScale, int _optSearchOption, int _predictorType,
-    float _scaleCSADfine, int _accnum, int _iUseSubShift, PClip _child_cur,
-    int _iSearchDirMode, int _DMFlags, IScriptEnvironment* env);
+    bool mt_flag, int _chromaSADScale, int _optSearchOption, int _predictorType, PClip _child_cur, IScriptEnvironment* env);
   ~MVAnalyse();
 
   ::PVideoFrame __stdcall	GetFrame(int n, ::IScriptEnvironment* env) override;
@@ -169,157 +140,6 @@ private:
   void load_src_frame(MVGroupOfFrames &gof, ::PVideoFrame &src, const MVAnalysisData &ana_data);
 
   PClip child_cur;
-
-#if defined _WIN32 && defined DX12_ME
-
-  uint8_t* pNV12FrameDataUV;
-  void LoadNV12(MVGroupOfFrames* pGOF, bool bChroma, int &iWidth, int &iHeight);
-
-  inline UINT Align(UINT size, UINT alignment)
-  {
-    return (size + (alignment - 1)) & ~(alignment - 1);
-  }
-
-  Microsoft::WRL::ComPtr<IDXGIFactory4> factory;
-  Microsoft::WRL::ComPtr<IDXGIAdapter1> hardwareAdapter;
-  Microsoft::WRL::ComPtr<ID3D12Device> m_D3D12device;
-  Microsoft::WRL::ComPtr<ID3D12VideoDevice> dev_D3D12VideoDevice;
-  Microsoft::WRL::ComPtr<ID3D12VideoDevice1> dev_D3D12VideoDevice1;
-  Microsoft::WRL::ComPtr<ID3D12VideoMotionEstimator> spVideoMotionEstimator;
-  Microsoft::WRL::ComPtr<ID3D12VideoMotionVectorHeap> spVideoMotionVectorHeap;
-  Microsoft::WRL::ComPtr<ID3D12Resource> spResolvedMotionVectors;
-  Microsoft::WRL::ComPtr<ID3D12Resource> spResolvedMotionVectorsReadBack;
-  Microsoft::WRL::ComPtr<ID3D12Resource> spSADReadBack;
-  Microsoft::WRL::ComPtr<ID3D12Resource> spCurrentResource;
-  Microsoft::WRL::ComPtr<ID3D12Resource> spCurrentResourceUpload;
-  Microsoft::WRL::ComPtr<ID3D12Resource> spReferenceResource;
-  Microsoft::WRL::ComPtr<ID3D12Resource> spReferenceResourceUpload;
-  Microsoft::WRL::ComPtr<ID3D12VideoEncodeCommandList> m_VideoEncodeCommandList;
-  Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> m_GraphicsCommandList;
-  Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_commandAllocatorGraphics;
-  Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_commandAllocatorVideo;
-  Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_commandQueueVideo;
-  Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_commandQueueGraphics;
-
-  // pool of resources in accelerator
-  int iNumFrameResources;
-  std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> FramesResources;
-
-  HANDLE m_fenceEventGraphics;
-  HANDLE m_fenceEventVideo;
-  HANDLE m_fenceEventCopyBack;
-  Microsoft::WRL::ComPtr<ID3D12Fence> m_fence;
-  UINT64 m_fenceValue;
-
-  Microsoft::WRL::ComPtr<ID3D12Debug> debugController;
-
-  // for Compute Shaders
-  uint32_t  m_ThreadGroupX;
-  uint32_t  m_ThreadGroupY;
-
-  enum Descriptors // is it used ???
-  {
-    TextFont,
-    ControllerFont,
-    Count
-  };
-
-  // Indexes for the root parameter table
-  enum RootParameters : uint32_t
-  {
-    e_rootParameterCB = 0,
-    e_rootParameterSampler,
-    e_rootParameterSRV,
-    e_rootParameterUAV,
-    e_numRootParameters
-  };
-
-  enum ResourceBufferState : uint32_t
-  {
-    ResourceState_ReadyCompute,
-    ResourceState_Computing,    // async is currently running on this resource buffer
-    ResourceState_Computed,     // async buffer has been updated, no one is using it, moved to this state by async thread, only render will access in this state
-    ResourceState_Switching,    // switching buffer from texture to unordered, from render to compute access
-    ResourceState_Rendering,    // buffer is currently being used by the render system for the frame
-    ResourceState_Rendered      // render frame finished for this resource. possible to switch to computing by render thread if needed
-  };
-
-  std::atomic<ResourceBufferState> m_resourceState[2];
-
-  // indexes of resources into the descriptor heap
-  enum DescriptorHeapCount : uint32_t
-  {
-    e_cCB = 10,
-    e_cUAV = 1,
-    e_cSRV = 5,
-  };
-  enum DescriptorHeapIndex : uint32_t
-  {
-    e_iCB = 0,
-    e_iUAV = e_iCB + e_cCB,
-    e_iSRV = e_iUAV + e_cUAV,
-    e_iHeapEnd = e_iSRV + e_cSRV
-  };
-
-  Microsoft::WRL::ComPtr<ID3D12PipelineState> m_computePSO; // Pipeline state object
-  Microsoft::WRL::ComPtr<ID3D12RootSignature> m_computeRootSignature;
-  Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_computeAllocator;
-  Microsoft::WRL::ComPtr<ID3D12CommandQueue>  m_computeCommandQueue;
-  Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> m_computeCommandList;
-
-  HANDLE m_computeFenceEvent;
-
-  std::unique_ptr<DirectX::DescriptorHeap>    m_SRVDescriptorHeap;    // shader resource views for the fractal texture and data
-  std::unique_ptr<DirectX::DescriptorHeap>    m_samplerDescriptorHeap;// shader resource views for the samplers used by the compute shader
-
-  D3D12_RESOURCE_STATES                       m_resourceStateSADTexture;   // current state of the SAD texture, unordered or texture view
-
-  D3D12_CONSTANT_BUFFER_VIEW_DESC sadCBparamsBV;
-  Microsoft::WRL::ComPtr<ID3D12Resource> spSADCBResource;
-
- struct SAD_CS_PARAMS
-  {
-    int blockSizeH;// reg c0.x
-    int blockSizeV; // reg c0.y
-    int useChroma; // reg c0.z
-    int precisionMVs; // reg c0.w
-    int chromaSADscale; // reg c1.x
-    float chromaSADscale_fine; // reg c1.y
-    int nPel; // reg c1.z
-    int iKernelSize; // reg c1.w  
-    float fKernelShift_01_0[4]; // reg c2.xyzw
-    float fKernelShift_01_1[4]; // reg c3.xyzw
-    float fKernelShift_10_0[4]; // reg c4.xyzw
-    float fKernelShift_10_1[4]; // reg c5.xyzw
-    float fKernelShift_11_0[4]; // reg c6.xyzw
-    float fKernelShift_11_1[4]; // reg c7.xyzw
- };
-
- Microsoft::WRL::ComPtr<ID3D12Resource>  m_SADTexture;    // the actual texture generated by the compute shader, double buffered, async and render operating on opposite textures
-
-  void GetHardwareAdapter(
-    _In_ IDXGIFactory1* pFactory,
-    _Outptr_result_maybenull_ IDXGIAdapter1** ppAdapter,
-    bool requestHighPerformanceAdapter = false, // better true ?
-    int iAdapterNum = 0
-    ); 
-
-  void Init_DX12_ME(IScriptEnvironment* env, int nWidth, int nHeight, int iBlkSize, bool bChroma, int iChromaSADScale, float scaleCSADfine, bool bMulti, int _nPel, int iAccNum);
-
-  float fSinc(float x)
-  {
-    x = fabsf(x);
-
-    if (x > 0.000001f)
-    {
-      return sinf(x) / x;
-    }
-    else return 1.0f;
-  }
-
-  void CalcShiftKernel(float* fKernel, float fPelShift, int iKS);
-
-#endif 
 };
 
 #endif

@@ -45,48 +45,18 @@
 #include "MVFrame.h"
 #include "MVPlane.h"
 #include "MVPlaneSet.h"
-#include "DisMetric.h"
 
 
 // right now 5 should be enough (TSchniede)
 #define MAX_PREDICTOR (20)
 
-#define MAX_MULTI_BLOCKS_8x8_AVX2 4
-#define MAX_MULTI_BLOCKS_8x8_AVX512 16
 
-#define CACHE_LINE_SIZE 64
-
-struct VECTOR_XY
-{
-  int x;
-  int y;
-};
 
 class DCTClass;
 class MVClip;
 class MVFrame;
 
-// MVVector
-template <class T>
-class  MVVector
-{
-public:
 
-  typedef T* iterator;
-
-  MVVector();
-  ~MVVector();
-  MVVector(size_t size, IScriptEnvironment* env);
-  size_t size() const;
-
-  size_t size_bytes;
-
-  T& operator[](size_t index);
-
-private:
-  size_t my_size;
-  T* buffer;
-};
 
 // v2.5.13.1: This class is currently a bit messy,
 // it's being reorganised and reworked for further improvement.
@@ -104,7 +74,7 @@ public:
   PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int _nFlags, int _nOverlapX, int _nOverlapY,
     int _xRatioUV, int _yRatioUV, int _pixelsize, int _bits_per_pixel,
     conc::ObjPool <DCTClass> *dct_pool_ptr,
-    bool mt_flag, int _chromaSADscale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift, int _DMFlags,
+    bool mt_flag, int _chromaSADscale, int _optSearchOption,
   IScriptEnvironment* env);
 
   ~PlaneOfBlocks();
@@ -122,11 +92,7 @@ public:
 
     /* compute the predictors from the upper plane */
   template<typename safe_sad_t, typename smallOverlapSafeSad_t>
-//  void InterpolatePrediction(const PlaneOfBlocks &pob);
-  void InterpolatePrediction(PlaneOfBlocks& pob); // temp for MVVector[]
-
-  template<typename safe_sad_t, typename smallOverlapSafeSad_t>
-  void InterpolatePrediction_sse(PlaneOfBlocks& pob); // temp for MVVector[]
+  void InterpolatePrediction(const PlaneOfBlocks &pob);
 
 
   void WriteHeaderToArray(int *array);
@@ -145,7 +111,6 @@ public:
     int _divideExtra, int smooth, bool meander,
     int optPredictorType);
 
-  MVVector <VECTOR> vectors; // public to write MVs from DX12_ME
 
 private:
 
@@ -175,8 +140,6 @@ private:
   const int      chromaSADscale;   // PF experimental 2.7.18.22 allow e.g. YV24 chroma to have the same magnitude as for YV12
   int            effective_chromaSADscale;   // PF experimental 2.7.18.22 allow e.g. YV24 chroma to have the same magnitude as for YV12
   const int      optSearchOption; // DTL test != 0: allow
-  const float    scaleCSADfine; // DTL test - float finetune of luma/chroma SADs ratio in total SAD
-  const int      iUseSubShift; // DTL test - use or not subshifted call to MVPlane for sub sample shifted block's view
 
   SADFunction *  SAD;              /* function which computes the sad */
   LUMAFunction * LUMA;             /* function which computes the mean luma */
@@ -187,19 +150,14 @@ private:
   SADFunction *  SATD;              /* SATD function, (similar to SAD), used as replacement to dct */
 
   // DTL test
-  DisMetric* DM_Luma;
-  DisMetric* DM_Chroma;
-
-  // DTL test
   class WorkingArea; // forward
   using ExhaustiveSearchFunction_t = void(PlaneOfBlocks::*)(WorkingArea& workarea, int mvx, int mvy);
 
   ExhaustiveSearchFunction_t get_ExhaustiveSearchFunction(int BlockX, int BlockY, int SearchParam, int bits_per_pixel, arch_t arch);
   ExhaustiveSearchFunction_t ExhaustiveSearchFunctions[MAX_SUPPORTED_EXH_SEARCHPARAM + 1]; // the function pointer
 
-  //std::vector <VECTOR>              /* motion vectors of the blocks */
-  //  vectors;           /* before the search, contains the hierachal predictor */
-//  MVVector <VECTOR> vectors;
+  std::vector <VECTOR>              /* motion vectors of the blocks */
+    vectors;           /* before the search, contains the hierachal predictor */
                        /* after the search, contains the best motion vector */
 
   bool           smallestPlane;     /* say whether vectors can use predictors from a smaller plane */
@@ -210,7 +168,6 @@ private:
   bool sse41;
   bool avx;
   bool avx2;
-  bool avx512;
 
 
   int dctpitch;
@@ -272,8 +229,6 @@ private:
   //  const VECTOR zeroMV = {0,0,(sad_t)-1};
   int _predictorType; // 2.7.46
 
-  uint64_t checked_mv_vectors[9]; // 2.7.46
-  int iNumCheckedVectors; // 2.7.46
 
   // Working area
   class WorkingArea
@@ -305,13 +260,11 @@ private:
     const uint8_t* pSrc[3];     // the alignment of this array is important for speed for some reason (cacheline?)
 
     VECTOR bestMV;              /* best vector found so far during the search */
-    VECTOR bestMV_multi[MAX_MULTI_BLOCKS_8x8_AVX512]; // 2.7.46
     sad_t nMinCost;               /* minimum cost ( sad + mv cost ) found so far */
-    sad_t nMinCost_multi[MAX_MULTI_BLOCKS_8x8_AVX512]; // 2.7.46
     VECTOR predictor;           /* best predictor for the current vector */
     VECTOR predictors[MAX_PREDICTOR];   /* set of predictors for the current block */
 
-    int nDxMin;                 /* minimum x coordinate for the vector */ //need to be in order DxMin, DyMin for ClipMV faster load
+    int nDxMin;                 /* minimum x coordinate for the vector */
     int nDyMin;                 /* minimum y coordinate for the vector */
     int nDxMax;                 /* maximum x corrdinate for the vector */
     int nDyMax;                 /* maximum y coordinate for the vector */
@@ -322,8 +275,6 @@ private:
 
     int pixelsize;
     int bits_per_pixel;
-
-    bool bIntraframe;
 
     // Data set once
     TmpDataArray dctSrc;
@@ -350,13 +301,6 @@ private:
 
     template<typename pixel_t>
     sad_t MotionDistorsion(int vx, int vy) const; // this one is better not forceinlined
-
-    // multi blocks processing sources for reusing
-    __m256i ymm0_src_r1, ymm1_src_r2, ymm2_src_r3, ymm3_src_r4, ymm4_src_r5, ymm5_src_r6, ymm6_src_r7, ymm7_src_r8;
-
-    __m512i zmm0_Src_r1_b0007, zmm2_Src_r2_b0007, zmm4_Src_r3_b0007, zmm6_Src_r4_b0007, zmm8_Src_r5_b0007, zmm10_Src_r6_b0007, zmm12_Src_r7_b0007, zmm14_Src_r8_b0007;
-    __m512i zmm1_Src_r1_b0815, zmm3_Src_r2_b0815, zmm5_Src_r3_b0815, zmm7_Src_r4_b0815, zmm9_Src_r5_b0815, zmm11_Src_r6_b0815, zmm13_Src_r7_b0815, zmm15_Src_r8_b0815;
-
   };
 
   class WorkingAreaFactory
@@ -394,16 +338,6 @@ private:
   template<typename pixel_t>
   void FetchPredictors(WorkingArea &workarea);
 
-  template<typename pixel_t>
-  MV_FORCEINLINE void FetchPredictors_sse41(WorkingArea &workarea);
-
-  template<typename pixel_t>
-  MV_FORCEINLINE void FetchPredictors_sse41_intraframe(WorkingArea& workarea);
-
-  template<typename pixel_t>
-  MV_FORCEINLINE void FetchPredictors_avx2_intraframe(WorkingArea& workarea);
-
-
   /* performs a diamond search */
   template<typename pixel_t>
   void DiamondSearch(WorkingArea &workarea, int step);
@@ -428,51 +362,11 @@ private:
 
   /* performs an epz search */
   template<typename pixel_t>
-  void PseudoEPZSearch_optSO2(WorkingArea& workarea); // full predictors, optSearchOption = 2 set of params
-
-  template<typename pixel_t>
-  void PseudoEPZSearch_optSO2_8x8_avx2(WorkingArea& workarea); // full predictors, optSearchOption = 2 set of params, avx2 version of SADs and search
- 
-  /* performs an epz search */
-  template<typename pixel_t>
-  void PseudoEPZSearch_glob_med_pred(WorkingArea& workarea); // planes >=2 recommended (optPredictorType=1)
+  void PseudoEPZSearch_no_pred(WorkingArea& workarea); // planes = 1 recommended
 
   /* performs an epz search */
   template<typename pixel_t>
-  void PseudoEPZSearch_no_pred(WorkingArea& workarea); // only interpolated predictor (optPredictorType=2)
-
-  /* performs an epz search */
-  template<typename pixel_t>
-  void PseudoEPZSearch_no_refine(WorkingArea& workarea); // no refining mode - faster (optPredictorType=3)
-
-  /* performs an epz search */
-  template<typename pixel_t>
-  void PseudoEPZSearch_optSO2_glob_med_pred(WorkingArea& workarea); // global and median predictors, optSearchOption = 2 set of params
-
-  /* performs an epz search */
-  template<typename pixel_t>
-  void PseudoEPZSearch_optSO2_no_pred(WorkingArea& workarea); // no predictors, optSearchOption = 2 set of params
-
-  /* performs an epz search */
-  template<typename pixel_t>
-  void PseudoEPZSearch_optSO2_no_refine(WorkingArea& workarea); // no predictors, optSearchOption = 2 optPredictorType = 3 set of params
-
-  /* performs an epz search */
-  template<typename pixel_t>
-  void PseudoEPZSearch_optSO3_no_pred(WorkingArea& workarea, int* pBlkData); // no predictors, multi-block search AVX2
-
-  /* performs an epz search */
-  template<typename pixel_t>
-  void PseudoEPZSearch_optSO3_glob_pred_avx2(WorkingArea& workarea, int* pBlkData); // zero and global predictor, multi-block search AVX2
-
-  /* performs an epz search */
-  template<typename pixel_t>
-  void PseudoEPZSearch_optSO4_no_pred(WorkingArea& workarea, int* pBlkData); // no predictors, multi-block search AVX512
-
-  /* performs an epz search */
-  template<typename pixel_t>
-  void PseudoEPZSearch_optSO4_glob_pred_avx512(WorkingArea& workarea, int* pBlkData); // zero and global predictor, multi-block search AVX512
-
+  void PseudoEPZSearch_glob_med_pred(WorkingArea& workarea); // planes >=2 recommended
 
   //	void PhaseShiftSearch(int vx, int vy);
 
@@ -480,45 +374,19 @@ private:
   template<typename pixel_t>
   void ExpandingSearch(WorkingArea &workarea, int radius, int step, int mvx, int mvy); // diameter = 2*radius + 1
 
-  // DTL test function, 8x8 and 16x16 block, 8 bit only
-
-  // C-versions
-  void ExhaustiveSearch_uint8_sp1_c(WorkingArea& workarea, int mvx, int mvy); // for any nPel and blocksize (SAD() is selected for blocksize)
-  void ExhaustiveSearch_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy);
-  void ExhaustiveSearch_uint8_sp3_c(WorkingArea& workarea, int mvx, int mvy);
-  void ExhaustiveSearch_uint8_sp4_c(WorkingArea& workarea, int mvx, int mvy);
-
-  // 8x8 exa search radius 4
+  // DTL test function, 8x8 block, 8 bit only
+  // 8x8 esa search radius 4
+  void ExhaustiveSearch8x8_uint8_sp4_c(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp4_avx2(WorkingArea& workarea, int mvx, int mvy);
+  //void ExhaustiveSearch8x8_uint8_sp4_avx2_2(WorkingArea& workarea, int mvx, int mvy);
 
-  // 8x8 exa search radius 1
+  // 8x8 esa search radius 1
+  void ExhaustiveSearch8x8_uint8_sp1_c(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy);
-  void ExhaustiveSearch8x8_uint8_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy);
-  void ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy);
-  void ExhaustiveSearch8x8_uint8_SO2_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy);
-  void ExhaustiveSearch8x8_uint8_4Blks_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy, int* pBlkData);
-  void ExhaustiveSearch8x8_uint8_4Blks_Z_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy, int* pBlkData); // + zero pos
-  void ExhaustiveSearch8x8_uint8_16Blks_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy, int* pBlkData);
-  void ExhaustiveSearch8x8_uint8_16Blks_Z_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy, int* pBlkData); // +zero pos
-   
-  // 8x8 exa search radius 2
+
+  // 8x8 esa search radius 2
+  void ExhaustiveSearch8x8_uint8_sp2_c(WorkingArea& workarea, int mvx, int mvy);
   void ExhaustiveSearch8x8_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
-  void ExhaustiveSearch8x8_uint8_SO2_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy);
-  
-  // 8x8 exa search radius 3
-  void ExhaustiveSearch8x8_uint8_np1_sp3_avx2(WorkingArea& workarea, int mvx, int mvy);
-
-  // 16x16 exa search radius 1
-  void ExhaustiveSearch16x16_uint8_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy); // minsadbw only version
-  void ExhaustiveSearch16x16_uint8_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy); 
-  void ExhaustiveSearch16x16_uint8_SO2_np1_sp1_avx2(WorkingArea& workarea, int mvx, int mvy); // minsadbw only version
-  void ExhaustiveSearch16x16_uint8_SO2_np1_sp1_avx512(WorkingArea& workarea, int mvx, int mvy); // minsadbw only version
-
-  // 16x16 exa search radius 2
-  void ExhaustiveSearch16x16_uint8_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy); // minsadbw only version
-  void ExhaustiveSearch16x16_uint8_SO2_np1_sp2_avx2(WorkingArea& workarea, int mvx, int mvy); // minsadbw only version
-
-
   // END OF DTL test function
 
   template<typename pixel_t>
@@ -539,14 +407,6 @@ private:
       pRefFrame->GetPlane(YPLANE)->GetAbsolutePointerPel <2>((workarea.x[0] << 2) + nVx, (workarea.y[0] << 2) + nVy);
   }
 
-  MV_FORCEINLINE const uint8_t* GetRefBlockSubShifted(WorkingArea& workarea, int nVx, int nVy, int& iPitch) {
-
-   return
-      (nPel == 2) ? pRefFrame->GetPlane(YPLANE)->GetPointerSubShift((workarea.x[0] << 1) + nVx, (workarea.y[0] << 1) + nVy, iPitch, false) :
-      (nPel == 1) ? pRefFrame->GetPlane(YPLANE)->GetPointerSubShift((workarea.x[0]) + nVx, (workarea.y[0]) + nVy, iPitch, false) :
-      pRefFrame->GetPlane(YPLANE)->GetPointerSubShift((workarea.x[0] << 2) + nVx, (workarea.y[0] << 2) + nVy, iPitch, false);
-  }
-
   MV_FORCEINLINE const uint8_t* GetRefBlockU(WorkingArea& workarea, int nVx, int nVy)
   {
     int nVx1 = (nLogxRatioUV == 1) ? nVx + 1 : nVx;
@@ -558,14 +418,6 @@ private:
 
   }
 
-  MV_FORCEINLINE const uint8_t* GetRefBlockUSubShifted(WorkingArea& workarea, int nVx, int nVy, int& iPitch)
-  {
-    return
-      (nPel == 2) ? pRefFrame->GetPlane(UPLANE)->GetPointerSubShift((workarea.x[1] << 1) + (nVx >> nLogxRatioUV), (workarea.y[1] << 1) + (nVy >> nLogyRatioUV), iPitch, false) :
-      (nPel == 1) ? pRefFrame->GetPlane(UPLANE)->GetPointerSubShift((workarea.x[1]) + (nVx >> nLogxRatioUV), (workarea.y[1]) + (nVy >> nLogyRatioUV), iPitch, false) :
-      pRefFrame->GetPlane(UPLANE)->GetPointerSubShift((workarea.x[1] << 2) + (nVx >> nLogxRatioUV), (workarea.y[1] << 2) + (nVy >> nLogyRatioUV), iPitch, false);
-  }
-
   MV_FORCEINLINE const uint8_t* GetRefBlockV(WorkingArea& workarea, int nVx, int nVy)
   {
     int nVx1 = (nLogxRatioUV == 1) ? nVx + 1 : nVx;
@@ -575,15 +427,6 @@ private:
       (nPel == 1) ? pRefFrame->GetPlane(VPLANE)->GetAbsolutePointerPel <0>((workarea.x[2]) + (nVx1 >> nLogxRatioUV), (workarea.y[2]) + (nVy1 >> nLogyRatioUV)) :
       pRefFrame->GetPlane(VPLANE)->GetAbsolutePointerPel <2>((workarea.x[2] << 2) + (nVx1 >> nLogxRatioUV), (workarea.y[2] << 2) + (nVy1 >> nLogyRatioUV));
   }
-
-  MV_FORCEINLINE const uint8_t* GetRefBlockVSubShifted(WorkingArea& workarea, int nVx, int nVy, int& iPitch)
-  {
-    return
-      (nPel == 2) ? pRefFrame->GetPlane(VPLANE)->GetPointerSubShift((workarea.x[1] << 1) + (nVx >> nLogxRatioUV), (workarea.y[1] << 1) + (nVy >> nLogyRatioUV), iPitch, false) :
-      (nPel == 1) ? pRefFrame->GetPlane(VPLANE)->GetPointerSubShift((workarea.x[1]) + (nVx >> nLogxRatioUV), (workarea.y[1]) + (nVy >> nLogyRatioUV), iPitch, false) :
-      pRefFrame->GetPlane(VPLANE)->GetPointerSubShift((workarea.x[1] << 2) + (nVx >> nLogxRatioUV), (workarea.y[1] << 2) + (nVy >> nLogyRatioUV), iPitch, false);
-  }
-
 
   MV_FORCEINLINE const uint8_t* GetSrcBlock(int nX, int nY)
   {
@@ -598,8 +441,6 @@ private:
   template<typename pixel_t>
   MV_FORCEINLINE void CheckMV0(WorkingArea &workarea, int vx, int vy);
   template<typename pixel_t>
-  MV_FORCEINLINE void CheckMV0_SO2(WorkingArea& workarea, int vx, int vy, sad_t cost);
-  template<typename pixel_t>
   MV_FORCEINLINE void CheckMV(WorkingArea &workarea, int vx, int vy);
   template<typename pixel_t>
   MV_FORCEINLINE void CheckMV2(WorkingArea &workarea, int vx, int vy, int *dir, int val);
@@ -608,38 +449,20 @@ private:
   MV_FORCEINLINE int ClipMVx(WorkingArea &workarea, int vx);
   MV_FORCEINLINE int ClipMVy(WorkingArea &workarea, int vy);
   MV_FORCEINLINE VECTOR ClipMV(WorkingArea &workarea, VECTOR v);
-  MV_FORCEINLINE VECTOR	ClipMV_SO2(WorkingArea& workarea, VECTOR v);
   MV_FORCEINLINE static int Median(int a, int b, int c);
   // MV_FORCEINLINE static unsigned int SquareDifferenceNorm(const VECTOR& v1, const VECTOR& v2); // not used
   MV_FORCEINLINE static unsigned int SquareDifferenceNorm(const VECTOR& v1, const int v2x, const int v2y);
   MV_FORCEINLINE bool IsInFrame(int i);
-  MV_FORCEINLINE bool IsVectorChecked(uint64_t xy); // 2.7.46
-  MV_FORCEINLINE bool IsVectorsCoherent(VECTOR_XY* vectors_coh_check, int cnt);
 
   template<typename pixel_t>
   void Refine(WorkingArea &workarea);
 
   template<typename pixel_t>
   void	search_mv_slice(Slicer::TaskData &td);
-
-  template<typename pixel_t>
-  void	search_mv_slice_SO2(Slicer::TaskData& td); // with optSearchOption = 2 set of params
-
-  template<typename pixel_t>
-  void	search_mv_slice_SO3(Slicer::TaskData& td); // with optSearchOption = 3 set of params, multi-blocks search AVX2
-
-  template<typename pixel_t>
-  void	search_mv_slice_SO4(Slicer::TaskData& td); // with optSearchOption = 4 set of params, multi-blocks search AVX512
-
-
   template<typename pixel_t>
   void	recalculate_mv_slice(Slicer::TaskData &td);
 
   void	estimate_global_mv_doubled_slice(Slicer::TaskData &td);
-
-  void(PlaneOfBlocks::* ExhaustiveSearch_SO2)(WorkingArea& workarea, int mvx, int mvy); // selector for sp1 and sp2
-
-//  void(PlaneOfBlocks::* Sel_Pseudo_EPZ_search_SO2)(WorkingArea& workarea); // selector for optPredictors 0,1
 
 };
 
