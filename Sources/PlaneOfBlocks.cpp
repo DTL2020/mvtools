@@ -399,6 +399,10 @@ void PlaneOfBlocks::SearchMVs(
 
   _out = out;
   _outfilebuf = outfilebuf;
+  if (_outfilebuf != NULL)
+  {
+    int ibr = 0;
+  }
   _vecPrev = vecPrev;
   _meander_flag = meander;
   _pnew = pnew;
