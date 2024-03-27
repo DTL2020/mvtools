@@ -1050,6 +1050,145 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
 }
 
 template<typename pixel_t>
+void PlaneOfBlocks::FetchMorePredictors(WorkingArea& workarea)
+{
+  VECTOR toMedian[MAX_MEDIAN_PREDICTORS]; // to be more SIMD friendly we not need SAD for this computing
+  VECTOR toClip;
+
+  int iPredIdx = (temporal) ? 5 : 4; // place additional predictors after temporal (if present)
+
+  // _predictorType of -1 : 3x3 median predictor, workarea.predictors[5]
+
+  for (int dy = -1; dy < 2; dy++)
+  {
+    for (int dx = -1; dx < 2; dx++)
+    {
+      int iGetIdx;
+      // scan linearly from left to right and from top to bottom
+      // check for lower than zero or over max index
+      iGetIdx = workarea.blkIdx + dy * nBlkX + dx;
+
+      if ((iGetIdx < 0) || (iGetIdx > nBlkCount - 1))
+      {
+        toMedian[(dy + 1) * 3 + (dx + 1)] = zeroMVfieldShifted;
+      }
+      else
+      {
+        toMedian[(dy + 1) * 3 + (dx + 1)] = vectors[iGetIdx];
+      }
+    }
+  }
+
+  GetMedianXY(&toMedian[0], &toClip, 3*3);
+
+  workarea.predictors[iPredIdx] = ClipMV(workarea, toClip);
+
+  if (_predictorType >= -1) return;
+
+  // _predictorType of -2 : 5x5 median predictor
+  for (int dy = -2; dy < 3; dy++)
+  {
+    for (int dx = -2; dx < 3; dx++)
+    {
+      int iGetIdx;
+      // scan linearly from left to right and from top to bottom
+      // check for lower than zero or over max index
+      iGetIdx = workarea.blkIdx + dy * nBlkX + dx;
+
+      if ((iGetIdx < 0) || (iGetIdx > nBlkCount - 1))
+      {
+        toMedian[(dy + 2) * 5 + (dx + 2)] = zeroMVfieldShifted;
+      }
+      else
+      {
+        toMedian[(dy + 2) * 5 + (dx + 2)] = vectors[iGetIdx];
+      }
+    }
+  }
+
+  GetMedianXY(&toMedian[0], &toClip, 5 * 5);
+
+  workarea.predictors[iPredIdx + 1] = ClipMV(workarea, toClip);
+
+  if (_predictorType >= -2) return;
+
+  // _predictorType of -3 : 7x7 median predictor
+  for (int dy = -3; dy < 4; dy++)
+  {
+    for (int dx = -3; dx < 4; dx++)
+    {
+      int iGetIdx;
+      // scan linearly from left to right and from top to bottom
+      // check for lower than zero or over max index
+      iGetIdx = workarea.blkIdx + dy * nBlkX + dx;
+
+      if ((iGetIdx < 0) || (iGetIdx > nBlkCount - 1))
+      {
+        toMedian[(dy + 3) * 7 + (dx + 3)] = zeroMVfieldShifted;
+      }
+      else
+      {
+        toMedian[(dy + 3) * 7 + (dx + 3)] = vectors[iGetIdx];
+      }
+    }
+  }
+
+  GetMedianXY(&toMedian[0], &toClip, 7 * 7);
+
+  workarea.predictors[iPredIdx + 2] = ClipMV(workarea, toClip);
+
+
+}
+
+MV_FORCEINLINE void PlaneOfBlocks::GetMedianXY(VECTOR* toMedian, VECTOR *vOut, int iNumMVs)
+{
+  // process dual coords in scalar C ?
+  const int iMaxMVlength = std::max(nBlkX * nBlkSizeX, nBlkY * nBlkSizeY) * 2 * nPel; // hope it is enough ? todo: make global constant ?
+  int MaxSumDM = iNumMVs * iMaxMVlength;
+
+  // find lowest sum of row in DM_table and index of row in single DM scan with DM calc
+  int sum_minrow_x = MaxSumDM;
+  int sum_minrow_y = MaxSumDM;
+  int i_idx_minrow_x = 0;
+  int i_idx_minrow_y = 0;
+
+  for (int dmt_row = 0; dmt_row < iNumMVs; dmt_row++)
+  {
+    int sum_row_x = 0;
+    int sum_row_y = 0;
+
+    for (int dmt_col = 0; dmt_col < iNumMVs; dmt_col++)
+    {
+      if (dmt_row == dmt_col)
+      { // with itself => DM=0
+        continue;
+      }
+
+      sum_row_x += std::abs(toMedian[dmt_row].x - toMedian[dmt_col].x);
+      sum_row_y += std::abs(toMedian[dmt_row].y - toMedian[dmt_col].y);
+    }
+
+    if (sum_row_x < sum_minrow_x)
+    {
+      sum_minrow_x = sum_row_x;
+      i_idx_minrow_x = dmt_row;
+    }
+
+    if (sum_row_y < sum_minrow_y)
+    {
+      sum_minrow_y = sum_row_y;
+      i_idx_minrow_y = dmt_row;
+    }
+
+  }
+
+  vOut[0].x = toMedian[i_idx_minrow_x].x;
+  vOut[0].y = toMedian[i_idx_minrow_y].y;
+  vOut[0].sad = std::max(toMedian[i_idx_minrow_x].sad, toMedian[i_idx_minrow_y].sad); // do we need SAD of predictor anywhere later ?
+
+}
+
+template<typename pixel_t>
 MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
 {
   VECTOR v1; VECTOR v2; VECTOR v3;
@@ -1671,6 +1810,11 @@ MV_FORCEINLINE bool PlaneOfBlocks::IsVectorChecked(uint64_t xy) // 2.7.46
 template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
 {
+  if (_predictorType < 0)
+  {
+    FetchMorePredictors<pixel_t>(workarea);
+  }
+
   typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
   if (sse41 && optSearchOption > 0)
   {
@@ -1719,8 +1863,8 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
   checked_mv_vectors[iNumCheckedVectors] = 0;
   iNumCheckedVectors++;
 
-  VECTOR bestMVMany[8];
-  int nMinCostMany[8];
+  VECTOR bestMVMany[MAX_PREDICTOR+3];
+  int nMinCostMany[MAX_PREDICTOR+3];
 
   for (int i = 0; i < 8; i++) nMinCostMany[i] = verybigSAD + 1; // init trymany with verybig value for skipped by already checked vectors points !
 
@@ -1801,6 +1945,9 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
   // then all the other predictors
   int npred = (temporal) ? 5 : 4;
 
+  // add number of possible more median predictors
+  npred += std::abs(_predictorType); // maybe not best but convert -1..-3 to 1..3 additional predictors to check
+
   for (int i = 0; i < npred; i++)
   {
     if (tryMany)
@@ -1821,6 +1968,7 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
       nMinCostMany[i + 3] = workarea.nMinCost;
     }
   }	// for i
+
 
   if (tryMany)
   {
@@ -4816,7 +4964,7 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
         else 
         {
           // Possible point of placement selection of 'predictors control'
-          if (_predictorType == 0)
+          if (_predictorType <= 0)
             PseudoEPZSearch<pixel_t>(workarea); // all predictors (original)
           else if (_predictorType == 1) // DTL: partial predictors
             PseudoEPZSearch_glob_med_pred<pixel_t>(workarea);

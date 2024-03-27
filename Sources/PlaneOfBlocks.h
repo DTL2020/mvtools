@@ -53,6 +53,7 @@
 
 #define MAX_MULTI_BLOCKS_8x8_AVX2 4
 #define MAX_MULTI_BLOCKS_8x8_AVX512 16
+#define MAX_MEDIAN_PREDICTORS 49 // up to 7x7 predictors ares
 
 #define CACHE_LINE_SIZE 64
 
@@ -272,7 +273,7 @@ private:
   //  const VECTOR zeroMV = {0,0,(sad_t)-1};
   int _predictorType; // 2.7.46
 
-  uint64_t checked_mv_vectors[9]; // 2.7.46
+  uint64_t checked_mv_vectors[MAX_PREDICTOR]; // 2.7.46
   int iNumCheckedVectors; // 2.7.46
 
   // Working area
@@ -402,6 +403,12 @@ private:
 
   template<typename pixel_t>
   MV_FORCEINLINE void FetchPredictors_avx2_intraframe(WorkingArea& workarea);
+
+  template<typename pixel_t>
+  MV_FORCEINLINE void FetchMorePredictors(WorkingArea& workarea);
+
+  MV_FORCEINLINE void GetMedianXY(VECTOR* toMedian, VECTOR *vOut, int iNumMVs);
+
 
 
   /* performs a diamond search */
