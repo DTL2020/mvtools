@@ -50,7 +50,8 @@ MVAnalyse::MVAnalyse(
   bool _meander, bool temporal_flag, bool _tryMany, bool multi_flag,
   bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType,
   float _scaleCSADfine, int _accnum, int _iUseSubShift, PClip _child_cur,
-  int _iSearchDirMode, int _DMFlags, IScriptEnvironment* env
+  int _iSearchDirMode, int _DMFlags, int _AreaMode, int _AMDiffSAD,
+  IScriptEnvironment* env
 )
   : ::GenericVideoFilter(_child)
   , _srd_arr(1)
@@ -68,6 +69,8 @@ MVAnalyse::MVAnalyse(
   , child_cur(_child_cur)
   , iSearchDirMode(_iSearchDirMode)
   , DMFlags(_DMFlags)
+  , iAreaMode(_AreaMode)
+  , iAMDiffSAD(_AMDiffSAD)
 {
   has_at_least_v8 = true;
   try { env->CheckVersion(8); }
@@ -539,6 +542,8 @@ MVAnalyse::MVAnalyse(
     scaleCSADfine,
     iUseSubShift,
     DMFlags,
+    iAreaMode,
+    iAMDiffSAD,
     env
   ));
 

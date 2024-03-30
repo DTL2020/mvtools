@@ -54,7 +54,7 @@ static unsigned int SadDummy(const uint8_t *, int , const uint8_t *, int )
 PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int _nFlags, int _nOverlapX, int _nOverlapY,
   int _xRatioUV, int _yRatioUV, int _pixelsize, int _bits_per_pixel,
   conc::ObjPool <DCTClass> *dct_pool_ptr,
-  bool mt_flag, int _chromaSADscale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift, int _DMFlags,
+  bool mt_flag, int _chromaSADscale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift, int _DMFlags, int _AreaMode, int _AMDiffSAD,
   IScriptEnvironment* env)
   : nBlkX(_nBlkX)
   , nBlkY(_nBlkY)
@@ -81,6 +81,8 @@ PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSi
   , optSearchOption(_optSearchOption)
   , scaleCSADfine(_scaleCSADfine)
   , iUseSubShift(_iUseSubShift)
+  , iAreaMode(_AreaMode)
+  , iAMDiffSAD(_AMDiffSAD)
   , SAD(0)
   , LUMA(0)
 //  , VAR(0)
@@ -1079,7 +1081,7 @@ void PlaneOfBlocks::FetchMorePredictors(WorkingArea& workarea)
     }
   }
 
-  GetMedianXY(&toMedian[0], &toClip, 3*3);
+  GetModeVECTOR(&toMedian[0], &toClip, 3*3);
 
   workarea.predictors[iPredIdx] = ClipMV(workarea, toClip);
 
@@ -1106,7 +1108,7 @@ void PlaneOfBlocks::FetchMorePredictors(WorkingArea& workarea)
     }
   }
 
-  GetMedianXY(&toMedian[0], &toClip, 5 * 5);
+  GetModeVECTOR(&toMedian[0], &toClip, 5 * 5);
 
   workarea.predictors[iPredIdx + 1] = ClipMV(workarea, toClip);
 
@@ -1133,14 +1135,14 @@ void PlaneOfBlocks::FetchMorePredictors(WorkingArea& workarea)
     }
   }
 
-  GetMedianXY(&toMedian[0], &toClip, 7 * 7);
+  GetModeVECTOR(&toMedian[0], &toClip, 7 * 7);
 
   workarea.predictors[iPredIdx + 2] = ClipMV(workarea, toClip);
 
 
 }
 
-MV_FORCEINLINE void PlaneOfBlocks::GetMedianXY(VECTOR* toMedian, VECTOR *vOut, int iNumMVs)
+MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTOR(VECTOR* toMedian, VECTOR *vOut, int iNumMVs)
 {
   // process dual coords in scalar C ?
   const int iMaxMVlength = std::max(nBlkX * nBlkSizeX, nBlkY * nBlkSizeY) * 2 * nPel; // hope it is enough ? todo: make global constant ?
@@ -1184,7 +1186,7 @@ MV_FORCEINLINE void PlaneOfBlocks::GetMedianXY(VECTOR* toMedian, VECTOR *vOut, i
 
   vOut[0].x = toMedian[i_idx_minrow_x].x;
   vOut[0].y = toMedian[i_idx_minrow_y].y;
-  vOut[0].sad = std::max(toMedian[i_idx_minrow_x].sad, toMedian[i_idx_minrow_y].sad); // do we need SAD of predictor anywhere later ?
+  vOut[0].sad = std::max(toMedian[i_idx_minrow_x].sad, toMedian[i_idx_minrow_y].sad); // may be make func param for max or min ?
 
 }
 
@@ -1849,9 +1851,9 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
   // Do we bias zero with not taking into account distorsion ?
   workarea.bestMV.x = zeroMVfieldShifted.x;
   workarea.bestMV.y = zeroMVfieldShifted.y;
-/*  saduv = (chroma) ?
-    ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, 0, 0), nRefPitch[1])
-      + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, 0, 0), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0; */
+  /*  saduv = (chroma) ?
+      ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, 0, 0), nRefPitch[1])
+        + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, 0, 0), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0; */
   saduv = (chroma) ?
     ScaleSadChroma_f(DM_Chroma->GetDisMetric(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, 0, 0), nRefPitch[1])
       + DM_Chroma->GetDisMetric(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, 0, 0), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0;
@@ -1863,8 +1865,8 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
   checked_mv_vectors[iNumCheckedVectors] = 0;
   iNumCheckedVectors++;
 
-  VECTOR bestMVMany[MAX_PREDICTOR+3];
-  int nMinCostMany[MAX_PREDICTOR+3];
+  VECTOR bestMVMany[MAX_PREDICTOR + 3];
+  int nMinCostMany[MAX_PREDICTOR + 3];
 
   for (int i = 0; i < 8; i++) nMinCostMany[i] = verybigSAD + 1; // init trymany with verybig value for skipped by already checked vectors points !
 
@@ -1883,9 +1885,9 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
   {
     if (!IsVectorChecked((uint64_t)workarea.globalMVPredictor.x | ((uint64_t)workarea.globalMVPredictor.y << 32)))
     {
-/*      saduv = (chroma) ?
-        ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y), nRefPitch[1])
-          + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0;*/
+      /*      saduv = (chroma) ?
+              ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y), nRefPitch[1])
+                + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0;*/
       saduv = (chroma) ?
         ScaleSadChroma_f(DM_Chroma->GetDisMetric(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y), nRefPitch[1])
           + DM_Chroma->GetDisMetric(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0;
@@ -1915,10 +1917,10 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
     //	{
     if (!IsVectorChecked((uint64_t)workarea.predictor.x | ((uint64_t)workarea.predictor.y << 32)))
     {
-/*      saduv = (chroma) ? ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[1])
-        + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0;*/
+      /*      saduv = (chroma) ? ScaleSadChroma_f(SADCHROMA(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[1])
+              + SADCHROMA(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0;*/
       saduv = (chroma) ? ScaleSadChroma_f(DM_Chroma->GetDisMetric(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[1])
-                + DM_Chroma->GetDisMetric(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0;
+        + DM_Chroma->GetDisMetric(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0;
       sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
       sad += saduv;
       cost = sad;
@@ -2001,7 +2003,7 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
 
   // bad vector, try wide search
   if (workarea.blkIdx > 1 + workarea.blky_beg * nBlkX
-    && foundSAD > (badSAD + badSAD*badcount / BADCOUNT_LIMIT))
+    && foundSAD > (badSAD + badSAD * badcount / BADCOUNT_LIMIT))
   {
     // with some soft limit (BADCOUNT_LIMIT) of bad cured vectors (time consumed)
     ++badcount;
@@ -2030,7 +2032,7 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
       {
         // rathe good is not found, lets try around zero
 //				UMHSearch(workarea, badSADRadius, abs(mvx0)%4 - 2, abs(mvy0)%4 - 2);
-        UMHSearch<pixel_t>(workarea, badrange*nPel, 0, 0);
+        UMHSearch<pixel_t>(workarea, badrange * nPel, 0, 0);
       }
     }
 
@@ -2061,7 +2063,7 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
               mvx = 0; // store to not move the search center!
               mvy = 0;
       */
-      for (int i = 1; i < -badrange*nPel; i += nPel)// at radius
+      for (int i = 1; i < -badrange * nPel; i += nPel)// at radius
       {
         ExpandingSearch<pixel_t>(workarea, i, nPel, 0, 0);
         if (workarea.bestMV.sad < foundSAD / 4)
@@ -2081,10 +2083,13 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
   }	// bad vector, try wide search
 
   // we store the result
-  vectors[workarea.blkIdx].x = workarea.bestMV.x;
-  vectors[workarea.blkIdx].y = workarea.bestMV.y;
-  vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
-
+  // only for center or in no AreaMode
+  if ((workarea.am_shift.x == 0) && (workarea.am_shift.y == 0))
+  {
+    vectors[workarea.blkIdx].x = workarea.bestMV.x;
+    vectors[workarea.blkIdx].y = workarea.bestMV.y;
+    vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
+  }
   workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
 }
 
@@ -2092,31 +2097,31 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
 template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch_no_pred(WorkingArea& workarea) // no new predictors - only interpolated from previous iteration
 {
-    typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
+  typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
 
-    sad_t sad;
+  sad_t sad;
 
-    if (smallestPlane)
-    {
-      workarea.bestMV = zeroMV;
-      workarea.nMinCost = verybigSAD + 1;
-    }
-    else
-    {
-      workarea.bestMV = workarea.predictor;
-      sad = workarea.predictor.sad;
-      workarea.nMinCost = (sad * 2) + ((penaltyNew * (safe_sad_t)sad) >> 8); // *2 - typically sad from previous level is lower about 2 times. depend on noise/spectrum ?  
-    }
+  if (smallestPlane)
+  {
+    workarea.bestMV = zeroMV;
+    workarea.nMinCost = verybigSAD + 1;
+  }
+  else
+  {
+    workarea.bestMV = workarea.predictor;
+    sad = workarea.predictor.sad;
+    workarea.nMinCost = (sad * 2) + ((penaltyNew * (safe_sad_t)sad) >> 8); // *2 - typically sad from previous level is lower about 2 times. depend on noise/spectrum ?  
+  }
 
-    // then, we refine, according to the search type
-    Refine<pixel_t>(workarea);
+  // then, we refine, according to the search type
+  Refine<pixel_t>(workarea);
 
-    // we store the result
-    vectors[workarea.blkIdx].x = workarea.bestMV.x;
-    vectors[workarea.blkIdx].y = workarea.bestMV.y;
-    vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
+  // we store the result
+  vectors[workarea.blkIdx].x = workarea.bestMV.x;
+  vectors[workarea.blkIdx].y = workarea.bestMV.y;
+  vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
 
-    workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
+  workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
 }
 
 // DTL test
@@ -4843,7 +4848,7 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
         // previous block scan)
 
         // fixme: why recalc is resetting only outside, why, maybe recalc is not using that at all?
-        workarea.globalMVPredictor = _glob_mv_pred_def;
+        workarea.globalMVPredictor = _glob_mv_pred_def; // need to reset every time in AreaMode next searches (because am_shift added before clipping internally in the EPZ search)
 
 #if (ALIGN_SOURCEBLOCK > 1)
         //store the pitch
@@ -4896,13 +4901,34 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
         // decreased padding of coarse levels
         int nHPaddingScaled = pSrcFrame->GetPlane(YPLANE)->GetHPadding() >> nLogScale;
         int nVPaddingScaled = pSrcFrame->GetPlane(YPLANE)->GetVPadding() >> nLogScale;
+
+        /* additional AreaMode limits*/
+        int iAMmaxStep = 0;
+        switch (iAreaMode)
+        {
+          case 1:
+            iAMmaxStep = 1;
+            break;
+          case 2:
+            iAMmaxStep = 2;
+            break;
+          case 3:
+            iAMmaxStep = 3;
+            break;
+          case 4:
+            iAMmaxStep = 4;
+            break;
+          default:
+            iAMmaxStep = 0;
+        }
+
         /* computes search boundaries */
         if (iUseSubShift == 0)
         {
-          workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
-          workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
-          workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled);
-          workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled);
+          workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled - iAMmaxStep);
+          workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled - iAMmaxStep);
+          workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled - iAMmaxStep);
+          workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled - iAMmaxStep);
         }
         else
         {
@@ -4914,6 +4940,9 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
         }
 
         /* search the mv */
+        workarea.am_shift.x = 0; // set to zero always at startup and non-AreaMode search to store result in 'vectors' fields at the end of EPZ search
+        workarea.am_shift.y = 0;
+
         workarea.predictor = ClipMV(workarea, vectors[workarea.blkIdx]);
         if (temporal)
         {
@@ -4972,6 +5001,11 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
             PseudoEPZSearch_no_pred<pixel_t>(workarea);
           else // DTL: no refine (at level = 0 typically)
             PseudoEPZSearch_no_refine<pixel_t>(workarea);
+
+          if (iAreaMode >= 1)
+          {
+            ProcessAreaMode<pixel_t>(workarea);
+          }
         }
 
         // workarea.bestMV = zeroMV; // debug
@@ -5082,6 +5116,330 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
 
   _workarea_pool.return_obj(workarea);
 } // search_mv_slice
+
+template<typename pixel_t>
+MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea)
+{
+  int iNumAMPos = 5; // x5 diagonals for begin
+  if (iAreaMode == 2) iNumAMPos = 9; // x9 double diagonals area
+  if (iAreaMode == 3) iNumAMPos = 13; // x13 triple diagonals area
+  if (iAreaMode == 4) iNumAMPos = 17; // x17 4x diagonals area
+
+  // x5 positions first
+  // store center bestMV to zero member
+  vAMResults[0].x = workarea.bestMV.x;
+  vAMResults[0].y = workarea.bestMV.y;
+  vAMResults[0].sad = workarea.bestMV.sad;
+
+  //top left offset
+  workarea.am_shift.x = -1;
+  workarea.am_shift.y = -1;
+  AreaModeSearchPos<pixel_t>(workarea);
+
+  // store top left bestMV to 1 member
+  vAMResults[1].x = workarea.bestMV.x;
+  vAMResults[1].y = workarea.bestMV.y;
+  vAMResults[1].sad = workarea.bestMV.sad;
+
+  //top right offset
+  workarea.am_shift.x = 1;
+  workarea.am_shift.y = -1;
+  AreaModeSearchPos<pixel_t>(workarea);
+
+  // store top left bestMV to 2 member
+  vAMResults[2].x = workarea.bestMV.x;
+  vAMResults[2].y = workarea.bestMV.y;
+  vAMResults[2].sad = workarea.bestMV.sad;
+
+  //bottom left offset
+  workarea.am_shift.x = -1;
+  workarea.am_shift.y = 1;
+  AreaModeSearchPos<pixel_t>(workarea);
+
+  // store top left bestMV to 3 member
+  vAMResults[3].x = workarea.bestMV.x;
+  vAMResults[3].y = workarea.bestMV.y;
+  vAMResults[3].sad = workarea.bestMV.sad;
+
+  //bottom right offset
+  workarea.am_shift.x = 1;
+  workarea.am_shift.y = 1;
+  AreaModeSearchPos<pixel_t>(workarea);
+
+  // store bottom right bestMV to 4 member
+  vAMResults[4].x = workarea.bestMV.x;
+  vAMResults[4].y = workarea.bestMV.y;
+  vAMResults[4].sad = workarea.bestMV.sad;
+
+  if (iAreaMode >= 2) // x9 additional positions
+  {
+    /* - V and H offsets
+    // center left offset
+    workarea.am_shift.x = -1;
+    workarea.am_shift.y = 0;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store center left bestMV to 5 member
+    vAMResults[5].x = workarea.bestMV.x;
+    vAMResults[5].y = workarea.bestMV.y;
+    vAMResults[5].sad = workarea.bestMV.sad;
+
+    // center top offset
+    workarea.am_shift.x = 0;
+    workarea.am_shift.y = -1;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store center top bestMV to 6 member
+    vAMResults[6].x = workarea.bestMV.x;
+    vAMResults[6].y = workarea.bestMV.y;
+    vAMResults[6].sad = workarea.bestMV.sad;
+
+    // center right offset
+    workarea.am_shift.x = 1;
+    workarea.am_shift.y = 0;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store center right bestMV to 7 member
+    vAMResults[7].x = workarea.bestMV.x;
+    vAMResults[7].y = workarea.bestMV.y;
+    vAMResults[7].sad = workarea.bestMV.sad;
+
+    // center bottom offset
+    workarea.am_shift.x = 0;
+    workarea.am_shift.y = 1;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store center bottom bestMV to 8 member
+    vAMResults[8].x = workarea.bestMV.x;
+    vAMResults[8].y = workarea.bestMV.y;
+    vAMResults[8].sad = workarea.bestMV.sad;
+    */
+    //double top left offset
+    workarea.am_shift.x = -2;
+    workarea.am_shift.y = -2;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store double top left bestMV to 5 member
+    vAMResults[5].x = workarea.bestMV.x;
+    vAMResults[5].y = workarea.bestMV.y;
+    vAMResults[5].sad = workarea.bestMV.sad;
+
+    //double top right offset
+    workarea.am_shift.x = 2;
+    workarea.am_shift.y = -2;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store double top left bestMV to 6 member
+    vAMResults[6].x = workarea.bestMV.x;
+    vAMResults[6].y = workarea.bestMV.y;
+    vAMResults[6].sad = workarea.bestMV.sad;
+
+    //double bottom left offset
+    workarea.am_shift.x = -2;
+    workarea.am_shift.y = 2;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store double top left bestMV to 7 member
+    vAMResults[7].x = workarea.bestMV.x;
+    vAMResults[7].y = workarea.bestMV.y;
+    vAMResults[7].sad = workarea.bestMV.sad;
+
+    //double bottom right offset
+    workarea.am_shift.x = 2;
+    workarea.am_shift.y = 2;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store double bottom right bestMV to 8 member
+    vAMResults[8].x = workarea.bestMV.x;
+    vAMResults[8].y = workarea.bestMV.y;
+    vAMResults[8].sad = workarea.bestMV.sad;
+
+  }
+
+  if (iAreaMode >= 3) // x13 additional positions
+  {
+    //triple top left offset
+    workarea.am_shift.x = -3;
+    workarea.am_shift.y = -3;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store triple top left bestMV to 9 member
+    vAMResults[9].x = workarea.bestMV.x;
+    vAMResults[9].y = workarea.bestMV.y;
+    vAMResults[9].sad = workarea.bestMV.sad;
+
+    //triple top right offset
+    workarea.am_shift.x = 3;
+    workarea.am_shift.y = -3;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store triple top left bestMV to 10 member
+    vAMResults[10].x = workarea.bestMV.x;
+    vAMResults[10].y = workarea.bestMV.y;
+    vAMResults[10].sad = workarea.bestMV.sad;
+
+    //triple bottom left offset
+    workarea.am_shift.x = -3;
+    workarea.am_shift.y = 3;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store double top left bestMV to 11 member
+    vAMResults[11].x = workarea.bestMV.x;
+    vAMResults[11].y = workarea.bestMV.y;
+    vAMResults[11].sad = workarea.bestMV.sad;
+
+    //triple bottom right offset
+    workarea.am_shift.x = 3;
+    workarea.am_shift.y = 3;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store triple bottom right bestMV to 12 member
+    vAMResults[12].x = workarea.bestMV.x;
+    vAMResults[12].y = workarea.bestMV.y;
+    vAMResults[12].sad = workarea.bestMV.sad;
+  }
+
+  if (iAreaMode >= 4) // x17 additional positions
+  {
+    //4x top left offset
+    workarea.am_shift.x = -4;
+    workarea.am_shift.y = -4;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store 4x top left bestMV to 13 member
+    vAMResults[13].x = workarea.bestMV.x;
+    vAMResults[13].y = workarea.bestMV.y;
+    vAMResults[13].sad = workarea.bestMV.sad;
+
+    //4x top right offset
+    workarea.am_shift.x = 4;
+    workarea.am_shift.y = -4;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store 4x top left bestMV to 14 member
+    vAMResults[14].x = workarea.bestMV.x;
+    vAMResults[14].y = workarea.bestMV.y;
+    vAMResults[14].sad = workarea.bestMV.sad;
+
+    //4x bottom left offset
+    workarea.am_shift.x = -4;
+    workarea.am_shift.y = 4;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store 4x top left bestMV to 15 member
+    vAMResults[15].x = workarea.bestMV.x;
+    vAMResults[15].y = workarea.bestMV.y;
+    vAMResults[15].sad = workarea.bestMV.sad;
+
+    //4x bottom right offset
+    workarea.am_shift.x = 4;
+    workarea.am_shift.y = 4;
+    AreaModeSearchPos<pixel_t>(workarea);
+
+    // store 4x bottom right bestMV to 16 member
+    vAMResults[16].x = workarea.bestMV.x;
+    vAMResults[16].y = workarea.bestMV.y;
+    vAMResults[16].sad = workarea.bestMV.sad;
+  }
+
+  GetModeVECTOR(&vAMResults[0], &workarea.bestMV, iNumAMPos);
+
+  // calc abs MVs difference and apply as SAD hint (to MDegrain and others) of resulted MV quality
+  if (iAMDiffSAD > 0)
+  {
+    // scale ?
+    // Calc mean MVs abs difference ?
+    int iAMMVsDiff = CalcMeanABSMVsDiff(&vAMResults[0], iNumAMPos);
+
+    workarea.bestMV.sad = workarea.bestMV.sad + iAMMVsDiff * iAMDiffSAD;
+
+  }
+
+  /* DEBUG
+  if (vAMResults[0].x != workarea.bestMV.x)
+  {
+    int idbr = 0;
+  }
+  if (vAMResults[0].y != workarea.bestMV.y)
+  {
+    int idbr = 0;
+  }
+  if (vAMResults[0].sad != workarea.bestMV.sad)
+  {
+    int idbr = 0;
+  }
+  */
+
+  // store to vectors field
+  vectors[workarea.blkIdx].x = workarea.bestMV.x;
+  vectors[workarea.blkIdx].y = workarea.bestMV.y;
+  vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
+
+}
+
+template<typename pixel_t>
+MV_FORCEINLINE void PlaneOfBlocks::AreaModeSearchPos(WorkingArea& workarea)
+{
+  int curr_x[3];
+  int curr_y[3];
+
+  // store current ref pos of workarea
+  curr_x[0] = workarea.x[0];
+  curr_x[1] = workarea.x[1];
+  curr_x[2] = workarea.x[2];
+
+  curr_y[0] = workarea.y[0];
+  curr_y[1] = workarea.y[1];
+  curr_y[2] = workarea.y[2];
+
+  // update current ref pos with area offset
+  workarea.x[0] += workarea.am_shift.x;
+  workarea.x[1] += (workarea.am_shift.x >> nLogxRatioUV); // is it valid for negative ?
+  workarea.x[2] += (workarea.am_shift.x >> nLogxRatioUV);
+
+  workarea.y[0] += workarea.am_shift.y;
+  workarea.y[1] += (workarea.am_shift.y >> nLogyRatioUV); // is it valid for negative ?
+  workarea.y[2] += (workarea.am_shift.y >> nLogyRatioUV);
+
+  workarea.globalMVPredictor = _glob_mv_pred_def; // reset global for next searches
+  workarea.pSrc[0] = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
+  if (chroma)
+  {
+    workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
+    workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
+  }
+  PseudoEPZSearch<pixel_t>(workarea);
+
+  // restore workarea center block pos
+  workarea.x[0] = curr_x[0];
+  workarea.x[1] = curr_x[1];
+  workarea.x[2] = curr_x[2];
+
+  workarea.y[0] = curr_y[0];
+  workarea.y[1] = curr_y[1];
+  workarea.y[2] = curr_y[2];
+
+}
+
+MV_FORCEINLINE int PlaneOfBlocks::CalcMeanABSMVsDiff(VECTOR* vAMResults, int iNumMVs)
+{
+  int iSumABS_xdiff = 0;
+  int iSumABS_ydiff = 0;
+
+  for (int i = 1; i < iNumMVs; i++)
+  {
+    // calc diff with center only for performance ?
+    iSumABS_xdiff += std::abs(vAMResults[0].x - vAMResults[i].x);
+    iSumABS_ydiff += std::abs(vAMResults[0].y - vAMResults[i].y);
+  }
+
+  // normalize to iNumMVs and nPel
+  iSumABS_xdiff /= (iNumMVs * nPel);
+  iSumABS_ydiff /= (iNumMVs * nPel);// todo: replace with multiplication to const (AreaMode reciprocal num positions)?
+
+  return iSumABS_xdiff + iSumABS_ydiff;
+
+}
 
 template<typename pixel_t>
 void	PlaneOfBlocks::search_mv_slice_SO2(Slicer::TaskData& td)

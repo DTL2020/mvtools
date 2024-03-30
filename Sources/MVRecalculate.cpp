@@ -337,7 +337,9 @@ MVRecalculate::MVRecalculate(
     _optSearchOption,
     1.0f, // scaleCSADfine default (no op)
     0, // UseSubShift - currently not controlled
-    DMFlags, 
+    DMFlags,
+    0, // AreaMode - curerntly not controlled
+    0, // AMDiffSAD - currently not controlled
     env
   ));
 

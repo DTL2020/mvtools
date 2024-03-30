@@ -46,6 +46,8 @@ class GroupOfPlanes
   float          scaleCSADfine; //DTL test
   int            iUseSubShift; // DTL test
   int            DMFlags; // DTL test
+  int            AreaMode; // DTL test (see MAnalyse.h for description)
+  int            AMDiffSAD; // DTL test
 
   conc::ObjPool <DCTClass> *
                  _dct_pool_ptr;
@@ -57,7 +59,7 @@ public :
     int _nBlkSizeX, int _nBlkSizeY, int _nLevelCount, int _nPel, int _nFlags,
     int _nOverlapX, int _nOverlapY, int _nBlkX, int _nBlkY, int _xRatioUV, int _yRatioUV, int _divideExtra, int _pixelsize, int _bits_per_pixel, 
     conc::ObjPool <DCTClass> *dct_pool_ptr,
-    bool mt_flag, int _chromaSADScale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift, int DMFlags,
+    bool mt_flag, int _chromaSADScale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift, int DMFlags, int _AreaMode, int _AMDiffSAD,
     IScriptEnvironment *env);
   ~GroupOfPlanes ();
   void           SearchMVs (

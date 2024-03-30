@@ -142,6 +142,9 @@ protected:
 
   int iUploadedCurrentFrameNum;
 
+  int iAreaMode;
+  int iAMDiffSAD;
+
 public:
 
   MVAnalyse(
@@ -153,7 +156,8 @@ public:
     bool _meander, bool temporal_flag, bool _tryMany, bool multi_flag,
     bool mt_flag, int _chromaSADScale, int _optSearchOption, int _predictorType,
     float _scaleCSADfine, int _accnum, int _iUseSubShift, PClip _child_cur,
-    int _iSearchDirMode, int _DMFlags, IScriptEnvironment* env);
+    int _iSearchDirMode, int _DMFlags,
+    int _AreaMode, int _AMDiffSAD, IScriptEnvironment* env);
   ~MVAnalyse();
 
   ::PVideoFrame __stdcall	GetFrame(int n, ::IScriptEnvironment* env) override;

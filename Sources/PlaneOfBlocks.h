@@ -54,6 +54,7 @@
 #define MAX_MULTI_BLOCKS_8x8_AVX2 4
 #define MAX_MULTI_BLOCKS_8x8_AVX512 16
 #define MAX_MEDIAN_PREDICTORS 49 // up to 7x7 predictors ares
+#define MAX_AREAMODE_STEPS 20
 
 #define CACHE_LINE_SIZE 64
 
@@ -105,7 +106,7 @@ public:
   PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int _nFlags, int _nOverlapX, int _nOverlapY,
     int _xRatioUV, int _yRatioUV, int _pixelsize, int _bits_per_pixel,
     conc::ObjPool <DCTClass> *dct_pool_ptr,
-    bool mt_flag, int _chromaSADscale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift, int _DMFlags,
+    bool mt_flag, int _chromaSADscale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift, int _DMFlags, int _AreaMode, int _AMDiffSAD,
   IScriptEnvironment* env);
 
   ~PlaneOfBlocks();
@@ -276,6 +277,10 @@ private:
   uint64_t checked_mv_vectors[MAX_PREDICTOR]; // 2.7.46
   int iNumCheckedVectors; // 2.7.46
 
+  int iAreaMode; // 2.7.46
+  int iAMDiffSAD; // 2.7.46
+  VECTOR vAMResults[MAX_AREAMODE_STEPS];
+
   // Working area
   class WorkingArea
   {
@@ -358,6 +363,8 @@ private:
     __m512i zmm0_Src_r1_b0007, zmm2_Src_r2_b0007, zmm4_Src_r3_b0007, zmm6_Src_r4_b0007, zmm8_Src_r5_b0007, zmm10_Src_r6_b0007, zmm12_Src_r7_b0007, zmm14_Src_r8_b0007;
     __m512i zmm1_Src_r1_b0815, zmm3_Src_r2_b0815, zmm5_Src_r3_b0815, zmm7_Src_r4_b0815, zmm9_Src_r5_b0815, zmm11_Src_r6_b0815, zmm13_Src_r7_b0815, zmm15_Src_r8_b0815;
 
+    VECTOR_XY am_shift; // AreaMode shift 2.7.46
+
   };
 
   class WorkingAreaFactory
@@ -407,9 +414,15 @@ private:
   template<typename pixel_t>
   MV_FORCEINLINE void FetchMorePredictors(WorkingArea& workarea);
 
-  MV_FORCEINLINE void GetMedianXY(VECTOR* toMedian, VECTOR *vOut, int iNumMVs);
+  MV_FORCEINLINE void GetModeVECTOR(VECTOR* toMedian, VECTOR *vOut, int iNumMVs);
 
+  template<typename pixel_t>
+  MV_FORCEINLINE void AreaModeSearchPos(WorkingArea& workarea);
 
+  template<typename pixel_t>
+  MV_FORCEINLINE void ProcessAreaMode(WorkingArea& workarea);
+
+  MV_FORCEINLINE int CalcMeanABSMVsDiff(VECTOR* vAMResults, int iNumMVs);
 
   /* performs a diamond search */
   template<typename pixel_t>
