@@ -340,6 +340,9 @@ MVRecalculate::MVRecalculate(
     DMFlags,
     0, // AreaMode - curerntly not controlled
     0, // AMDiffSAD - currently not controlled
+    0, // AMstep - currently not controlled
+    0, // AMoffset - currently not controlled
+    0, // AMpel - currently not controlled
     env
   ));
 
@@ -567,7 +570,7 @@ PVideoFrame __stdcall MVRecalculate::GetFrame(int n, IScriptEnvironment* env)
       *(srd._clip_sptr), pSrcGOF, pRefGOF,
       searchType, nSearchParam, nLambda, lsad, pnew,
       srd._analysis_data.nFlags, reinterpret_cast <int *> (pDst),
-      outfilebuf, fieldShift, thSAD, smooth, meander, optPredictorType
+      outfilebuf, fieldShift, thSAD, smooth, meander, optPredictorType, optPredictorType
     );
 
     if (divideExtra)

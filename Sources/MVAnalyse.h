@@ -114,6 +114,7 @@ protected:
   // 'opt' beginning until live during tests
   int optSearchOption; // DTL test
   int optPredictorType; // DTL test
+  int iPTpel; // DTL test - PredictorType at sub-sample levels
   float scaleCSADfine;// DTL test
   int iUseSubShift; // DTL test
   int _cpuFlags; // DTL test
@@ -144,6 +145,9 @@ protected:
 
   int iAreaMode;
   int iAMDiffSAD;
+  int iAMstep;
+  int iAMoffset;
+  int iAMpel;
 
 public:
 
@@ -157,7 +161,9 @@ public:
     bool mt_flag, int _chromaSADScale, int _optSearchOption, int _predictorType,
     float _scaleCSADfine, int _accnum, int _iUseSubShift, PClip _child_cur,
     int _iSearchDirMode, int _DMFlags,
-    int _AreaMode, int _AMDiffSAD, IScriptEnvironment* env);
+    int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, int _AMpel,
+    int _PTpel,
+    IScriptEnvironment* env);
   ~MVAnalyse();
 
   ::PVideoFrame __stdcall	GetFrame(int n, ::IScriptEnvironment* env) override;

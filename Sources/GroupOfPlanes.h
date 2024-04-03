@@ -47,7 +47,10 @@ class GroupOfPlanes
   int            iUseSubShift; // DTL test
   int            DMFlags; // DTL test
   int            AreaMode; // DTL test (see MAnalyse.h for description)
-  int            AMDiffSAD; // DTL test
+  int            AMDiffSAD; 
+  int            AMstep;
+  int            AMoffset;
+  int            AMpel;
 
   conc::ObjPool <DCTClass> *
                  _dct_pool_ptr;
@@ -59,7 +62,8 @@ public :
     int _nBlkSizeX, int _nBlkSizeY, int _nLevelCount, int _nPel, int _nFlags,
     int _nOverlapX, int _nOverlapY, int _nBlkX, int _nBlkY, int _xRatioUV, int _yRatioUV, int _divideExtra, int _pixelsize, int _bits_per_pixel, 
     conc::ObjPool <DCTClass> *dct_pool_ptr,
-    bool mt_flag, int _chromaSADScale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift, int DMFlags, int _AreaMode, int _AMDiffSAD,
+    bool mt_flag, int _chromaSADScale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift, int DMFlags,
+    int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, int _AMpel,
     IScriptEnvironment *env);
   ~GroupOfPlanes ();
   void           SearchMVs (
@@ -67,7 +71,7 @@ public :
     SearchType searchType, int nSearchParam, int _PelSearch, int _nLambda,
     sad_t _lsad, int _pnew, int _plevel, bool _global, int flags, int *out,
     short * outfilebuf, int fieldShift, int _pzero, int _pglobal, sad_t badSAD,
-    int badrange, bool meander, int *vecPrev, bool tryMany, int optPredictorType);
+    int badrange, bool meander, int *vecPrev, bool tryMany, int optPredictorType, int PTpel);
   void           WriteDefaultToArray (int *array);
   int            GetArraySize ();
   void           ExtraDivide (int *out, int flags);
@@ -75,7 +79,7 @@ public :
     MVClip &mvClip, MVGroupOfFrames *pSrcGOF, MVGroupOfFrames *pRefGOF,
     SearchType _searchType, int _nSearchParam, int _nLambda, sad_t _lsad,
     int _pnew, int flags, int *out, short * outfilebuf, int fieldShift,
-    sad_t thSAD, int smooth, bool meander, int optPredictorType);
+    sad_t thSAD, int smooth, bool meander, int optPredictorType, int PTpel);
   PlaneOfBlocks* GetPlane(int iPlane) { return planes[iPlane]; };
 };
 

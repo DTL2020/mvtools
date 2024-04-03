@@ -54,7 +54,7 @@
 #define MAX_MULTI_BLOCKS_8x8_AVX2 4
 #define MAX_MULTI_BLOCKS_8x8_AVX512 16
 #define MAX_MEDIAN_PREDICTORS 49 // up to 7x7 predictors ares
-#define MAX_AREAMODE_STEPS 20
+#define MAX_AREAMODE_STEPS 100 // expected enough ? todo: make variable memory allocation
 
 #define CACHE_LINE_SIZE 64
 
@@ -105,8 +105,9 @@ public:
 
   PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int _nFlags, int _nOverlapX, int _nOverlapY,
     int _xRatioUV, int _yRatioUV, int _pixelsize, int _bits_per_pixel,
-    conc::ObjPool <DCTClass> *dct_pool_ptr,
-    bool mt_flag, int _chromaSADscale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift, int _DMFlags, int _AreaMode, int _AMDiffSAD,
+    conc::ObjPool <DCTClass>* dct_pool_ptr,
+    bool mt_flag, int _chromaSADscale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift, int _DMFlags,
+    int _AMDiffSAD,
   IScriptEnvironment* env);
 
   ~PlaneOfBlocks();
@@ -117,7 +118,7 @@ public:
     int flags, sad_t *out, const VECTOR *globalMVec, short * outfilebuf, int fieldShiftCur,
     int * meanLumaChange, int divideExtra,
     int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
-    int optPredictorType);
+    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset);
 
 
   /* plane initialisation */
@@ -145,7 +146,7 @@ public:
     int stp, int _lambda, sad_t _lSAD, int _pennew,
     int flags, int *out, short * outfilebuf, int fieldShift, sad_t thSAD,
     int _divideExtra, int smooth, bool meander,
-    int optPredictorType);
+    int optPredictorType, int PTpel);
 
   MVVector <VECTOR> vectors; // public to write MVs from DX12_ME
 
@@ -277,8 +278,14 @@ private:
   uint64_t checked_mv_vectors[MAX_PREDICTOR]; // 2.7.46
   int iNumCheckedVectors; // 2.7.46
 
+  // AreaMode globals
   int iAreaMode; // 2.7.46
-  int iAMDiffSAD; // 2.7.46
+  int iAMDiffSAD;
+  int iAMstep;
+  int iAMoffset;
+  int iAMbsScale;
+  int iNumAMPos;
+  float fAMresNorm; 
   VECTOR vAMResults[MAX_AREAMODE_STEPS];
 
   // Working area

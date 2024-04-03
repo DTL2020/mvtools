@@ -32,7 +32,8 @@ GroupOfPlanes::GroupOfPlanes(
   int _divideExtra, int _pixelsize, int _bits_per_pixel,
   conc::ObjPool <DCTClass> *dct_pool_ptr,
   bool mt_flag, int _chromaSADScale, int _optSearchOption, float _scaleCSADfine,
-  int _iUseSubShift, int _DMFlags, int _AreaMode, int _AMDiffSAD,
+  int _iUseSubShift, int _DMFlags,
+  int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, int _AMpel,
   IScriptEnvironment* env
 )
   : nBlkSizeX(_nBlkSizeX)
@@ -56,6 +57,9 @@ GroupOfPlanes::GroupOfPlanes(
   , DMFlags(_DMFlags)
   , AreaMode(_AreaMode)
   , AMDiffSAD(_AMDiffSAD)
+  , AMstep(_AMstep)
+  , AMoffset(_AMoffset)
+  , AMpel(_AMpel)
 {
   planes = new PlaneOfBlocks*[nLevelCount];
 
@@ -78,7 +82,7 @@ GroupOfPlanes::GroupOfPlanes(
     nBlkY = ((nHeight_B >> i) - nOverlapY) / (nBlkSizeY - nOverlapY);
     planes[i] = new PlaneOfBlocks(nBlkX, nBlkY, nBlkSizeX, nBlkSizeY, nPelCurrent, i, nFlagsCurrent, nOverlapX, nOverlapY,
       xRatioUV, yRatioUV, pixelsize, bits_per_pixel, dct_pool_ptr,
-      mt_flag, chromaSADScale, optSearchOption, scaleCSADfine, iUseSubShift, DMFlags, AreaMode, AMDiffSAD, env);
+      mt_flag, chromaSADScale, optSearchOption, scaleCSADfine, iUseSubShift, DMFlags, AMDiffSAD, env);
     nPelCurrent = 1;
   }
 }
@@ -120,7 +124,9 @@ void	GroupOfPlanes::SearchMVs(
   bool   meander,
   int *  vecPrev,
   bool   tryMany,
-  int    optPredictorType)
+  int    optPredictorType,
+  int    PTpel
+)
 {
   nFlags |= flags;
 
@@ -212,7 +218,10 @@ void	GroupOfPlanes::SearchMVs(
     meander,
     vecPrev,
     tryManyLevel,
-    optPredictorType
+    optPredictorType,
+    AreaMode,
+    AMstep,
+    AMoffset
   );
 
   out += planes[nLevelCount - 1]->GetArraySize(divideExtra);
@@ -270,7 +279,23 @@ void	GroupOfPlanes::SearchMVs(
 
     // temp: sequence of params optPredictorType="4,1"
     if ((bDoPT4search == true) && (i == 0)) optPredictorType = 4;
-    
+
+    //change AreaMode to AMpel and PredictorType to PTpel for sub-pel levels (0 for pel=2 and 0 and 1 for pel=4)
+    int AMlevel = AreaMode;
+    int PTlevel = optPredictorType;
+
+    if ((i == 0) && (nPel == 2))
+    {
+      AMlevel = AMpel;
+      PTlevel = PTpel;
+    }
+
+    if (((i == 0) || (i == 1)) && (nPel == 4))
+    {
+      AMlevel = AMpel;
+      PTlevel = PTpel;
+    }
+
     planes[i]->SearchMVs(
       pSrcGOF->GetFrame(i),
       pRefGOF->GetFrame(i),
@@ -294,7 +319,10 @@ void	GroupOfPlanes::SearchMVs(
       meander,
       vecPrev,
       tryManyLevel,
-      optPredictorType
+      PTlevel,
+      AMlevel,
+      AMstep,
+      AMoffset
     );
 
     out += planes[i]->GetArraySize(divideExtra);
@@ -323,7 +351,8 @@ void	GroupOfPlanes::RecalculateMVs(
   sad_t    thSAD,
   int    smooth,
   bool meander,
-  int optPredictorType)
+  int optPredictorType,
+  int PTpel)
 {
   nFlags |= flags;
 
@@ -357,7 +386,8 @@ void	GroupOfPlanes::RecalculateMVs(
     divideExtra,
     smooth,
     meander,
-    optPredictorType
+    optPredictorType,
+    PTpel
   );
 
   out += planes[0]->GetArraySize(divideExtra);

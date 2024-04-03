@@ -54,8 +54,8 @@ static unsigned int SadDummy(const uint8_t *, int , const uint8_t *, int )
 PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSizeY, int _nPel, int _nLevel, int _nFlags, int _nOverlapX, int _nOverlapY,
   int _xRatioUV, int _yRatioUV, int _pixelsize, int _bits_per_pixel,
   conc::ObjPool <DCTClass> *dct_pool_ptr,
-  bool mt_flag, int _chromaSADscale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift, int _DMFlags, int _AreaMode, int _AMDiffSAD,
-  IScriptEnvironment* env)
+  bool mt_flag, int _chromaSADscale, int _optSearchOption, float _scaleCSADfine, int _iUseSubShift, int _DMFlags,
+  int _AMDiffSAD,  IScriptEnvironment* env)
   : nBlkX(_nBlkX)
   , nBlkY(_nBlkY)
   , nBlkSizeX(_nBlkSizeX)
@@ -81,7 +81,6 @@ PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSi
   , optSearchOption(_optSearchOption)
   , scaleCSADfine(_scaleCSADfine)
   , iUseSubShift(_iUseSubShift)
-  , iAreaMode(_AreaMode)
   , iAMDiffSAD(_AMDiffSAD)
   , SAD(0)
   , LUMA(0)
@@ -226,7 +225,6 @@ PlaneOfBlocks::PlaneOfBlocks(int _nBlkX, int _nBlkY, int _nBlkSizeX, int _nBlkSi
   {
     env->ThrowError("optSearchOption=2 require AVX2 or more CPU and pel=1");
   }
-  
 
   // for debug:
   //         SAD = x264_pixel_sad_4x4_mmx2;
@@ -299,7 +297,7 @@ void PlaneOfBlocks::SearchMVs(
   int plevel, int flags, sad_t *out, const VECTOR * globalMVec,
   short *outfilebuf, int fieldShift, sad_t * pmeanLumaChange,
   int divideExtra, int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
-  int optPredictorType
+  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -333,6 +331,27 @@ void PlaneOfBlocks::SearchMVs(
 
   pSrcFrame = _pSrcFrame;
   pRefFrame = _pRefFrame;
+
+  iAreaMode = _AreaMode;
+  iAMstep = _AMstep;
+  iAMoffset = _AMoffset;
+
+  if (iAreaMode > 0)
+  {
+    // iAreaMode - num steps around current block pos, each step = 4 positions in diagonal mode
+
+    iNumAMPos = 1 + iAreaMode * 4; // x5 diagonals for begin
+
+    // calculate step size
+    // auto
+    iAMbsScale = nBlkSizeX / 8; // 1 for 8x8, 2 for 16x16, 4 for 32x32
+    if (iAMstep == 0)
+    {
+      iAMstep = iAMbsScale;
+    }
+
+    fAMresNorm = 1.0f / (float(iNumAMPos * nPel));
+  }
 
 #if (ALIGN_SOURCEBLOCK > 1)
   nSrcPitch_plane[0] = pSrcFrame->GetPlane(YPLANE)->GetPitch();
@@ -459,7 +478,7 @@ void PlaneOfBlocks::RecalculateMVs(
   SearchType st, int stp, int lambda, sad_t lsad, int pnew,
   int flags, int *out,
   short *outfilebuf, int fieldShift, sad_t thSAD, int divideExtra, int smooth, bool meander,
-  int optPredictorType
+  int optPredictorType, int PTpel
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -2117,10 +2136,13 @@ void PlaneOfBlocks::PseudoEPZSearch_no_pred(WorkingArea& workarea) // no new pre
   Refine<pixel_t>(workarea);
 
   // we store the result
-  vectors[workarea.blkIdx].x = workarea.bestMV.x;
-  vectors[workarea.blkIdx].y = workarea.bestMV.y;
-  vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
-
+  // only for center or in no AreaMode
+  if ((workarea.am_shift.x == 0) && (workarea.am_shift.y == 0))
+  {
+    vectors[workarea.blkIdx].x = workarea.bestMV.x;
+    vectors[workarea.blkIdx].y = workarea.bestMV.y;
+    vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
+  }
   workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
 }
 
@@ -2154,10 +2176,13 @@ void PlaneOfBlocks::PseudoEPZSearch_no_refine(WorkingArea& workarea) // no refin
 //  CheckMV0<pixel_t>(workarea, workarea.predictor.x, workarea.predictor.y);
 
   // we store the result
-  vectors[workarea.blkIdx].x = workarea.bestMV.x;
-  vectors[workarea.blkIdx].y = workarea.bestMV.y;
-  vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
-
+    // only for center or in no AreaMode
+  if ((workarea.am_shift.x == 0) && (workarea.am_shift.y == 0))
+  {
+    vectors[workarea.blkIdx].x = workarea.bestMV.x;
+    vectors[workarea.blkIdx].y = workarea.bestMV.y;
+    vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
+  }
   workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
 }
 
@@ -4366,8 +4391,8 @@ MV_FORCEINLINE void	PlaneOfBlocks::CheckMV0(WorkingArea &workarea, int vx, int v
     }
 #else
     // from 2.5.11.9-SVP: no additional SAD calculations if partial sum is already above minCost
-    sad_t cost=workarea.MotionDistorsion<pixel_t>(vx, vy);
-    if(cost>=workarea.nMinCost) return;
+    sad_t cost = workarea.MotionDistorsion<pixel_t>(vx, vy);
+    if (cost >= workarea.nMinCost) return;
 
     sad_t sad=LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, vx, vy));
     cost+=sad;
@@ -4449,8 +4474,8 @@ MV_FORCEINLINE void	PlaneOfBlocks::CheckMV(WorkingArea &workarea, int vx, int vy
     }
 #else
     // from 2.5.11.9-SVP: no additional SAD calculations if partial sum is already above minCost
-    sad_t cost=workarea.MotionDistorsion<pixel_t>(vx, vy);
-    if(cost>=workarea.nMinCost) return;
+    sad_t cost = workarea.MotionDistorsion<pixel_t>(vx, vy);
+    if (cost >= workarea.nMinCost) return;
 
     typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
 
@@ -4540,8 +4565,8 @@ MV_FORCEINLINE void	PlaneOfBlocks::CheckMV2(WorkingArea &workarea, int vx, int v
     }
 #else
     // from 2.5.11.9-SVP: no additional SAD calculations if partial sum is already above minCost
-    sad_t cost=workarea.MotionDistorsion<pixel_t>(vx, vy);
-    if(cost>=workarea.nMinCost) return;
+    sad_t cost = workarea.MotionDistorsion<pixel_t>(vx, vy);
+    if (cost >= workarea.nMinCost) return;
 
     typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
 
@@ -4903,32 +4928,32 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
         int nVPaddingScaled = pSrcFrame->GetPlane(YPLANE)->GetVPadding() >> nLogScale;
 
         /* additional AreaMode limits*/
-        int iAMmaxStep = 0;
-        switch (iAreaMode)
+        int iAMmaxOffset = (iAreaMode * iAMstep) + iAMoffset;
+/*        switch (iAreaMode)
         {
           case 1:
-            iAMmaxStep = 1;
+            iAMmaxStep = 1 * iAMbsScale;
             break;
           case 2:
-            iAMmaxStep = 2;
+            iAMmaxStep = 2 * iAMbsScale;
             break;
           case 3:
-            iAMmaxStep = 3;
+            iAMmaxStep = 3 * iAMbsScale;
             break;
           case 4:
-            iAMmaxStep = 4;
+            iAMmaxStep = 4 * iAMbsScale;
             break;
           default:
             iAMmaxStep = 0;
         }
-
+        */
         /* computes search boundaries */
         if (iUseSubShift == 0)
         {
-          workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled - iAMmaxStep);
-          workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled - iAMmaxStep);
-          workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled - iAMmaxStep);
-          workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled - iAMmaxStep);
+          workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled - iAMmaxOffset);
+          workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled - iAMmaxOffset);
+          workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled - iAMmaxOffset);
+          workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled - iAMmaxOffset);
         }
         else
         {
@@ -5120,226 +5145,61 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
 template<typename pixel_t>
 MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea)
 {
-  int iNumAMPos = 5; // x5 diagonals for begin
-  if (iAreaMode == 2) iNumAMPos = 9; // x9 double diagonals area
-  if (iAreaMode == 3) iNumAMPos = 13; // x13 triple diagonals area
-  if (iAreaMode == 4) iNumAMPos = 17; // x17 4x diagonals area
 
-  // x5 positions first
   // store center bestMV to zero member
   vAMResults[0].x = workarea.bestMV.x;
   vAMResults[0].y = workarea.bestMV.y;
   vAMResults[0].sad = workarea.bestMV.sad;
 
-  //top left offset
-  workarea.am_shift.x = -1;
-  workarea.am_shift.y = -1;
-  AreaModeSearchPos<pixel_t>(workarea);
+  int iStoreIdx = 1;
 
-  // store top left bestMV to 1 member
-  vAMResults[1].x = workarea.bestMV.x;
-  vAMResults[1].y = workarea.bestMV.y;
-  vAMResults[1].sad = workarea.bestMV.sad;
-
-  //top right offset
-  workarea.am_shift.x = 1;
-  workarea.am_shift.y = -1;
-  AreaModeSearchPos<pixel_t>(workarea);
-
-  // store top left bestMV to 2 member
-  vAMResults[2].x = workarea.bestMV.x;
-  vAMResults[2].y = workarea.bestMV.y;
-  vAMResults[2].sad = workarea.bestMV.sad;
-
-  //bottom left offset
-  workarea.am_shift.x = -1;
-  workarea.am_shift.y = 1;
-  AreaModeSearchPos<pixel_t>(workarea);
-
-  // store top left bestMV to 3 member
-  vAMResults[3].x = workarea.bestMV.x;
-  vAMResults[3].y = workarea.bestMV.y;
-  vAMResults[3].sad = workarea.bestMV.sad;
-
-  //bottom right offset
-  workarea.am_shift.x = 1;
-  workarea.am_shift.y = 1;
-  AreaModeSearchPos<pixel_t>(workarea);
-
-  // store bottom right bestMV to 4 member
-  vAMResults[4].x = workarea.bestMV.x;
-  vAMResults[4].y = workarea.bestMV.y;
-  vAMResults[4].sad = workarea.bestMV.sad;
-
-  if (iAreaMode >= 2) // x9 additional positions
+  for (int i = 0; i < iAreaMode; i++) // counter of 4 positions checked, start from 1
   {
-    /* - V and H offsets
-    // center left offset
-    workarea.am_shift.x = -1;
-    workarea.am_shift.y = 0;
+    int iOffset = (iAMstep * i + iAMoffset + 1);
+
+    //top left offset
+    workarea.am_shift.x = -1 * iOffset;
+    workarea.am_shift.y = -1 * iOffset;
     AreaModeSearchPos<pixel_t>(workarea);
 
-    // store center left bestMV to 5 member
-    vAMResults[5].x = workarea.bestMV.x;
-    vAMResults[5].y = workarea.bestMV.y;
-    vAMResults[5].sad = workarea.bestMV.sad;
+    // store top left bestMV to 1 member
+    vAMResults[iStoreIdx].x = workarea.bestMV.x;
+    vAMResults[iStoreIdx].y = workarea.bestMV.y;
+    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;
+    iStoreIdx++;
 
-    // center top offset
-    workarea.am_shift.x = 0;
-    workarea.am_shift.y = -1;
+    //top right offset
+    workarea.am_shift.x = 1 * iOffset;
+    workarea.am_shift.y = -1 * iOffset;
     AreaModeSearchPos<pixel_t>(workarea);
 
-    // store center top bestMV to 6 member
-    vAMResults[6].x = workarea.bestMV.x;
-    vAMResults[6].y = workarea.bestMV.y;
-    vAMResults[6].sad = workarea.bestMV.sad;
+    // store top left bestMV to 2 member
+    vAMResults[iStoreIdx].x = workarea.bestMV.x;
+    vAMResults[iStoreIdx].y = workarea.bestMV.y;
+    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;
+    iStoreIdx++;
 
-    // center right offset
-    workarea.am_shift.x = 1;
-    workarea.am_shift.y = 0;
+    //bottom left offset
+    workarea.am_shift.x = -1 * iOffset;
+    workarea.am_shift.y = 1 * iOffset;
     AreaModeSearchPos<pixel_t>(workarea);
 
-    // store center right bestMV to 7 member
-    vAMResults[7].x = workarea.bestMV.x;
-    vAMResults[7].y = workarea.bestMV.y;
-    vAMResults[7].sad = workarea.bestMV.sad;
+    // store top left bestMV to 3 member
+    vAMResults[iStoreIdx].x = workarea.bestMV.x;
+    vAMResults[iStoreIdx].y = workarea.bestMV.y;
+    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;
+    iStoreIdx++;
 
-    // center bottom offset
-    workarea.am_shift.x = 0;
-    workarea.am_shift.y = 1;
+    //bottom right offset
+    workarea.am_shift.x = 1 * iOffset;
+    workarea.am_shift.y = 1 * iOffset;
     AreaModeSearchPos<pixel_t>(workarea);
 
-    // store center bottom bestMV to 8 member
-    vAMResults[8].x = workarea.bestMV.x;
-    vAMResults[8].y = workarea.bestMV.y;
-    vAMResults[8].sad = workarea.bestMV.sad;
-    */
-    //double top left offset
-    workarea.am_shift.x = -2;
-    workarea.am_shift.y = -2;
-    AreaModeSearchPos<pixel_t>(workarea);
-
-    // store double top left bestMV to 5 member
-    vAMResults[5].x = workarea.bestMV.x;
-    vAMResults[5].y = workarea.bestMV.y;
-    vAMResults[5].sad = workarea.bestMV.sad;
-
-    //double top right offset
-    workarea.am_shift.x = 2;
-    workarea.am_shift.y = -2;
-    AreaModeSearchPos<pixel_t>(workarea);
-
-    // store double top left bestMV to 6 member
-    vAMResults[6].x = workarea.bestMV.x;
-    vAMResults[6].y = workarea.bestMV.y;
-    vAMResults[6].sad = workarea.bestMV.sad;
-
-    //double bottom left offset
-    workarea.am_shift.x = -2;
-    workarea.am_shift.y = 2;
-    AreaModeSearchPos<pixel_t>(workarea);
-
-    // store double top left bestMV to 7 member
-    vAMResults[7].x = workarea.bestMV.x;
-    vAMResults[7].y = workarea.bestMV.y;
-    vAMResults[7].sad = workarea.bestMV.sad;
-
-    //double bottom right offset
-    workarea.am_shift.x = 2;
-    workarea.am_shift.y = 2;
-    AreaModeSearchPos<pixel_t>(workarea);
-
-    // store double bottom right bestMV to 8 member
-    vAMResults[8].x = workarea.bestMV.x;
-    vAMResults[8].y = workarea.bestMV.y;
-    vAMResults[8].sad = workarea.bestMV.sad;
-
-  }
-
-  if (iAreaMode >= 3) // x13 additional positions
-  {
-    //triple top left offset
-    workarea.am_shift.x = -3;
-    workarea.am_shift.y = -3;
-    AreaModeSearchPos<pixel_t>(workarea);
-
-    // store triple top left bestMV to 9 member
-    vAMResults[9].x = workarea.bestMV.x;
-    vAMResults[9].y = workarea.bestMV.y;
-    vAMResults[9].sad = workarea.bestMV.sad;
-
-    //triple top right offset
-    workarea.am_shift.x = 3;
-    workarea.am_shift.y = -3;
-    AreaModeSearchPos<pixel_t>(workarea);
-
-    // store triple top left bestMV to 10 member
-    vAMResults[10].x = workarea.bestMV.x;
-    vAMResults[10].y = workarea.bestMV.y;
-    vAMResults[10].sad = workarea.bestMV.sad;
-
-    //triple bottom left offset
-    workarea.am_shift.x = -3;
-    workarea.am_shift.y = 3;
-    AreaModeSearchPos<pixel_t>(workarea);
-
-    // store double top left bestMV to 11 member
-    vAMResults[11].x = workarea.bestMV.x;
-    vAMResults[11].y = workarea.bestMV.y;
-    vAMResults[11].sad = workarea.bestMV.sad;
-
-    //triple bottom right offset
-    workarea.am_shift.x = 3;
-    workarea.am_shift.y = 3;
-    AreaModeSearchPos<pixel_t>(workarea);
-
-    // store triple bottom right bestMV to 12 member
-    vAMResults[12].x = workarea.bestMV.x;
-    vAMResults[12].y = workarea.bestMV.y;
-    vAMResults[12].sad = workarea.bestMV.sad;
-  }
-
-  if (iAreaMode >= 4) // x17 additional positions
-  {
-    //4x top left offset
-    workarea.am_shift.x = -4;
-    workarea.am_shift.y = -4;
-    AreaModeSearchPos<pixel_t>(workarea);
-
-    // store 4x top left bestMV to 13 member
-    vAMResults[13].x = workarea.bestMV.x;
-    vAMResults[13].y = workarea.bestMV.y;
-    vAMResults[13].sad = workarea.bestMV.sad;
-
-    //4x top right offset
-    workarea.am_shift.x = 4;
-    workarea.am_shift.y = -4;
-    AreaModeSearchPos<pixel_t>(workarea);
-
-    // store 4x top left bestMV to 14 member
-    vAMResults[14].x = workarea.bestMV.x;
-    vAMResults[14].y = workarea.bestMV.y;
-    vAMResults[14].sad = workarea.bestMV.sad;
-
-    //4x bottom left offset
-    workarea.am_shift.x = -4;
-    workarea.am_shift.y = 4;
-    AreaModeSearchPos<pixel_t>(workarea);
-
-    // store 4x top left bestMV to 15 member
-    vAMResults[15].x = workarea.bestMV.x;
-    vAMResults[15].y = workarea.bestMV.y;
-    vAMResults[15].sad = workarea.bestMV.sad;
-
-    //4x bottom right offset
-    workarea.am_shift.x = 4;
-    workarea.am_shift.y = 4;
-    AreaModeSearchPos<pixel_t>(workarea);
-
-    // store 4x bottom right bestMV to 16 member
-    vAMResults[16].x = workarea.bestMV.x;
-    vAMResults[16].y = workarea.bestMV.y;
-    vAMResults[16].sad = workarea.bestMV.sad;
+    // store bottom right bestMV to 4 member
+    vAMResults[iStoreIdx].x = workarea.bestMV.x;
+    vAMResults[iStoreIdx].y = workarea.bestMV.y;
+    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;
+    iStoreIdx++;
   }
 
   GetModeVECTOR(&vAMResults[0], &workarea.bestMV, iNumAMPos);
@@ -5434,8 +5294,11 @@ MV_FORCEINLINE int PlaneOfBlocks::CalcMeanABSMVsDiff(VECTOR* vAMResults, int iNu
   }
 
   // normalize to iNumMVs and nPel
-  iSumABS_xdiff /= (iNumMVs * nPel);
-  iSumABS_ydiff /= (iNumMVs * nPel);// todo: replace with multiplication to const (AreaMode reciprocal num positions)?
+//  iSumABS_xdiff /= (iNumMVs * nPel);
+//  iSumABS_ydiff /= (iNumMVs * nPel);// todo: replace with multiplication to const (AreaMode reciprocal num positions)?
+
+  iSumABS_xdiff = (int)(fAMresNorm * (float)iSumABS_xdiff);
+  iSumABS_ydiff = (int)(fAMresNorm * (float)iSumABS_ydiff);
 
   return iSumABS_xdiff + iSumABS_ydiff;
 

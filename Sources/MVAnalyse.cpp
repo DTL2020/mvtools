@@ -50,7 +50,8 @@ MVAnalyse::MVAnalyse(
   bool _meander, bool temporal_flag, bool _tryMany, bool multi_flag,
   bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType,
   float _scaleCSADfine, int _accnum, int _iUseSubShift, PClip _child_cur,
-  int _iSearchDirMode, int _DMFlags, int _AreaMode, int _AMDiffSAD,
+  int _iSearchDirMode, int _DMFlags,
+  int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, int _AMpel, int _PTpel,
   IScriptEnvironment* env
 )
   : ::GenericVideoFilter(_child)
@@ -71,6 +72,10 @@ MVAnalyse::MVAnalyse(
   , DMFlags(_DMFlags)
   , iAreaMode(_AreaMode)
   , iAMDiffSAD(_AMDiffSAD)
+  , iAMstep(_AMstep)
+  , iAMoffset(_AMoffset)
+  , iAMpel(_AMpel)
+  , iPTpel(_PTpel)
 {
   has_at_least_v8 = true;
   try { env->CheckVersion(8); }
@@ -544,6 +549,9 @@ MVAnalyse::MVAnalyse(
     DMFlags,
     iAreaMode,
     iAMDiffSAD,
+    iAMstep,
+    iAMoffset,
+    iAMpel,
     env
   ));
 
@@ -1400,7 +1408,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         searchType, nSearchParam, nPelSearch, nLambda, lsad, pnew, plevel,
         global, srd._analysis_data.nFlags, reinterpret_cast<int*>(pDst),
         outfilebuf, fieldShift, pzero, pglobal, badSAD, badrange,
-        meander, pVecPrevOrNull, tryMany, optPredictorType
+        meander, pVecPrevOrNull, tryMany, optPredictorType, iPTpel
       );
     }
 

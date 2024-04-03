@@ -141,6 +141,9 @@ AVSValue __cdecl Create_MVAnalyse(AVSValue args, void* user_data, IScriptEnviron
   bool global;
   int overlap = args[18].AsInt(0);
 
+  int AreaMode = args[41].AsInt(0); // AreaMode 2.7.46, number of steps around center block position
+  int PredictorType = args[34].AsInt(0);   // optpredictortype 2.7.46
+
   bool truemotion = args[11].AsBool(true); // preset added in v0.9.13
   if (truemotion)
   {
@@ -193,15 +196,21 @@ AVSValue __cdecl Create_MVAnalyse(AVSValue args, void* user_data, IScriptEnviron
     args[31].AsBool(true),   // mt
     args[32].AsInt(0),   // scaleCSAD
     args[33].AsInt(0),   // optsearchoption 2.7.46
-    args[34].AsInt(0),   // optpredictortype 2.7.46
+//    args[34].AsInt(0),   // optpredictortype 2.7.46
+    PredictorType, 
     args[35].AsFloat(1.0),   // scaleCSADfine 2.7.46
     args[36].AsInt(0), // accnum 2.7.46
     args[37].AsInt(0), // UseSubShift 2.7.46
     args[38].AsClip(), // SuperCurrent 2.7.46
     args[39].AsInt(0), // SearchDirMode 2.7.46
     args[40].AsInt(1), // DMFlags 2.7.46
-    args[41].AsInt(0), // AreaMode 2.7.46
+//    args[41].AsInt(0), // AreaMode 2.7.46, number of steps around center block position
+    AreaMode,
     args[42].AsInt(0), // AreaMode MVs difference hint to SAD addition
+    args[43].AsInt(0), // AreaMode step size in samples, 0 - auto (depend on block size, 1 for 8x8, 2 for 16x16 and so on)
+    args[44].AsInt(0), // AreaMode offset for start search, 0 - no (start from center block)
+    args[45].AsInt(AreaMode), // AreaMode pel, 0 - no AreaMode at sub-sample levels of search (0 for pel=2 and 0 and 1 for pel=4), > 0 = number of steps at sub-sample levels
+    args[46].AsInt(PredictorType), // PredictorType at sub-sample levels
     env
   );
 }
@@ -734,7 +743,7 @@ AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Linkage* const vectors) {
   AVS_linkage = vectors;
 #endif
   env->AddFunction("MShow", "cc[scale]i[sil]i[tol]i[showsad]b[number]i[thSCD1]i[thSCD2]i[isse]b[planar]b", Create_MVShow, 0);
-  env->AddFunction("MAnalyse", "c[blksize]i[blksizeV]i[levels]i[search]i[searchparam]i[pelsearch]i[isb]b[lambda]i[chroma]b[delta]i[truemotion]b[lsad]i[plevel]i[global]b[pnew]i[pzero]i[pglobal]i[overlap]i[overlapV]i[outfile]s[dct]i[divide]i[sadx264]i[badSAD]i[badrange]i[isse]b[meander]b[temporal]b[trymany]b[multi]b[mt]b[scaleCSAD]i[optsearchoption]i[optpredictortype]i[scaleCSADfine]f[accnum]i[UseSubShift]i[SuperCurrent]c[SearchDirMode]i[DMFlags]i[AreaMode]i[AMdiffSAD]i", Create_MVAnalyse, 0);
+  env->AddFunction("MAnalyse", "c[blksize]i[blksizeV]i[levels]i[search]i[searchparam]i[pelsearch]i[isb]b[lambda]i[chroma]b[delta]i[truemotion]b[lsad]i[plevel]i[global]b[pnew]i[pzero]i[pglobal]i[overlap]i[overlapV]i[outfile]s[dct]i[divide]i[sadx264]i[badSAD]i[badrange]i[isse]b[meander]b[temporal]b[trymany]b[multi]b[mt]b[scaleCSAD]i[optsearchoption]i[optpredictortype]i[scaleCSADfine]f[accnum]i[UseSubShift]i[SuperCurrent]c[SearchDirMode]i[DMFlags]i[AreaMode]i[AMdiffSAD]i[AMstep]i[AMoffset]i[AMpel]i[PTpel]i", Create_MVAnalyse, 0);
   env->AddFunction("MMask", "cc[ml]f[gamma]f[kind]i[time]f[Ysc]i[thSCD1]i[thSCD2]i[isse]b[planar]b", Create_MVMask, 0);
   env->AddFunction("MCompensate", "ccc[scbehavior]b[recursion]f[thSAD]i[fields]b[time]f[thSCD1]i[thSCD2]i[isse]b[planar]b[mt]b[tr]i[center]b[cclip]c[thSAD2]i[showRNB]b", Create_MVCompensate, 0);
   env->AddFunction("MSCDetection", "cc[Ysc]i[thSCD1]i[thSCD2]i[isse]b", Create_MVSCDetection, 0);
