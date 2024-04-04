@@ -5149,7 +5149,6 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
 template<typename pixel_t>
 MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool bRecalc)
 {
-
   // store center bestMV to zero member
   vAMResults[0].x = workarea.bestMV.x;
   vAMResults[0].y = workarea.bestMV.y;
@@ -5167,9 +5166,6 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
     AreaModeSearchPos<pixel_t>(workarea, bRecalc);
 
     // store top left bestMV 
-/*    vAMResults[iStoreIdx].x = workarea.bestMV.x;
-    vAMResults[iStoreIdx].y = workarea.bestMV.y;
-    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;*/
     vAMResults[iStoreIdx] = workarea.bestMV;
     iStoreIdx++;
 
@@ -5179,9 +5175,6 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
     AreaModeSearchPos<pixel_t>(workarea, bRecalc);
 
     // store top left bestMV 
-/*    vAMResults[iStoreIdx].x = workarea.bestMV.x;
-    vAMResults[iStoreIdx].y = workarea.bestMV.y;
-    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;*/
     vAMResults[iStoreIdx] = workarea.bestMV;
     iStoreIdx++;
 
@@ -5191,9 +5184,6 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
     AreaModeSearchPos<pixel_t>(workarea, bRecalc);
 
     // store top left bestMV to 3 member
-/*    vAMResults[iStoreIdx].x = workarea.bestMV.x;
-    vAMResults[iStoreIdx].y = workarea.bestMV.y;
-    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;*/
     vAMResults[iStoreIdx] = workarea.bestMV;
     iStoreIdx++;
 
@@ -5203,9 +5193,6 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
     AreaModeSearchPos<pixel_t>(workarea, bRecalc);
 
     // store bottom right bestMV to 4 member
-/*    vAMResults[iStoreIdx].x = workarea.bestMV.x;
-    vAMResults[iStoreIdx].y = workarea.bestMV.y;
-    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;*/
     vAMResults[iStoreIdx] = workarea.bestMV;
     iStoreIdx++;
   }
@@ -5220,23 +5207,7 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
     int iAMMVsDiff = CalcMeanABSMVsDiff(&vAMResults[0], iNumAMPos);
 
     workarea.bestMV.sad = workarea.bestMV.sad + iAMMVsDiff * iAMDiffSAD;
-
   }
-
-  /* DEBUG
-  if (vAMResults[0].x != workarea.bestMV.x)
-  {
-    int idbr = 0;
-  }
-  if (vAMResults[0].y != workarea.bestMV.y)
-  {
-    int idbr = 0;
-  }
-  if (vAMResults[0].sad != workarea.bestMV.sad)
-  {
-    int idbr = 0;
-  }
-  */
 
   if (!bRecalc)
   {
@@ -6806,71 +6777,81 @@ void	PlaneOfBlocks::recalculate_mv_slice(Slicer::TaskData &td)
 } // recalculate_mv_slice
 
 template<typename pixel_t>
-void PlaneOfBlocks::RecalculateSearch(WorkingArea& workarea)
+MV_FORCEINLINE void PlaneOfBlocks::RecalculateSearch(WorkingArea& workarea)
 {
-  // todo PF: consider switch and not bitfield searchType
-  if (searchType & ONETIME)
+  switch (searchType)
   {
-    for (int i = nSearchParam; i > 0; i /= 2)
+    case ONETIME:
     {
-      OneTimeSearch<pixel_t>(workarea, i);
+      for (int i = nSearchParam; i > 0; i /= 2)
+      {
+        OneTimeSearch<pixel_t>(workarea, i);
+      }
     }
-  }
+    break;
 
-  if (searchType & NSTEP)
-  {
-    NStepSearch<pixel_t>(workarea, nSearchParam);
-  }
-
-  if (searchType & LOGARITHMIC)
-  {
-    for (int i = nSearchParam; i > 0; i /= 2)
+    case NSTEP:
     {
-      DiamondSearch<pixel_t>(workarea, i);
+      NStepSearch<pixel_t>(workarea, nSearchParam);
     }
-  }
+    break;
 
-  if (searchType & EXHAUSTIVE)
-  {
-    //       ExhaustiveSearch(nSearchParam);
-    int mvx = workarea.bestMV.x;
-    int mvy = workarea.bestMV.y;
-    for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
+    case LOGARITHMIC:
     {
-      ExpandingSearch<pixel_t>(workarea, i, 1, mvx, mvy);
+      for (int i = nSearchParam; i > 0; i /= 2)
+      {
+        DiamondSearch<pixel_t>(workarea, i);
+      }
     }
-  }
+    break;
 
-  if (searchType & HEX2SEARCH)
-  {
-    Hex2Search<pixel_t>(workarea, nSearchParam);
-  }
-
-  if (searchType & UMHSEARCH)
-  {
-    UMHSearch<pixel_t>(workarea, nSearchParam, workarea.bestMV.x, workarea.bestMV.y);
-  }
-
-  if (searchType & HSEARCH)
-  {
-    int mvx = workarea.bestMV.x;
-    int mvy = workarea.bestMV.y;
-    for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
+    case EXHAUSTIVE:
     {
-      CheckMV<pixel_t>(workarea, mvx - i, mvy);
-      CheckMV<pixel_t>(workarea, mvx + i, mvy);
+      //       ExhaustiveSearch(nSearchParam);
+      int mvx = workarea.bestMV.x;
+      int mvy = workarea.bestMV.y;
+      for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
+      {
+        ExpandingSearch<pixel_t>(workarea, i, 1, mvx, mvy);
+      }
     }
-  }
+    break;
 
-  if (searchType & VSEARCH)
-  {
-    int mvx = workarea.bestMV.x;
-    int mvy = workarea.bestMV.y;
-    for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
+    case HEX2SEARCH:
     {
-      CheckMV<pixel_t>(workarea, mvx, mvy - i);
-      CheckMV<pixel_t>(workarea, mvx, mvy + i);
+      Hex2Search<pixel_t>(workarea, nSearchParam);
     }
+    break;
+
+    case UMHSEARCH:
+    {
+      UMHSearch<pixel_t>(workarea, nSearchParam, workarea.bestMV.x, workarea.bestMV.y);
+    }
+    break;
+
+    case HSEARCH:
+    {
+      int mvx = workarea.bestMV.x;
+      int mvy = workarea.bestMV.y;
+      for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
+      {
+        CheckMV<pixel_t>(workarea, mvx - i, mvy);
+        CheckMV<pixel_t>(workarea, mvx + i, mvy);
+      }
+    }
+    break;
+
+    case VSEARCH:
+    {
+      int mvx = workarea.bestMV.x;
+      int mvy = workarea.bestMV.y;
+      for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
+      {
+        CheckMV<pixel_t>(workarea, mvx, mvy - i);
+        CheckMV<pixel_t>(workarea, mvx, mvy + i);
+      }
+    }
+    break;
   }
 }
 

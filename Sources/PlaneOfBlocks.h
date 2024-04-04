@@ -432,7 +432,7 @@ private:
   MV_FORCEINLINE int CalcMeanABSMVsDiff(VECTOR* vAMResults, int iNumMVs);
 
   template<typename pixel_t> 
-  void RecalculateSearch(WorkingArea& workarea); // to use in single search or AreaMode in MRecalculate
+  MV_FORCEINLINE void RecalculateSearch(WorkingArea& workarea); // to use in single search or AreaMode in MRecalculate
 
   /* performs a diamond search */
   template<typename pixel_t>
