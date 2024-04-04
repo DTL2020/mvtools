@@ -478,7 +478,7 @@ void PlaneOfBlocks::RecalculateMVs(
   SearchType st, int stp, int lambda, sad_t lsad, int pnew,
   int flags, int *out,
   short *outfilebuf, int fieldShift, sad_t thSAD, int divideExtra, int smooth, bool meander,
-  int optPredictorType, int PTpel
+  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -509,6 +509,27 @@ void PlaneOfBlocks::RecalculateMVs(
 
   pSrcFrame = _pSrcFrame;
   pRefFrame = _pRefFrame;
+
+  iAreaMode = _AreaMode;
+  iAMstep = _AMstep;
+  iAMoffset = _AMoffset;
+
+  if (iAreaMode > 0)
+  {
+    // iAreaMode - num steps around current block pos, each step = 4 positions in diagonal mode
+
+    iNumAMPos = 1 + iAreaMode * 4; // x5 diagonals for begin
+
+    // calculate step size
+    // auto
+    iAMbsScale = nBlkSizeX / 8; // 1 for 8x8, 2 for 16x16, 4 for 32x32
+    if (iAMstep == 0)
+    {
+      iAMstep = iAMbsScale;
+    }
+
+    fAMresNorm = 1.0f / (float(iNumAMPos * nPel));
+  }
 
 #if (ALIGN_SOURCEBLOCK > 1)
   nSrcPitch_plane[0] = pSrcFrame->GetPlane(YPLANE)->GetPitch();
@@ -4929,24 +4950,7 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
 
         /* additional AreaMode limits*/
         int iAMmaxOffset = (iAreaMode * iAMstep) + iAMoffset;
-/*        switch (iAreaMode)
-        {
-          case 1:
-            iAMmaxStep = 1 * iAMbsScale;
-            break;
-          case 2:
-            iAMmaxStep = 2 * iAMbsScale;
-            break;
-          case 3:
-            iAMmaxStep = 3 * iAMbsScale;
-            break;
-          case 4:
-            iAMmaxStep = 4 * iAMbsScale;
-            break;
-          default:
-            iAMmaxStep = 0;
-        }
-        */
+
         /* computes search boundaries */
         if (iUseSubShift == 0)
         {
@@ -5027,9 +5031,9 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
           else // DTL: no refine (at level = 0 typically)
             PseudoEPZSearch_no_refine<pixel_t>(workarea);
 
-          if (iAreaMode >= 1)
+          if (iAreaMode > 0 )
           {
-            ProcessAreaMode<pixel_t>(workarea);
+            ProcessAreaMode<pixel_t>(workarea, false);
           }
         }
 
@@ -5143,7 +5147,7 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
 } // search_mv_slice
 
 template<typename pixel_t>
-MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea)
+MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool bRecalc)
 {
 
   // store center bestMV to zero member
@@ -5160,45 +5164,49 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea)
     //top left offset
     workarea.am_shift.x = -1 * iOffset;
     workarea.am_shift.y = -1 * iOffset;
-    AreaModeSearchPos<pixel_t>(workarea);
+    AreaModeSearchPos<pixel_t>(workarea, bRecalc);
 
-    // store top left bestMV to 1 member
-    vAMResults[iStoreIdx].x = workarea.bestMV.x;
+    // store top left bestMV 
+/*    vAMResults[iStoreIdx].x = workarea.bestMV.x;
     vAMResults[iStoreIdx].y = workarea.bestMV.y;
-    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;
+    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;*/
+    vAMResults[iStoreIdx] = workarea.bestMV;
     iStoreIdx++;
 
     //top right offset
     workarea.am_shift.x = 1 * iOffset;
     workarea.am_shift.y = -1 * iOffset;
-    AreaModeSearchPos<pixel_t>(workarea);
+    AreaModeSearchPos<pixel_t>(workarea, bRecalc);
 
-    // store top left bestMV to 2 member
-    vAMResults[iStoreIdx].x = workarea.bestMV.x;
+    // store top left bestMV 
+/*    vAMResults[iStoreIdx].x = workarea.bestMV.x;
     vAMResults[iStoreIdx].y = workarea.bestMV.y;
-    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;
+    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;*/
+    vAMResults[iStoreIdx] = workarea.bestMV;
     iStoreIdx++;
 
     //bottom left offset
     workarea.am_shift.x = -1 * iOffset;
     workarea.am_shift.y = 1 * iOffset;
-    AreaModeSearchPos<pixel_t>(workarea);
+    AreaModeSearchPos<pixel_t>(workarea, bRecalc);
 
     // store top left bestMV to 3 member
-    vAMResults[iStoreIdx].x = workarea.bestMV.x;
+/*    vAMResults[iStoreIdx].x = workarea.bestMV.x;
     vAMResults[iStoreIdx].y = workarea.bestMV.y;
-    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;
+    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;*/
+    vAMResults[iStoreIdx] = workarea.bestMV;
     iStoreIdx++;
 
     //bottom right offset
     workarea.am_shift.x = 1 * iOffset;
     workarea.am_shift.y = 1 * iOffset;
-    AreaModeSearchPos<pixel_t>(workarea);
+    AreaModeSearchPos<pixel_t>(workarea, bRecalc);
 
     // store bottom right bestMV to 4 member
-    vAMResults[iStoreIdx].x = workarea.bestMV.x;
+/*    vAMResults[iStoreIdx].x = workarea.bestMV.x;
     vAMResults[iStoreIdx].y = workarea.bestMV.y;
-    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;
+    vAMResults[iStoreIdx].sad = workarea.bestMV.sad;*/
+    vAMResults[iStoreIdx] = workarea.bestMV;
     iStoreIdx++;
   }
 
@@ -5230,15 +5238,18 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea)
   }
   */
 
-  // store to vectors field
-  vectors[workarea.blkIdx].x = workarea.bestMV.x;
-  vectors[workarea.blkIdx].y = workarea.bestMV.y;
-  vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
+  if (!bRecalc)
+  {
+    // store to vectors field
+    vectors[workarea.blkIdx].x = workarea.bestMV.x;
+    vectors[workarea.blkIdx].y = workarea.bestMV.y;
+    vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
+  }
 
 }
 
 template<typename pixel_t>
-MV_FORCEINLINE void PlaneOfBlocks::AreaModeSearchPos(WorkingArea& workarea)
+MV_FORCEINLINE void PlaneOfBlocks::AreaModeSearchPos(WorkingArea& workarea, bool bRecalc)
 {
   int curr_x[3];
   int curr_y[3];
@@ -5262,13 +5273,58 @@ MV_FORCEINLINE void PlaneOfBlocks::AreaModeSearchPos(WorkingArea& workarea)
   workarea.y[2] += (workarea.am_shift.y >> nLogyRatioUV);
 
   workarea.globalMVPredictor = _glob_mv_pred_def; // reset global for next searches
+/*  workarea.pSrc[0] = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
+  if (chroma)
+  {
+    workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
+    workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
+  }
+  */
+#if (ALIGN_SOURCEBLOCK > 1)
+  //store the pitch
+  const BYTE* pY = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
+  //create aligned copy
+  BLITLUMA(workarea.pSrc_temp[0], nSrcPitch[0], pY, nSrcPitch_plane[0]);
+  //set the to the aligned copy
+  workarea.pSrc[0] = workarea.pSrc_temp[0];
+  if (chroma)
+  {
+    workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
+    BLITCHROMA(workarea.pSrc_temp[1], nSrcPitch[1], workarea.pSrc[1], nSrcPitch_plane[1]);
+    workarea.pSrc[1] = workarea.pSrc_temp[1];
+    workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
+    BLITCHROMA(workarea.pSrc_temp[2], nSrcPitch[2], workarea.pSrc[2], nSrcPitch_plane[2]);
+    workarea.pSrc[2] = workarea.pSrc_temp[2];
+  }
+#else	// ALIGN_SOURCEBLOCK
   workarea.pSrc[0] = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
   if (chroma)
   {
     workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
     workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
   }
-  PseudoEPZSearch<pixel_t>(workarea);
+#endif	// ALIGN_SOURCEBLOCK
+
+  if (!bRecalc)
+  {
+    // full search
+    PseudoEPZSearch<pixel_t>(workarea);
+  }
+  else
+  {
+    // recalculate
+    sad_t saduv = (chroma) ? ScaleSadChroma_f(DM_Chroma->GetDisMetric(workarea.pSrc[1], nSrcPitch[1], GetRefBlockU(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[1])
+      + DM_Chroma->GetDisMetric(workarea.pSrc[2], nSrcPitch[2], GetRefBlockV(workarea, workarea.predictor.x, workarea.predictor.y), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0;
+    sad_t sad = LumaSAD<pixel_t>(workarea, GetRefBlock(workarea, workarea.predictor.x, workarea.predictor.y));
+    sad += saduv;
+
+    workarea.bestMV = workarea.predictor;
+
+    workarea.bestMV.sad = sad;
+    workarea.nMinCost = sad;
+
+    RecalculateSearch<pixel_t>(workarea);
+  }
 
   // restore workarea center block pos
   workarea.x[0] = curr_x[0];
@@ -6560,11 +6616,14 @@ void	PlaneOfBlocks::recalculate_mv_slice(Slicer::TaskData &td)
       LSAD = _lsad;    // SAD limit for lambda using
       // may be they must be scaled by nPel ?
 
+      /* additional AreaMode limits*/
+      int iAMmaxOffset = (iAreaMode * iAMstep) + iAMoffset;
+
       /* computes search boundaries */
-      workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX);
-      workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY);
-      workarea.nDxMin = -nPel * workarea.x[0];
-      workarea.nDyMin = -nPel * workarea.y[0];
+      workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX + iAMmaxOffset);
+      workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY + iAMmaxOffset);
+      workarea.nDxMin = -nPel * (workarea.x[0] + iAMmaxOffset);
+      workarea.nDyMin = -nPel * (workarea.y[0] + iAMmaxOffset); // do this valid for extended AreaMode search, + or - ?
 
       // get and interplolate old vectors
       int centerX = nBlkSizeX / 2 + (nBlkSizeX - nOverlapX)*workarea.blkx; // center of new block
@@ -6667,75 +6726,14 @@ void	PlaneOfBlocks::recalculate_mv_slice(Slicer::TaskData &td)
 
       if (workarea.bestMV.sad > _thSAD)// if old interpolated vector is bad
       {
-        //				CheckMV(vectorOld1.x, vectorOld1.y);
-        //				CheckMV(vectorOld2.x, vectorOld2.y);
-        //				CheckMV(vectorOld3.x, vectorOld3.y);
-        //				CheckMV(vectorOld4.x, vectorOld4.y);
-                // then, we refine, according to the search type
 
-        // todo PF: consider switch and not bitfield searchType
-        if (searchType & ONETIME)
-        {
-          for (int i = nSearchParam; i > 0; i /= 2)
-          {
-            OneTimeSearch<pixel_t>(workarea, i);
-          }
-        }
+        // then, we refine, according to the search type
+        RecalculateSearch<pixel_t>(workarea);
 
-        if (searchType & NSTEP)
+        // AreaMode here
+        if (iAreaMode > 0)
         {
-          NStepSearch<pixel_t>(workarea, nSearchParam);
-        }
-
-        if (searchType & LOGARITHMIC)
-        {
-          for (int i = nSearchParam; i > 0; i /= 2)
-          {
-            DiamondSearch<pixel_t>(workarea, i);
-          }
-        }
-
-        if (searchType & EXHAUSTIVE)
-        {
-          //       ExhaustiveSearch(nSearchParam);
-          int mvx = workarea.bestMV.x;
-          int mvy = workarea.bestMV.y;
-          for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
-          {
-            ExpandingSearch<pixel_t>(workarea, i, 1, mvx, mvy);
-          }
-        }
-
-        if (searchType & HEX2SEARCH)
-        {
-          Hex2Search<pixel_t>(workarea, nSearchParam);
-        }
-
-        if (searchType & UMHSEARCH)
-        {
-          UMHSearch<pixel_t>(workarea, nSearchParam, workarea.bestMV.x, workarea.bestMV.y);
-        }
-
-        if (searchType & HSEARCH)
-        {
-          int mvx = workarea.bestMV.x;
-          int mvy = workarea.bestMV.y;
-          for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
-          {
-            CheckMV<pixel_t>(workarea, mvx - i, mvy);
-            CheckMV<pixel_t>(workarea, mvx + i, mvy);
-          }
-        }
-
-        if (searchType & VSEARCH)
-        {
-          int mvx = workarea.bestMV.x;
-          int mvy = workarea.bestMV.y;
-          for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
-          {
-            CheckMV<pixel_t>(workarea, mvx, mvy - i);
-            CheckMV<pixel_t>(workarea, mvx, mvy + i);
-          }
+          ProcessAreaMode<pixel_t>(workarea, true);
         }
       }	// if bestMV.sad > thSAD
 
@@ -6807,7 +6805,74 @@ void	PlaneOfBlocks::recalculate_mv_slice(Slicer::TaskData &td)
   _workarea_pool.return_obj(workarea);
 } // recalculate_mv_slice
 
+template<typename pixel_t>
+void PlaneOfBlocks::RecalculateSearch(WorkingArea& workarea)
+{
+  // todo PF: consider switch and not bitfield searchType
+  if (searchType & ONETIME)
+  {
+    for (int i = nSearchParam; i > 0; i /= 2)
+    {
+      OneTimeSearch<pixel_t>(workarea, i);
+    }
+  }
 
+  if (searchType & NSTEP)
+  {
+    NStepSearch<pixel_t>(workarea, nSearchParam);
+  }
+
+  if (searchType & LOGARITHMIC)
+  {
+    for (int i = nSearchParam; i > 0; i /= 2)
+    {
+      DiamondSearch<pixel_t>(workarea, i);
+    }
+  }
+
+  if (searchType & EXHAUSTIVE)
+  {
+    //       ExhaustiveSearch(nSearchParam);
+    int mvx = workarea.bestMV.x;
+    int mvy = workarea.bestMV.y;
+    for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
+    {
+      ExpandingSearch<pixel_t>(workarea, i, 1, mvx, mvy);
+    }
+  }
+
+  if (searchType & HEX2SEARCH)
+  {
+    Hex2Search<pixel_t>(workarea, nSearchParam);
+  }
+
+  if (searchType & UMHSEARCH)
+  {
+    UMHSearch<pixel_t>(workarea, nSearchParam, workarea.bestMV.x, workarea.bestMV.y);
+  }
+
+  if (searchType & HSEARCH)
+  {
+    int mvx = workarea.bestMV.x;
+    int mvy = workarea.bestMV.y;
+    for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
+    {
+      CheckMV<pixel_t>(workarea, mvx - i, mvy);
+      CheckMV<pixel_t>(workarea, mvx + i, mvy);
+    }
+  }
+
+  if (searchType & VSEARCH)
+  {
+    int mvx = workarea.bestMV.x;
+    int mvy = workarea.bestMV.y;
+    for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
+    {
+      CheckMV<pixel_t>(workarea, mvx, mvy - i);
+      CheckMV<pixel_t>(workarea, mvx, mvy + i);
+    }
+  }
+}
 
 // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
 

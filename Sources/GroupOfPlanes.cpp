@@ -352,7 +352,9 @@ void	GroupOfPlanes::RecalculateMVs(
   int    smooth,
   bool meander,
   int optPredictorType,
-  int PTpel)
+  int AreaMode,
+  int AMstep,
+  int AMoffset)
 {
   nFlags |= flags;
 
@@ -387,7 +389,9 @@ void	GroupOfPlanes::RecalculateMVs(
     smooth,
     meander,
     optPredictorType,
-    PTpel
+    AreaMode,
+    AMstep,
+    AMoffset
   );
 
   out += planes[0]->GetArraySize(divideExtra);

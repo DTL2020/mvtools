@@ -41,7 +41,9 @@ MVRecalculate::MVRecalculate(
   int _blksizex, int _blksizey, int st, int stp, int lambda, bool chroma,
   int _pnew, int _overlapx, int _overlapy, const char* _outfilename,
   int _dctmode, int _divide, int _sadx264, bool _isse, bool _meander,
-  int trad, bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType, int _DMFlags, IScriptEnvironment* env
+  int trad, bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType, int _DMFlags,
+  int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset,
+  IScriptEnvironment* env
 )
   : GenericVideoFilter(_super)
   , _srd_arr()
@@ -53,6 +55,10 @@ MVRecalculate::MVRecalculate(
   , optSearchOption(_optSearchOption)
   , optPredictorType(_optPredictorType)
   , DMFlags(_DMFlags)
+  , iAreaMode(_AreaMode)
+  , iAMdiffSAD(_AMDiffSAD)
+  , iAMstep(_AMstep)
+  , iAMoffset(_AMoffset)
 {
   has_at_least_v8 = true;
   try { env->CheckVersion(8); }
@@ -339,7 +345,7 @@ MVRecalculate::MVRecalculate(
     0, // UseSubShift - currently not controlled
     DMFlags,
     0, // AreaMode - curerntly not controlled
-    0, // AMDiffSAD - currently not controlled
+    iAMdiffSAD, // 
     0, // AMstep - currently not controlled
     0, // AMoffset - currently not controlled
     0, // AMpel - currently not controlled
@@ -570,7 +576,7 @@ PVideoFrame __stdcall MVRecalculate::GetFrame(int n, IScriptEnvironment* env)
       *(srd._clip_sptr), pSrcGOF, pRefGOF,
       searchType, nSearchParam, nLambda, lsad, pnew,
       srd._analysis_data.nFlags, reinterpret_cast <int *> (pDst),
-      outfilebuf, fieldShift, thSAD, smooth, meander, optPredictorType, optPredictorType
+      outfilebuf, fieldShift, thSAD, smooth, meander, optPredictorType, iAreaMode, iAMstep, iAMoffset
     );
 
     if (divideExtra)

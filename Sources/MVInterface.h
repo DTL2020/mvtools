@@ -38,8 +38,7 @@
 
 // ALIGN_PLANES aligns the sourceblock UNLESS overlap != 0 OR special case: MMX function AND Block=16, Overlap = 8
 // ALIGN_SOURCEBLOCK creates aligned copy of Source block. Set it to 1 if you don't want alignment.
-//#define ALIGN_SOURCEBLOCK (16) // 16 - for old CPUs (SSE)
-#define ALIGN_SOURCEBLOCK (1) // 1 - for new CPUs (AVX)
+#define ALIGN_SOURCEBLOCK (16) // REQUIRED for 16x16 x264 sam sad functions (MAnalyse and other filters ?)
 
 // special feature, disable in the standard release !!!
 //#define RETURN_PREV_LEVEL_SAD_AT_LEVEL_0

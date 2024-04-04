@@ -146,7 +146,7 @@ public:
     int stp, int _lambda, sad_t _lSAD, int _pennew,
     int flags, int *out, short * outfilebuf, int fieldShift, sad_t thSAD,
     int _divideExtra, int smooth, bool meander,
-    int optPredictorType, int PTpel);
+    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset);
 
   MVVector <VECTOR> vectors; // public to write MVs from DX12_ME
 
@@ -424,12 +424,15 @@ private:
   MV_FORCEINLINE void GetModeVECTOR(VECTOR* toMedian, VECTOR *vOut, int iNumMVs);
 
   template<typename pixel_t>
-  MV_FORCEINLINE void AreaModeSearchPos(WorkingArea& workarea);
+  MV_FORCEINLINE void AreaModeSearchPos(WorkingArea& workarea, bool bRecalc);
 
   template<typename pixel_t>
-  MV_FORCEINLINE void ProcessAreaMode(WorkingArea& workarea);
+  MV_FORCEINLINE void ProcessAreaMode(WorkingArea& workarea, bool bRecalc);
 
   MV_FORCEINLINE int CalcMeanABSMVsDiff(VECTOR* vAMResults, int iNumMVs);
+
+  template<typename pixel_t> 
+  void RecalculateSearch(WorkingArea& workarea); // to use in single search or AreaMode in MRecalculate
 
   /* performs a diamond search */
   template<typename pixel_t>

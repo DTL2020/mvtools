@@ -121,6 +121,11 @@ protected:
     int optPredictorType; // DTL test
     int DMFlags; // DTL test
 
+    int iAreaMode;
+    int iAMdiffSAD;
+    int iAMstep;
+    int iAMoffset;
+
 public :
 
   MVRecalculate (
@@ -128,7 +133,9 @@ public :
     int _blksizex, int _blksizey, int st, int stp, int lambda, bool chroma,
     int _pnew, int _overlapx, int _overlapy, const char* _outfilename,
     int _dctmode, int _divide, int _sadx264, bool _isse, bool _meander,
-    int trad, bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType, int _DMFlags, IScriptEnvironment* env
+    int trad, bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType, int _DMFlags,
+    int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset,
+    IScriptEnvironment* env
   );
   ~MVRecalculate();
 

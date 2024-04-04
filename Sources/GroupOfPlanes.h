@@ -46,12 +46,12 @@ class GroupOfPlanes
   float          scaleCSADfine; //DTL test
   int            iUseSubShift; // DTL test
   int            DMFlags; // DTL test
-  int            AreaMode; // DTL test (see MAnalyse.h for description)
+  int            AreaMode; // DTL test (see MAnalyse.h for description) - todo: remove from class and use at Search and Recalc calls
   int            AMDiffSAD; 
   int            AMstep;
   int            AMoffset;
   int            AMpel;
-
+  
   conc::ObjPool <DCTClass> *
                  _dct_pool_ptr;
   PlaneOfBlocks **
@@ -79,7 +79,7 @@ public :
     MVClip &mvClip, MVGroupOfFrames *pSrcGOF, MVGroupOfFrames *pRefGOF,
     SearchType _searchType, int _nSearchParam, int _nLambda, sad_t _lsad,
     int _pnew, int flags, int *out, short * outfilebuf, int fieldShift,
-    sad_t thSAD, int smooth, bool meander, int optPredictorType, int PTpel);
+    sad_t thSAD, int smooth, bool meander, int optPredictorType, int AreaMode, int AMstep, int AMoffset);
   PlaneOfBlocks* GetPlane(int iPlane) { return planes[iPlane]; };
 };
 
