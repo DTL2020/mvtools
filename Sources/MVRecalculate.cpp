@@ -208,6 +208,7 @@ MVRecalculate::MVRecalculate(
   analysisData.nPel = nSuperPel;
   analysisData.nDeltaFrame = pAnalyseFilter->GetDeltaFrame();
   analysisData.isBackward = pAnalyseFilter->IsBackward();
+  analysisData.nTrad = trad;
 
   if (_overlapx < 0 || _overlapx > _blksizex / 2
     || _overlapy < 0 || _overlapy > _blksizey / 2)

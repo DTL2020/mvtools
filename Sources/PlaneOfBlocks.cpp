@@ -6591,10 +6591,10 @@ void	PlaneOfBlocks::recalculate_mv_slice(Slicer::TaskData &td)
       int iAMmaxOffset = (iAreaMode * iAMstep) + iAMoffset;
 
       /* computes search boundaries */
-      workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX + iAMmaxOffset);
-      workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY + iAMmaxOffset);
-      workarea.nDxMin = -nPel * (workarea.x[0] + iAMmaxOffset);
-      workarea.nDyMin = -nPel * (workarea.y[0] + iAMmaxOffset); // do this valid for extended AreaMode search, + or - ?
+      workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - iAMmaxOffset);
+      workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - iAMmaxOffset);
+      workarea.nDxMin = -nPel * (workarea.x[0] - iAMmaxOffset);
+      workarea.nDyMin = -nPel * (workarea.y[0] - iAMmaxOffset); // do this valid for extended AreaMode search, + or - ?
 
       // get and interplolate old vectors
       int centerX = nBlkSizeX / 2 + (nBlkSizeX - nOverlapX)*workarea.blkx; // center of new block
