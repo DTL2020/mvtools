@@ -42,7 +42,7 @@ MVRecalculate::MVRecalculate(
   int _pnew, int _overlapx, int _overlapy, const char* _outfilename,
   int _dctmode, int _divide, int _sadx264, bool _isse, bool _meander,
   int trad, bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType, int _DMFlags,
-  int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset,
+  int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, PClip _super_cur,
   IScriptEnvironment* env
 )
   : GenericVideoFilter(_super)
@@ -59,6 +59,7 @@ MVRecalculate::MVRecalculate(
   , iAMdiffSAD(_AMDiffSAD)
   , iAMstep(_AMstep)
   , iAMoffset(_AMoffset)
+  , super_cur(_super_cur)
 {
   has_at_least_v8 = true;
   try { env->CheckVersion(8); }
@@ -111,6 +112,24 @@ MVRecalculate::MVRecalculate(
   const int nSuperPel = params.nPel;
   const int nSuperModeYUV = params.nModeYUV;
   const int nSuperLevels = params.nLevels;
+
+  // some attempt to check for difference - incomplete !
+  if (super_cur != 0)// ??
+  {
+    const ::VideoInfo& vi_super_current = super_cur->GetVideoInfo();
+
+    if (vi_super_current.height != vi.height)
+      env->ThrowError("MRecalculate: super and super_current clips video format is different!");
+
+    if (vi_super_current.image_type != vi.image_type)
+      env->ThrowError("MRecalculate: super and super_current clips video format is different!");
+
+    if (vi_super_current.num_frames != vi.num_frames)
+      env->ThrowError("MRecalculate: super and super_current clips video format is different!");
+
+    if (!vi.IsSameColorspace(super_cur->GetVideoInfo()))
+      env->ThrowError("MRecalculate: super and super_current clips video format is different!");
+  }
 
   if (vi.IsY())
     chroma = false; // silent fallback
@@ -552,7 +571,13 @@ PVideoFrame __stdcall MVRecalculate::GetFrame(int n, IScriptEnvironment* env)
   else
   {
     //		DebugPrintf ("MVRecalculate: Get src frame %d",nsrc);
-    PVideoFrame src = child->GetFrame(nsrc, env); // v2.0
+//    PVideoFrame src = child->GetFrame(nsrc, env); // v2.0
+    PVideoFrame src;
+    if (super_cur == 0)
+      src = child->GetFrame(nsrc, env); // v2.0
+    else
+      src = super_cur->GetFrame(nsrc, env); // v2.7.46 - load different source super clip frame as current for search
+
     if (has_at_least_v8) env->copyFrameProps(src, dst); // frame prop copy support v8
     load_src_frame(*pSrcGOF, src, srd._analysis_data);
 
