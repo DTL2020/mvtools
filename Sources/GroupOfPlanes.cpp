@@ -354,7 +354,8 @@ void	GroupOfPlanes::RecalculateMVs(
   int optPredictorType,
   int AreaMode,
   int AMstep,
-  int AMoffset)
+  int AMoffset,
+  float fAMthVSMang)
 {
   nFlags |= flags;
 
@@ -391,7 +392,8 @@ void	GroupOfPlanes::RecalculateMVs(
     optPredictorType,
     AreaMode,
     AMstep,
-    AMoffset
+    AMoffset,
+    fAMthVSMang
   );
 
   out += planes[0]->GetArraySize(divideExtra);

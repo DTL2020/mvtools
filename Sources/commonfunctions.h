@@ -158,5 +158,4 @@ static T* AlignPointer(T* ptr, size_t align)
 
 #endif  // __cplusplus
 
-
 #endif

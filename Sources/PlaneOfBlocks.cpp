@@ -478,7 +478,7 @@ void PlaneOfBlocks::RecalculateMVs(
   SearchType st, int stp, int lambda, sad_t lsad, int pnew,
   int flags, int *out,
   short *outfilebuf, int fieldShift, sad_t thSAD, int divideExtra, int smooth, bool meander,
-  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset
+  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, float _fAMthVSMang 
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -513,6 +513,7 @@ void PlaneOfBlocks::RecalculateMVs(
   iAreaMode = _AreaMode;
   iAMstep = _AMstep;
   iAMoffset = _AMoffset;
+  fAMthVSMang = _fAMthVSMang;
 
   if (iAreaMode > 0)
   {
@@ -5209,6 +5210,49 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
     workarea.bestMV.sad = workarea.bestMV.sad + iAMMVsDiff * iAMDiffSAD;
   }
 
+  // check for AM skip MV conditions
+  // too unstable angles condition
+  if (fAMthVSMang > -1.0f)
+  {
+    // found first non-zero vector to compare with, if no non-zeroes - do nothing (keep bestMV)
+    int iRefdx = 0;
+    int iRefdy = 0;
+    for (int i = 0; i < iNumAMPos; i++)
+    {
+      if (vAMResults[i].x != 0)
+      {
+        iRefdx = vAMResults[i].x;
+        iRefdy = vAMResults[i].y;
+        break; // exit loop
+      }
+      if (vAMResults[i].y != 0)
+      {
+        iRefdx = vAMResults[i].x;
+        iRefdy = vAMResults[i].y;
+        break; // exit loop
+      }
+    }
+
+    if ((iRefdx != 0) || (iRefdy != 0)) // process only if Ref MV non-zero
+    {
+      float fSumAngDiff = 0.0f;
+
+      for (int i = 0; i < iNumAMPos; i++) // check all because we do not know the selected ref, one more zero in sum is only some performance penalty
+        fSumAngDiff += fDiffAngleVect(iRefdx, iRefdy, vAMResults[i].x, vAMResults[i].y);
+
+      //attempt to normalize to AM search quads ?
+      fSumAngDiff /= (float(iAreaMode)); // max DiffAngleVect is 2.0 per checked pair, 
+
+      if (fSumAngDiff > fAMthVSMang) // fail AM MV and replace with zero-indexed (initial best)
+      {
+        workarea.bestMV = vAMResults[0];
+      }
+    }
+
+  }
+
+  // too unstable ModeDM condition
+
   if (!bRecalc)
   {
     // store to vectors field
@@ -8630,4 +8674,28 @@ zmm17_r1_b0815 = _mm512_adds_epi16(zmm17_r1_b0815, zmm25_r5_b0815);
   // stored internally in Exa_search()
 
   workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
+}
+
+// not best place - need to be moved to some more common func library
+// compute float vectors difference angle metric in abstract range 0..2 (0 - coherent vectors, 2 - reverse-directed vectors) 
+MV_FORCEINLINE float fDiffAngleVect(int x1, int y1, int x2, int y2)
+{
+  float fResult = 0.0f;
+  // check if any of 2 input vectors is zero vector - return 0
+  if ((x1 == 0) && (y1 == 0) || (x2 == 0) && (y2 == 0))
+    return 0.0f;
+
+  int iUpper = x1 * x2 + y1 * y2;
+
+  if (iUpper > 0)
+  {
+    fResult = 1.0f - ((float)(iUpper * iUpper) / (float((x1 * x1 + y1 * y1) * (x2 * x2 + y2 * y2))));
+  }
+  else
+  {
+    fResult = 1.0f + ((float)(iUpper * iUpper) / (float((x1 * x1 + y1 * y1) * (x2 * x2 + y2 * y2))));
+  }
+
+  return fResult;
+
 }

@@ -146,7 +146,7 @@ public:
     int stp, int _lambda, sad_t _lSAD, int _pennew,
     int flags, int *out, short * outfilebuf, int fieldShift, sad_t thSAD,
     int _divideExtra, int smooth, bool meander,
-    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset);
+    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, float _fAMthVSMang);
 
   MVVector <VECTOR> vectors; // public to write MVs from DX12_ME
 
@@ -285,7 +285,8 @@ private:
   int iAMoffset;
   int iAMbsScale;
   int iNumAMPos;
-  float fAMresNorm; 
+  float fAMresNorm;
+  float fAMthVSMang;
   VECTOR vAMResults[MAX_AREAMODE_STEPS];
 
   // Working area
@@ -672,5 +673,7 @@ private:
 //  void(PlaneOfBlocks::* Sel_Pseudo_EPZ_search_SO2)(WorkingArea& workarea); // selector for optPredictors 0,1
 
 };
+
+MV_FORCEINLINE float fDiffAngleVect(int x1, int y1, int x2, int y2); // temp here - need to be moved for common header with MDegrain
 
 #endif
