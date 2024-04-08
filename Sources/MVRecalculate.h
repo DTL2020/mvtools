@@ -126,6 +126,7 @@ protected:
     int iAMstep;
     int iAMoffset;
     float fAMthVSMang;
+    int iAMflags;
 
     PClip super_cur;
 
@@ -138,7 +139,7 @@ public :
     int _dctmode, int _divide, int _sadx264, bool _isse, bool _meander,
     int trad, bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType, int _DMFlags,
     int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, 
-    PClip _super_cur, float _fAMthVSMang,
+    PClip _super_cur, float _fAMthVSMang, int _AMflags,
     IScriptEnvironment* env
   );
   ~MVRecalculate();

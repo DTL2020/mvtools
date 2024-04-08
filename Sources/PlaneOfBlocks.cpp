@@ -297,7 +297,7 @@ void PlaneOfBlocks::SearchMVs(
   int plevel, int flags, sad_t *out, const VECTOR * globalMVec,
   short *outfilebuf, int fieldShift, sad_t * pmeanLumaChange,
   int divideExtra, int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
-  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset
+  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -335,12 +335,17 @@ void PlaneOfBlocks::SearchMVs(
   iAreaMode = _AreaMode;
   iAMstep = _AMstep;
   iAMoffset = _AMoffset;
+  iAMflags = _AMflags;
+  fAMthVSMang = 10.0f; // curently disabled
+  iAMnumPosInStep = 0;
 
   if (iAreaMode > 0)
   {
     // iAreaMode - num steps around current block pos, each step = 4 positions in diagonal mode
+    if ((iAMflags & AMFLAG_DIA) == AMFLAG_DIA) iAMnumPosInStep += 4;
+    if ((iAMflags & AMFLAG_SIDE) == AMFLAG_SIDE) iAMnumPosInStep += 4;
 
-    iNumAMPos = 1 + iAreaMode * 4; // x5 diagonals for begin
+    iNumAMPos = 1 + iAMnumPosInStep * iAreaMode; // x4 diagonals and/or x4 sides 
 
     // calculate step size
     // auto
@@ -478,7 +483,7 @@ void PlaneOfBlocks::RecalculateMVs(
   SearchType st, int stp, int lambda, sad_t lsad, int pnew,
   int flags, int *out,
   short *outfilebuf, int fieldShift, sad_t thSAD, int divideExtra, int smooth, bool meander,
-  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, float _fAMthVSMang 
+  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, float _fAMthVSMang, int _AMflags 
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -514,12 +519,17 @@ void PlaneOfBlocks::RecalculateMVs(
   iAMstep = _AMstep;
   iAMoffset = _AMoffset;
   fAMthVSMang = _fAMthVSMang;
+  iAMnumPosInStep = 0;
+  iAMflags = _AMflags;
 
   if (iAreaMode > 0)
   {
     // iAreaMode - num steps around current block pos, each step = 4 positions in diagonal mode
+    // iAreaMode - num steps around current block pos, each step = 4 positions in diagonal mode
+    if ((iAMflags & AMFLAG_DIA) == AMFLAG_DIA) iAMnumPosInStep += 4;
+    if ((iAMflags & AMFLAG_SIDE) == AMFLAG_SIDE) iAMnumPosInStep += 4;
 
-    iNumAMPos = 1 + iAreaMode * 4; // x5 diagonals for begin
+    iNumAMPos = 1 + iAMnumPosInStep * iAreaMode; // x4 diagonals and/or x4 sides 
 
     // calculate step size
     // auto
@@ -5161,41 +5171,83 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
   {
     int iOffset = (iAMstep * i + iAMoffset + 1);
 
-    //top left offset
-    workarea.am_shift.x = -1 * iOffset;
-    workarea.am_shift.y = -1 * iOffset;
-    AreaModeSearchPos<pixel_t>(workarea, bRecalc);
+    if ((iAMflags & AMFLAG_DIA) == AMFLAG_DIA)
+    {
+      //top left offset
+      workarea.am_shift.x = -1 * iOffset;
+      workarea.am_shift.y = -1 * iOffset;
+      AreaModeSearchPos<pixel_t>(workarea, bRecalc);
 
-    // store top left bestMV 
-    vAMResults[iStoreIdx] = workarea.bestMV;
-    iStoreIdx++;
+      // store top left bestMV 
+      vAMResults[iStoreIdx] = workarea.bestMV;
+      iStoreIdx++;
 
-    //top right offset
-    workarea.am_shift.x = 1 * iOffset;
-    workarea.am_shift.y = -1 * iOffset;
-    AreaModeSearchPos<pixel_t>(workarea, bRecalc);
+      //top right offset
+      workarea.am_shift.x = 1 * iOffset;
+      workarea.am_shift.y = -1 * iOffset;
+      AreaModeSearchPos<pixel_t>(workarea, bRecalc);
 
-    // store top left bestMV 
-    vAMResults[iStoreIdx] = workarea.bestMV;
-    iStoreIdx++;
+      // store top left bestMV 
+      vAMResults[iStoreIdx] = workarea.bestMV;
+      iStoreIdx++;
 
-    //bottom left offset
-    workarea.am_shift.x = -1 * iOffset;
-    workarea.am_shift.y = 1 * iOffset;
-    AreaModeSearchPos<pixel_t>(workarea, bRecalc);
+      //bottom left offset
+      workarea.am_shift.x = -1 * iOffset;
+      workarea.am_shift.y = 1 * iOffset;
+      AreaModeSearchPos<pixel_t>(workarea, bRecalc);
 
-    // store top left bestMV to 3 member
-    vAMResults[iStoreIdx] = workarea.bestMV;
-    iStoreIdx++;
+      // store top left bestMV to 3 member
+      vAMResults[iStoreIdx] = workarea.bestMV;
+      iStoreIdx++;
 
-    //bottom right offset
-    workarea.am_shift.x = 1 * iOffset;
-    workarea.am_shift.y = 1 * iOffset;
-    AreaModeSearchPos<pixel_t>(workarea, bRecalc);
+      //bottom right offset
+      workarea.am_shift.x = 1 * iOffset;
+      workarea.am_shift.y = 1 * iOffset;
+      AreaModeSearchPos<pixel_t>(workarea, bRecalc);
 
-    // store bottom right bestMV to 4 member
-    vAMResults[iStoreIdx] = workarea.bestMV;
-    iStoreIdx++;
+      // store bottom right bestMV to 4 member
+      vAMResults[iStoreIdx] = workarea.bestMV;
+      iStoreIdx++;
+    }
+
+    if ((iAMflags & AMFLAG_SIDE) == AMFLAG_SIDE)
+    {
+      //left offset
+      workarea.am_shift.x = -1 * iOffset;
+      workarea.am_shift.y = 0 * iOffset;
+      AreaModeSearchPos<pixel_t>(workarea, bRecalc);
+
+      // store left bestMV 
+      vAMResults[iStoreIdx] = workarea.bestMV;
+      iStoreIdx++;
+
+      //right offset
+      workarea.am_shift.x = 1 * iOffset;
+      workarea.am_shift.y = 0 * iOffset;
+      AreaModeSearchPos<pixel_t>(workarea, bRecalc);
+
+      // store right bestMV 
+      vAMResults[iStoreIdx] = workarea.bestMV;
+      iStoreIdx++;
+
+      //top offset
+      workarea.am_shift.x = 0 * iOffset;
+      workarea.am_shift.y = -1 * iOffset;
+      AreaModeSearchPos<pixel_t>(workarea, bRecalc);
+
+      // store top bestMV 
+      vAMResults[iStoreIdx] = workarea.bestMV;
+      iStoreIdx++;
+
+      //bottom offset
+      workarea.am_shift.x = 0 * iOffset;
+      workarea.am_shift.y = 1 * iOffset;
+      AreaModeSearchPos<pixel_t>(workarea, bRecalc);
+
+      // store bottom bestMV 
+      vAMResults[iStoreIdx] = workarea.bestMV;
+      iStoreIdx++;
+    }
   }
 
   GetModeVECTOR(&vAMResults[0], &workarea.bestMV, iNumAMPos);
@@ -5212,7 +5264,7 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
 
   // check for AM skip MV conditions
   // too unstable angles condition
-  if (fAMthVSMang > -1.0f)
+  if (fAMthVSMang < 10.0f)
   {
     // found first non-zero vector to compare with, if no non-zeroes - do nothing (keep bestMV)
     int iRefdx = 0;
@@ -5241,17 +5293,19 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
         fSumAngDiff += fDiffAngleVect(iRefdx, iRefdy, vAMResults[i].x, vAMResults[i].y);
 
       //attempt to normalize to AM search quads ?
-      fSumAngDiff /= (float(iAreaMode)); // max DiffAngleVect is 2.0 per checked pair, 
+      float fNorm = float((iAreaMode * iAMnumPosInStep * 2) - 1); // max DiffAngleVect is 2.0 per checked pair
+      fSumAngDiff /= fNorm; // normalized to 0..1.0f range for any AMFLAGS mode ?
 
-      if (fSumAngDiff > fAMthVSMang) // fail AM MV and replace with zero-indexed (initial best)
+      if (fSumAngDiff > fAMthVSMang) // fail AM MV and replace with initial predictor (interpolated only)
       {
-        workarea.bestMV = vAMResults[0];
+        workarea.bestMV = workarea.predictor;
       }
     }
 
   }
 
   // too unstable ModeDM condition
+  // todo
 
   if (!bRecalc)
   {

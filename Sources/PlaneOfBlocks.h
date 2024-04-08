@@ -64,6 +64,11 @@ struct VECTOR_XY
   int y;
 };
 
+enum {
+  AMFLAG_DIA = 1 << 0,
+  AMFLAG_SIDE = 1 << 1
+};
+
 class DCTClass;
 class MVClip;
 class MVFrame;
@@ -118,7 +123,7 @@ public:
     int flags, sad_t *out, const VECTOR *globalMVec, short * outfilebuf, int fieldShiftCur,
     int * meanLumaChange, int divideExtra,
     int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
-    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset);
+    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags);
 
 
   /* plane initialisation */
@@ -146,7 +151,7 @@ public:
     int stp, int _lambda, sad_t _lSAD, int _pennew,
     int flags, int *out, short * outfilebuf, int fieldShift, sad_t thSAD,
     int _divideExtra, int smooth, bool meander,
-    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, float _fAMthVSMang);
+    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, float _fAMthVSMang, int _AMflags);
 
   MVVector <VECTOR> vectors; // public to write MVs from DX12_ME
 
@@ -285,8 +290,10 @@ private:
   int iAMoffset;
   int iAMbsScale;
   int iNumAMPos;
+  int iAMnumPosInStep;
   float fAMresNorm;
   float fAMthVSMang;
+  int iAMflags;
   VECTOR vAMResults[MAX_AREAMODE_STEPS];
 
   // Working area
