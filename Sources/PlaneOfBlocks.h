@@ -679,8 +679,21 @@ private:
 
 //  void(PlaneOfBlocks::* Sel_Pseudo_EPZ_search_SO2)(WorkingArea& workarea); // selector for optPredictors 0,1
 
+  // compacted functions of getting DisMetric of Luma and Chroma and Chroma only
+  template<typename pixel_t>
+  MV_FORCEINLINE sad_t GetDM(WorkingArea& workarea, int vx, int vy); // Luma and Chroma
+
+  template<typename pixel_t>
+  MV_FORCEINLINE sad_t GetDMChroma(WorkingArea& workarea, int vx, int vy); // Chroma only
+
+  template<typename pixel_t>
+  MV_FORCEINLINE sad_t GetDMLuma(WorkingArea& workarea, int vx, int vy); // Luma only
+
 };
 
 MV_FORCEINLINE float fDiffAngleVect(int x1, int y1, int x2, int y2); // temp here - need to be moved for common header with MDegrain
+
+
+
 
 #endif
