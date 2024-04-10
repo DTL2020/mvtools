@@ -78,6 +78,12 @@ int DisMetric::GetDisMetric(const uint8_t* pSrc, int nSrcPitch, const uint8_t* p
 {
   int iRetDisMetric = 0;
 
+  //special case - SAD only (DMFlags == 1) for fast return without lots of conditional jumps
+  if (nMetricFlags == MEF_SAD)
+  {
+    return SAD(pSrc, nSrcPitch, pRef, nRefPitch);
+  }
+
   if (nMetricFlags & MEF_SAD)
   {
     iRetDisMetric += SAD(pSrc, nSrcPitch, pRef, nRefPitch);
