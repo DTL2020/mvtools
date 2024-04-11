@@ -43,7 +43,7 @@ MVRecalculate::MVRecalculate(
   int _dctmode, int _divide, int _sadx264, bool _isse, bool _meander,
   int trad, bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType, int _DMFlags,
   int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, 
-  PClip _super_cur, float _fAMthVSMang, int _AMflags,
+  PClip _super_cur, float _fAMthVSMang, int _AMflags, int _AMavg,
   IScriptEnvironment* env
 )
   : GenericVideoFilter(_super)
@@ -62,6 +62,7 @@ MVRecalculate::MVRecalculate(
   , iAMoffset(_AMoffset)
   , fAMthVSMang(_fAMthVSMang)
   , iAMflags(_AMflags)
+  , iAMavg(_AMavg)
   , super_cur(_super_cur)
 {
   has_at_least_v8 = true;
@@ -605,7 +606,7 @@ PVideoFrame __stdcall MVRecalculate::GetFrame(int n, IScriptEnvironment* env)
       *(srd._clip_sptr), pSrcGOF, pRefGOF,
       searchType, nSearchParam, nLambda, lsad, pnew,
       srd._analysis_data.nFlags, reinterpret_cast <int *> (pDst),
-      outfilebuf, fieldShift, thSAD, smooth, meander, optPredictorType, iAreaMode, iAMstep, iAMoffset, fAMthVSMang, iAMflags
+      outfilebuf, fieldShift, thSAD, smooth, meander, optPredictorType, iAreaMode, iAMstep, iAMoffset, fAMthVSMang, iAMflags, iAMavg
     );
 
     if (divideExtra)

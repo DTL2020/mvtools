@@ -149,6 +149,7 @@ protected:
   int iAMoffset;
   int iAMpel;
   int iAMflags;
+  int iAMavg;
 
 public:
 
@@ -163,7 +164,7 @@ public:
     float _scaleCSADfine, int _accnum, int _iUseSubShift, PClip _child_cur,
     int _iSearchDirMode, int _DMFlags,
     int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, int _AMpel,
-    int _PTpel, int _AMflags,
+    int _PTpel, int _AMflags, int _AMavg,
     IScriptEnvironment* env);
   ~MVAnalyse();
 

@@ -126,7 +126,8 @@ void	GroupOfPlanes::SearchMVs(
   bool   tryMany,
   int    optPredictorType,
   int    PTpel,
-  int    AMflags
+  int    AMflags,
+  int    AMavg
 )
 {
   nFlags |= flags;
@@ -223,7 +224,8 @@ void	GroupOfPlanes::SearchMVs(
     AreaMode,
     AMstep,
     AMoffset,
-    AMflags
+    AMflags,
+    AMavg
   );
 
   out += planes[nLevelCount - 1]->GetArraySize(divideExtra);
@@ -325,7 +327,8 @@ void	GroupOfPlanes::SearchMVs(
       AMlevel,
       AMstep,
       AMoffset,
-      AMflags
+      AMflags,
+      AMavg
     );
 
     out += planes[i]->GetArraySize(divideExtra);
@@ -359,7 +362,8 @@ void	GroupOfPlanes::RecalculateMVs(
   int AMstep,
   int AMoffset,
   float fAMthVSMang,
-  int AMflags)
+  int AMflags,
+  int AMavg)
 {
   nFlags |= flags;
 
@@ -398,7 +402,8 @@ void	GroupOfPlanes::RecalculateMVs(
     AMstep,
     AMoffset,
     fAMthVSMang,
-    AMflags
+    AMflags,
+    AMavg
   );
 
   out += planes[0]->GetArraySize(divideExtra);

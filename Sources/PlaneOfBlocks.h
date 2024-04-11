@@ -123,7 +123,7 @@ public:
     int flags, sad_t *out, const VECTOR *globalMVec, short * outfilebuf, int fieldShiftCur,
     int * meanLumaChange, int divideExtra,
     int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
-    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags);
+    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg);
 
 
   /* plane initialisation */
@@ -151,7 +151,7 @@ public:
     int stp, int _lambda, sad_t _lSAD, int _pennew,
     int flags, int *out, short * outfilebuf, int fieldShift, sad_t thSAD,
     int _divideExtra, int smooth, bool meander,
-    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, float _fAMthVSMang, int _AMflags);
+    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, float _fAMthVSMang, int _AMflags, int _AMavg);
 
   MVVector <VECTOR> vectors; // public to write MVs from DX12_ME
 
@@ -294,6 +294,7 @@ private:
   float fAMresNorm;
   float fAMthVSMang;
   int iAMflags;
+  int iAMavg; 
   VECTOR vAMResults[MAX_AREAMODE_STEPS];
 
   // Working area
@@ -430,6 +431,9 @@ private:
   MV_FORCEINLINE void FetchMorePredictors(WorkingArea& workarea);
 
   MV_FORCEINLINE void GetModeVECTOR(VECTOR* toMedian, VECTOR *vOut, int iNumMVs);
+  MV_FORCEINLINE void GetModeVECTORvad(VECTOR* toMedian, VECTOR* vOut, int iNumMVs);
+  MV_FORCEINLINE void GetMeanVECTOR(VECTOR* toMedian, VECTOR* vOut, int iNumMVs);
+
 
   template<typename pixel_t>
   MV_FORCEINLINE void AreaModeSearchPos(WorkingArea& workarea, bool bRecalc);
@@ -692,8 +696,5 @@ private:
 };
 
 MV_FORCEINLINE float fDiffAngleVect(int x1, int y1, int x2, int y2); // temp here - need to be moved for common header with MDegrain
-
-
-
 
 #endif

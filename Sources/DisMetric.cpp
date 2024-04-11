@@ -16,7 +16,6 @@
 // http://www.gnu.org/copyleft/gpl.html .
 
 #include "DisMetric.h"
-#include <math.h>
 
 DisMetric::DisMetric(int iBlkSizeX, int iBlkSizeY, int iBPP, int _pixelsize, arch_t _arch, int metric_flags)
 {

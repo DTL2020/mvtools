@@ -297,7 +297,7 @@ void PlaneOfBlocks::SearchMVs(
   int plevel, int flags, sad_t *out, const VECTOR * globalMVec,
   short *outfilebuf, int fieldShift, sad_t * pmeanLumaChange,
   int divideExtra, int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
-  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags
+  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -336,6 +336,7 @@ void PlaneOfBlocks::SearchMVs(
   iAMstep = _AMstep;
   iAMoffset = _AMoffset;
   iAMflags = _AMflags;
+  iAMavg = _AMavg;
   fAMthVSMang = 10.0f; // curently disabled
   iAMnumPosInStep = 0;
 
@@ -480,7 +481,7 @@ void PlaneOfBlocks::RecalculateMVs(
   SearchType st, int stp, int lambda, sad_t lsad, int pnew,
   int flags, int *out,
   short *outfilebuf, int fieldShift, sad_t thSAD, int divideExtra, int smooth, bool meander,
-  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, float _fAMthVSMang, int _AMflags 
+  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, float _fAMthVSMang, int _AMflags, int _AMavg 
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -518,6 +519,7 @@ void PlaneOfBlocks::RecalculateMVs(
   fAMthVSMang = _fAMthVSMang;
   iAMnumPosInStep = 0;
   iAMflags = _AMflags;
+  iAMavg = _AMavg;
 
   if (iAreaMode > 0)
   {
@@ -1237,6 +1239,69 @@ MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTOR(VECTOR* toMedian, VECTOR *vOut,
   vOut[0].sad = std::max(toMedian[i_idx_minrow_x].sad, toMedian[i_idx_minrow_y].sad); // may be make func param for max or min ?
 
 }
+
+MV_FORCEINLINE void PlaneOfBlocks::GetMeanVECTOR(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
+{
+
+  // find lowest sum of row in DM_table and index of row in single DM scan with DM calc
+  int sum_dx = 0;
+  int sum_dy = 0;
+  int sum_sad = 0;
+
+  for (int i = 0; i < iNumMVs; i++)
+  {
+    sum_dx += toMedian[i].x;
+    sum_dy += toMedian[i].y;
+    sum_sad += toMedian[i].sad;
+  }
+
+  sum_dx /= iNumMVs;
+  sum_dy /= iNumMVs;
+  sum_sad /= iNumMVs;
+
+  vOut[0].x = sum_dx;
+  vOut[0].y = sum_dy;
+  vOut[0].sad = sum_sad; 
+
+}
+
+
+MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvad(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
+{
+  // process dual coords in scalar C ?
+  const int iMaxAngDiff = 3; // hope it is enough ? 
+  int MaxSumDM = iNumMVs * iMaxAngDiff;
+
+  // find lowest sum of row in DM_table and index of row in single DM scan with DM calc
+  float sum_minrow = (float)MaxSumDM;
+  int i_idx_minrow = 0;
+
+  for (int dmt_row = 0; dmt_row < iNumMVs; dmt_row++)
+  {
+    int sum_row = 0;
+
+    for (int dmt_col = 0; dmt_col < iNumMVs; dmt_col++)
+    {
+      if (dmt_row == dmt_col)
+      { // with itself => DM=0
+        continue;
+      }
+
+      sum_row += fDiffAngleVect(toMedian[dmt_row].x, toMedian[dmt_col].x, toMedian[dmt_row].y, toMedian[dmt_col].y);
+    }
+
+    if (sum_row < sum_minrow)
+    {
+      sum_minrow = sum_row;
+      i_idx_minrow = dmt_row;
+    }
+
+  }
+
+  vOut[0] = toMedian[i_idx_minrow];
+
+}
+
 
 template<typename pixel_t>
 MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
@@ -4949,7 +5014,7 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
 
   for (int i = 0; i < iAreaMode; i++) // counter of 4 positions checked, start from 1
   {
-    int iOffset = (iAMstep * i + iAMoffset + 1);
+    int iOffset = (iAMstep * i + iAMoffset + 1); 
 
     if ((iAMflags & AMFLAG_DIA) == AMFLAG_DIA)
     {
@@ -5030,7 +5095,20 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
     }
   }
 
-  GetModeVECTOR(&vAMResults[0], &workarea.bestMV, iNumAMPos);
+  switch (iAMavg)
+  {
+    case 0:
+      GetModeVECTOR(&vAMResults[0], &workarea.bestMV, iNumAMPos);
+      break;
+
+    case 1:
+      GetMeanVECTOR(&vAMResults[0], &workarea.bestMV, iNumAMPos);
+      break;
+
+    case 2:
+      GetModeVECTORvad(&vAMResults[0], &workarea.bestMV, iNumAMPos);
+      break;
+  }
 
   // calc abs MVs difference and apply as SAD hint (to MDegrain and others) of resulted MV quality
   if (iAMDiffSAD > 0)
