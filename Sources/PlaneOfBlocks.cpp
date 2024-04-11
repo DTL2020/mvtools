@@ -1243,7 +1243,6 @@ MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTOR(VECTOR* toMedian, VECTOR *vOut,
 MV_FORCEINLINE void PlaneOfBlocks::GetMeanVECTOR(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
 {
 
-  // find lowest sum of row in DM_table and index of row in single DM scan with DM calc
   int sum_dx = 0;
   int sum_dy = 0;
   int sum_sad = 0;
@@ -1287,7 +1286,7 @@ MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvad(VECTOR* toMedian, VECTOR* vO
         continue;
       }
 
-      sum_row += fDiffAngleVect(toMedian[dmt_row].x, toMedian[dmt_col].x, toMedian[dmt_row].y, toMedian[dmt_col].y);
+      sum_row += fDiffAngleVect(toMedian[dmt_row].x, toMedian[dmt_row].y, toMedian[dmt_col].x, toMedian[dmt_col].y);
     }
 
     if (sum_row < sum_minrow)
