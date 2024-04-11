@@ -1131,7 +1131,7 @@ void PlaneOfBlocks::FetchMorePredictors(WorkingArea& workarea)
     }
   }
 
-  GetModeVECTOR(&toMedian[0], &toClip, 3*3);
+  GetModeVECTORxy(&toMedian[0], &toClip, 3*3);
 
   workarea.predictors[iPredIdx] = ClipMV(workarea, toClip);
 
@@ -1158,7 +1158,7 @@ void PlaneOfBlocks::FetchMorePredictors(WorkingArea& workarea)
     }
   }
 
-  GetModeVECTOR(&toMedian[0], &toClip, 5 * 5);
+  GetModeVECTORxy(&toMedian[0], &toClip, 5 * 5);
 
   workarea.predictors[iPredIdx + 1] = ClipMV(workarea, toClip);
 
@@ -1185,14 +1185,14 @@ void PlaneOfBlocks::FetchMorePredictors(WorkingArea& workarea)
     }
   }
 
-  GetModeVECTOR(&toMedian[0], &toClip, 7 * 7);
+  GetModeVECTORxy(&toMedian[0], &toClip, 7 * 7);
 
   workarea.predictors[iPredIdx + 2] = ClipMV(workarea, toClip);
 
 
 }
 
-MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTOR(VECTOR* toMedian, VECTOR *vOut, int iNumMVs)
+MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORxy(VECTOR* toMedian, VECTOR *vOut, int iNumMVs)
 {
   // process dual coords in scalar C ?
   const int iMaxMVlength = std::max(nBlkX * nBlkSizeX, nBlkY * nBlkSizeY) * 2 * nPel; // hope it is enough ? todo: make global constant ?
@@ -1240,7 +1240,7 @@ MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTOR(VECTOR* toMedian, VECTOR *vOut,
 
 }
 
-MV_FORCEINLINE void PlaneOfBlocks::GetMeanVECTOR(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
+MV_FORCEINLINE void PlaneOfBlocks::GetMeanVECTORxy(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
 {
 
   int sum_dx = 0;
@@ -1287,6 +1287,42 @@ MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvad(VECTOR* toMedian, VECTOR* vO
       }
 
       sum_row += fDiffAngleVect(toMedian[dmt_row].x, toMedian[dmt_row].y, toMedian[dmt_col].x, toMedian[dmt_col].y);
+    }
+
+    if (sum_row < sum_minrow)
+    {
+      sum_minrow = sum_row;
+      i_idx_minrow = dmt_row;
+    }
+
+  }
+
+  vOut[0] = toMedian[i_idx_minrow];
+
+}
+
+MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvld(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
+{
+  // process dual coords in scalar C ?
+  const int iMaxMVlength = std::max(nBlkX * nBlkSizeX, nBlkY * nBlkSizeY) * 2 * nPel; // hope it is enough ? todo: make global constant ?
+  int MaxSumDM = iNumMVs * iMaxMVlength;
+
+  // find lowest sum of row in DM_table and index of row in single DM scan with DM calc
+  int sum_minrow = MaxSumDM * MaxSumDM; // squared vects difference ?
+  int i_idx_minrow = 0;
+
+  for (int dmt_row = 0; dmt_row < iNumMVs; dmt_row++)
+  {
+    int sum_row = 0;
+
+    for (int dmt_col = 0; dmt_col < iNumMVs; dmt_col++)
+    {
+      if (dmt_row == dmt_col)
+      { // with itself => DM=0
+        continue;
+      }
+
+      sum_row += (toMedian[dmt_row].x - toMedian[dmt_col].x) * (toMedian[dmt_row].x - toMedian[dmt_col].x) + (toMedian[dmt_row].y - toMedian[dmt_col].y) * (toMedian[dmt_row].y - toMedian[dmt_col].y);
     }
 
     if (sum_row < sum_minrow)
@@ -5097,15 +5133,19 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
   switch (iAMavg)
   {
     case 0:
-      GetModeVECTOR(&vAMResults[0], &workarea.bestMV, iNumAMPos);
+      GetModeVECTORxy(&vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
 
     case 1:
-      GetMeanVECTOR(&vAMResults[0], &workarea.bestMV, iNumAMPos);
+      GetMeanVECTORxy(&vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
 
     case 2:
       GetModeVECTORvad(&vAMResults[0], &workarea.bestMV, iNumAMPos);
+      break;
+
+    case 3:
+      GetModeVECTORvld(&vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
   }
 
