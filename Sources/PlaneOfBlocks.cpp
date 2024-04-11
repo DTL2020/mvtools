@@ -1131,7 +1131,7 @@ void PlaneOfBlocks::FetchMorePredictors(WorkingArea& workarea)
     }
   }
 
-  GetModeVECTORxy(&toMedian[0], &toClip, 3*3);
+  GetModeVECTORxy<pixel_t>(workarea, &toMedian[0], &toClip, 3*3, false);
 
   workarea.predictors[iPredIdx] = ClipMV(workarea, toClip);
 
@@ -1158,7 +1158,7 @@ void PlaneOfBlocks::FetchMorePredictors(WorkingArea& workarea)
     }
   }
 
-  GetModeVECTORxy(&toMedian[0], &toClip, 5 * 5);
+  GetModeVECTORxy<pixel_t>(workarea, &toMedian[0], &toClip, 5 * 5, false);
 
   workarea.predictors[iPredIdx + 1] = ClipMV(workarea, toClip);
 
@@ -1185,14 +1185,15 @@ void PlaneOfBlocks::FetchMorePredictors(WorkingArea& workarea)
     }
   }
 
-  GetModeVECTORxy(&toMedian[0], &toClip, 7 * 7);
+  GetModeVECTORxy<pixel_t>(workarea, &toMedian[0], &toClip, 7 * 7, false);
 
   workarea.predictors[iPredIdx + 2] = ClipMV(workarea, toClip);
 
 
 }
 
-MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORxy(VECTOR* toMedian, VECTOR *vOut, int iNumMVs)
+template<typename pixel_t>
+MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORxy(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs, bool bUpdateDM)
 {
   // process dual coords in scalar C ?
   const int iMaxMVlength = std::max(nBlkX * nBlkSizeX, nBlkY * nBlkSizeY) * 2 * nPel; // hope it is enough ? todo: make global constant ?
@@ -1236,36 +1237,35 @@ MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORxy(VECTOR* toMedian, VECTOR *vOu
 
   vOut[0].x = toMedian[i_idx_minrow_x].x;
   vOut[0].y = toMedian[i_idx_minrow_y].y;
-  vOut[0].sad = std::max(toMedian[i_idx_minrow_x].sad, toMedian[i_idx_minrow_y].sad); // may be make func param for max or min ?
+  if (!bUpdateDM)
+    vOut[0].sad = std::max(toMedian[i_idx_minrow_x].sad, toMedian[i_idx_minrow_y].sad); // may be make func param for max or min ?
+  else
+    vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
 
 }
 
-MV_FORCEINLINE void PlaneOfBlocks::GetMeanVECTORxy(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
+template<typename pixel_t>
+MV_FORCEINLINE void PlaneOfBlocks::GetMeanVECTORxy(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
 {
-
   int sum_dx = 0;
   int sum_dy = 0;
-  int sum_sad = 0;
 
   for (int i = 0; i < iNumMVs; i++)
   {
     sum_dx += toMedian[i].x;
     sum_dy += toMedian[i].y;
-    sum_sad += toMedian[i].sad;
   }
 
   sum_dx /= iNumMVs;
   sum_dy /= iNumMVs;
-  sum_sad /= iNumMVs;
 
   vOut[0].x = sum_dx;
   vOut[0].y = sum_dy;
-  vOut[0].sad = sum_sad; 
-
+  vOut[0].sad = GetDM<pixel_t>(workarea, sum_dx, sum_dy); // update DM for current block pos and selected bestMV
 }
 
-
-MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvad(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
+template<typename pixel_t>
+MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvad(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
 {
   // process dual coords in scalar C ?
   const int iMaxAngDiff = 3; // hope it is enough ? 
@@ -1297,11 +1297,14 @@ MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvad(VECTOR* toMedian, VECTOR* vO
 
   }
 
-  vOut[0] = toMedian[i_idx_minrow];
-
+//  vOut[0] = toMedian[i_idx_minrow];
+  vOut[0].x = toMedian[i_idx_minrow].x;
+  vOut[0].y = toMedian[i_idx_minrow].y;
+  vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
 }
 
-MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvld(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
+template<typename pixel_t>
+MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvld(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
 {
   // process dual coords in scalar C ?
   const int iMaxMVlength = std::max(nBlkX * nBlkSizeX, nBlkY * nBlkSizeY) * 2 * nPel; // hope it is enough ? todo: make global constant ?
@@ -1333,8 +1336,10 @@ MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvld(VECTOR* toMedian, VECTOR* vO
 
   }
 
-  vOut[0] = toMedian[i_idx_minrow];
-
+//  vOut[0] = toMedian[i_idx_minrow];
+  vOut[0].x = toMedian[i_idx_minrow].x;
+  vOut[0].y = toMedian[i_idx_minrow].y;
+  vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
 }
 
 
@@ -5130,22 +5135,41 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
     }
   }
 
+  // restore aligned copy of src block in the workarea
+#if (ALIGN_SOURCEBLOCK > 1)
+//store the pitch
+  const BYTE* pY = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
+  //create aligned copy
+  BLITLUMA(workarea.pSrc_temp[0], nSrcPitch[0], pY, nSrcPitch_plane[0]);
+  //set the to the aligned copy
+  workarea.pSrc[0] = workarea.pSrc_temp[0];
+  if (chroma)
+  {
+    workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
+    BLITCHROMA(workarea.pSrc_temp[1], nSrcPitch[1], workarea.pSrc[1], nSrcPitch_plane[1]);
+    workarea.pSrc[1] = workarea.pSrc_temp[1];
+    workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
+    BLITCHROMA(workarea.pSrc_temp[2], nSrcPitch[2], workarea.pSrc[2], nSrcPitch_plane[2]);
+    workarea.pSrc[2] = workarea.pSrc_temp[2];
+  }
+#endif	// ALIGN_SOURCEBLOCK
+
   switch (iAMavg)
   {
     case 0:
-      GetModeVECTORxy(&vAMResults[0], &workarea.bestMV, iNumAMPos);
+      GetModeVECTORxy<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos, false);
       break;
 
     case 1:
-      GetMeanVECTORxy(&vAMResults[0], &workarea.bestMV, iNumAMPos);
+      GetMeanVECTORxy<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
 
     case 2:
-      GetModeVECTORvad(&vAMResults[0], &workarea.bestMV, iNumAMPos);
+      GetModeVECTORvad<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
 
     case 3:
-      GetModeVECTORvld(&vAMResults[0], &workarea.bestMV, iNumAMPos);
+      GetModeVECTORvld<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
   }
 
@@ -5220,6 +5244,8 @@ MV_FORCEINLINE void PlaneOfBlocks::AreaModeSearchPos(WorkingArea& workarea, bool
   int curr_x[3];
   int curr_y[3];
 
+  const uint8_t* pStoreSrc[3];
+
   // store current ref pos of workarea
   curr_x[0] = workarea.x[0];
   curr_x[1] = workarea.x[1];
@@ -5228,6 +5254,11 @@ MV_FORCEINLINE void PlaneOfBlocks::AreaModeSearchPos(WorkingArea& workarea, bool
   curr_y[0] = workarea.y[0];
   curr_y[1] = workarea.y[1];
   curr_y[2] = workarea.y[2];
+
+  // store current pSrc to revert workarea state completely
+  pStoreSrc[0] = workarea.pSrc[0];
+  pStoreSrc[1] = workarea.pSrc[1];
+  pStoreSrc[2] = workarea.pSrc[2];
 
   // update current ref pos with area offset
   workarea.x[0] += workarea.am_shift.x;
@@ -5298,6 +5329,10 @@ MV_FORCEINLINE void PlaneOfBlocks::AreaModeSearchPos(WorkingArea& workarea, bool
   workarea.y[1] = curr_y[1];
   workarea.y[2] = curr_y[2];
 
+  // restore pSrc 
+  workarea.pSrc[0] = pStoreSrc[0];
+  workarea.pSrc[1] = pStoreSrc[1];
+  workarea.pSrc[2] = pStoreSrc[2];
 }
 
 MV_FORCEINLINE int PlaneOfBlocks::CalcMeanABSMVsDiff(VECTOR* vAMResults, int iNumMVs)

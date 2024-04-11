@@ -430,11 +430,17 @@ private:
   template<typename pixel_t>
   MV_FORCEINLINE void FetchMorePredictors(WorkingArea& workarea);
 
-  MV_FORCEINLINE void GetModeVECTORxy(VECTOR* toMedian, VECTOR *vOut, int iNumMVs);
-  MV_FORCEINLINE void GetModeVECTORvad(VECTOR* toMedian, VECTOR* vOut, int iNumMVs);
-  MV_FORCEINLINE void GetModeVECTORvld(VECTOR* toMedian, VECTOR* vOut, int iNumMVs);
-  MV_FORCEINLINE void GetMeanVECTORxy(VECTOR* toMedian, VECTOR* vOut, int iNumMVs);
+  template<typename pixel_t>
+  MV_FORCEINLINE void GetModeVECTORxy(WorkingArea& workarea, VECTOR* toMedian, VECTOR *vOut, int iNumMVs, bool bUpdateDM);
 
+  template<typename pixel_t>
+  MV_FORCEINLINE void GetModeVECTORvad(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs);
+
+  template<typename pixel_t>
+  MV_FORCEINLINE void GetModeVECTORvld(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs);
+
+  template<typename pixel_t>
+  MV_FORCEINLINE void GetMeanVECTORxy(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs);
 
   template<typename pixel_t>
   MV_FORCEINLINE void AreaModeSearchPos(WorkingArea& workarea, bool bRecalc);
