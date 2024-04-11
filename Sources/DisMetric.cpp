@@ -16,6 +16,7 @@
 // http://www.gnu.org/copyleft/gpl.html .
 
 #include "DisMetric.h"
+#include <math.h>
 
 DisMetric::DisMetric(int iBlkSizeX, int iBlkSizeY, int iBPP, int _pixelsize, arch_t _arch, int metric_flags)
 {
@@ -96,18 +97,25 @@ int DisMetric::GetDisMetric(const uint8_t* pSrc, int nSrcPitch, const uint8_t* p
 
   if ((nMetricFlags & MEF_SSIM_CS) && !(nMetricFlags & MEF_SSIM_L))
   {
-    iRetDisMetric += (int)(((1.0f - SSIM_CS(pSrc, nSrcPitch, pRef, nRefPitch)) * (float)(maxSAD >> 1))); // SSIM may be low as -1.0f
+    iRetDisMetric += (int)(((1.0f - SSIM_CS(pSrc, nSrcPitch, pRef, nRefPitch)) * (float)(maxSAD >> 1)) * 0.04f); // SSIM may be low as -1.0f
   }
 
   if ((nMetricFlags & MEF_SSIM_CS) && (nMetricFlags & MEF_SSIM_L))
   {
 //    iRetDisMetric += (int)(((1.0f - SSIM_L(pSrc, nSrcPitch, pRef, nRefPitch) * SSIM_CS(pSrc, nSrcPitch, pRef, nRefPitch)) * (float)(maxSAD >> 1))); // SSIM may be low as -1.0f
-    iRetDisMetric += (int)(((1.0f - SSIM_FULL(pSrc, nSrcPitch, pRef, nRefPitch)) * (float)(maxSAD >> 1))); // SSIM may be low as -1.0f
+    iRetDisMetric += (int)(((1.0f - SSIM_FULL(pSrc, nSrcPitch, pRef, nRefPitch)) * (float)(maxSAD >> 1)) * 0.04f); // SSIM may be low as -1.0f
   }
 
   if ((nMetricFlags & MEF_VIFA_DWT) && (nMetricFlags & MEF_VIFE_DWT))
   {
-    iRetDisMetric += (int)(((1.0f - VIF_FULL(pSrc, nSrcPitch, pRef, nRefPitch, DWT2D)) * (float)(maxSAD))); // VIF range ??? [0..1] forced
+//    iRetDisMetric += (int)(((1.0f - VIF_FULL(pSrc, nSrcPitch, pRef, nRefPitch, DWT2D)) * (float)(maxSAD))); // VIF range ??? [0..1] forced
+    float fRetVIF = VIF_FULL(pSrc, nSrcPitch, pRef, nRefPitch, DWT2D);
+    iRetDisMetric += (int)(((1.0f - fRetVIF) * (float)(maxSAD)) * 0.02f); // VIF range ??? [0..1] forced
+    if (iRetDisMetric < 0)
+    {
+      iRetDisMetric = 0;
+    }
+
 //    iRetDisMetric += (int)(((5.0f - VIF_FULL(pSrc, nSrcPitch, pRef, nRefPitch, DWT2D)) * (float)(maxSAD >> 2))); // VIF range ??? [0..1] ?
   }
 
