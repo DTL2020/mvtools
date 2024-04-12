@@ -450,6 +450,8 @@ private:
 
   MV_FORCEINLINE int CalcMeanABSMVsDiff(VECTOR* vAMResults, int iNumMVs);
 
+  MV_FORCEINLINE bool CheckForAMMVsEq(VECTOR* vAMResults, int iNumMVs);
+
   template<typename pixel_t> 
   MV_FORCEINLINE void RecalculateSearch(WorkingArea& workarea); // to use in single search or AreaMode in MRecalculate
 

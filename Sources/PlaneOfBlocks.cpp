@@ -1240,7 +1240,12 @@ MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORxy(WorkingArea& workarea, VECTOR
   if (!bUpdateDM)
     vOut[0].sad = std::max(toMedian[i_idx_minrow_x].sad, toMedian[i_idx_minrow_y].sad); // may be make func param for max or min ?
   else
-    vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
+  {
+    if ((vOut[0].x == toMedian[0].x) && (vOut[0].y == toMedian[0].y))
+      vOut[0].sad = toMedian[0].sad; // MV already checked in inpit of AreaMode
+    else
+      vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
+  }
 
 }
 
@@ -1261,7 +1266,12 @@ MV_FORCEINLINE void PlaneOfBlocks::GetMeanVECTORxy(WorkingArea& workarea, VECTOR
 
   vOut[0].x = sum_dx;
   vOut[0].y = sum_dy;
-  vOut[0].sad = GetDM<pixel_t>(workarea, sum_dx, sum_dy); // update DM for current block pos and selected bestMV
+
+  if ((vOut[0].x == toMedian[0].x) && (vOut[0].y == toMedian[0].y))
+    vOut[0].sad = toMedian[0].sad; // MV already checked in inpit of AreaMode
+  else
+    vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
+
 }
 
 template<typename pixel_t>
@@ -1297,10 +1307,14 @@ MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvad(WorkingArea& workarea, VECTO
 
   }
 
-//  vOut[0] = toMedian[i_idx_minrow];
   vOut[0].x = toMedian[i_idx_minrow].x;
   vOut[0].y = toMedian[i_idx_minrow].y;
-  vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
+
+  if ((vOut[0].x == toMedian[0].x) && (vOut[0].y == toMedian[0].y))
+    vOut[0].sad = toMedian[0].sad; // MV already checked in inpit of AreaMode
+  else
+    vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
+
 }
 
 template<typename pixel_t>
@@ -1336,10 +1350,13 @@ MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvld(WorkingArea& workarea, VECTO
 
   }
 
-//  vOut[0] = toMedian[i_idx_minrow];
   vOut[0].x = toMedian[i_idx_minrow].x;
   vOut[0].y = toMedian[i_idx_minrow].y;
-  vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
+
+  if ((vOut[0].x == toMedian[0].x) && (vOut[0].y == toMedian[0].y))
+    vOut[0].sad = toMedian[0].sad; // MV already checked in inpit of AreaMode
+  else
+    vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
 }
 
 
@@ -5050,6 +5067,13 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
   vAMResults[0].y = workarea.bestMV.y;
   vAMResults[0].sad = workarea.bestMV.sad;
 
+  // performance optimization for Mode* average - check only half of positions first +1 (input) for equality
+  int iHalfSearchPos;
+  if ((iAMavg == 0) || (iAMavg == 2) || (iAMavg == 3)) // only full mean avg require all positions always search
+    iHalfSearchPos = (iNumAMPos - 1) / 2;
+  else
+    iHalfSearchPos = iNumAMPos;
+
   int iStoreIdx = 1;
 
   for (int i = 0; i < iAreaMode; i++) // counter of 4 positions checked, start from 1
@@ -5062,36 +5086,40 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
       workarea.am_shift.x = -1 * iOffset;
       workarea.am_shift.y = -1 * iOffset;
       AreaModeSearchPos<pixel_t>(workarea, bRecalc);
-
       // store top left bestMV 
       vAMResults[iStoreIdx] = workarea.bestMV;
+      if (iStoreIdx == iHalfSearchPos)
+        if (CheckForAMMVsEq(&vAMResults[0], iStoreIdx) == true) break;
+      iStoreIdx++;
+
+      //bottom right offset - check diagonal first for more reliable fast skip mode
+      workarea.am_shift.x = 1 * iOffset;
+      workarea.am_shift.y = 1 * iOffset;
+      AreaModeSearchPos<pixel_t>(workarea, bRecalc);
+      // store bottom right bestMV to 4 member
+      vAMResults[iStoreIdx] = workarea.bestMV;
+      if (iStoreIdx == iHalfSearchPos)
+        if (CheckForAMMVsEq(&vAMResults[0], iStoreIdx) == true) break;
       iStoreIdx++;
 
       //top right offset
       workarea.am_shift.x = 1 * iOffset;
       workarea.am_shift.y = -1 * iOffset;
       AreaModeSearchPos<pixel_t>(workarea, bRecalc);
-
       // store top left bestMV 
       vAMResults[iStoreIdx] = workarea.bestMV;
+      if (iStoreIdx  == iHalfSearchPos)
+        if (CheckForAMMVsEq(&vAMResults[0], iStoreIdx) == true) break;
       iStoreIdx++;
 
       //bottom left offset
       workarea.am_shift.x = -1 * iOffset;
       workarea.am_shift.y = 1 * iOffset;
       AreaModeSearchPos<pixel_t>(workarea, bRecalc);
-
       // store top left bestMV to 3 member
       vAMResults[iStoreIdx] = workarea.bestMV;
-      iStoreIdx++;
-
-      //bottom right offset
-      workarea.am_shift.x = 1 * iOffset;
-      workarea.am_shift.y = 1 * iOffset;
-      AreaModeSearchPos<pixel_t>(workarea, bRecalc);
-
-      // store bottom right bestMV to 4 member
-      vAMResults[iStoreIdx] = workarea.bestMV;
+      if (iStoreIdx == iHalfSearchPos)
+        if (CheckForAMMVsEq(&vAMResults[0], iStoreIdx) == true) break;
       iStoreIdx++;
     }
 
@@ -5101,36 +5129,40 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
       workarea.am_shift.x = -1 * iOffset;
       workarea.am_shift.y = 0 * iOffset;
       AreaModeSearchPos<pixel_t>(workarea, bRecalc);
-
       // store left bestMV 
       vAMResults[iStoreIdx] = workarea.bestMV;
+      if (iStoreIdx == iHalfSearchPos)
+        if (CheckForAMMVsEq(&vAMResults[0], iStoreIdx) == true) break;
       iStoreIdx++;
 
       //right offset
       workarea.am_shift.x = 1 * iOffset;
       workarea.am_shift.y = 0 * iOffset;
       AreaModeSearchPos<pixel_t>(workarea, bRecalc);
-
       // store right bestMV 
       vAMResults[iStoreIdx] = workarea.bestMV;
+      if (iStoreIdx == iHalfSearchPos)
+        if (CheckForAMMVsEq(&vAMResults[0], iStoreIdx) == true) break;
       iStoreIdx++;
 
       //top offset
       workarea.am_shift.x = 0 * iOffset;
       workarea.am_shift.y = -1 * iOffset;
       AreaModeSearchPos<pixel_t>(workarea, bRecalc);
-
       // store top bestMV 
       vAMResults[iStoreIdx] = workarea.bestMV;
+      if (iStoreIdx == iHalfSearchPos)
+        if (CheckForAMMVsEq(&vAMResults[0], iStoreIdx) == true) break;
       iStoreIdx++;
 
       //bottom offset
       workarea.am_shift.x = 0 * iOffset;
       workarea.am_shift.y = 1 * iOffset;
       AreaModeSearchPos<pixel_t>(workarea, bRecalc);
-
       // store bottom bestMV 
       vAMResults[iStoreIdx] = workarea.bestMV;
+      if (iStoreIdx == iHalfSearchPos)
+        if (CheckForAMMVsEq(&vAMResults[0], iStoreIdx) == true) break;
       iStoreIdx++;
     }
   }
@@ -5154,8 +5186,16 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
   }
 #endif	// ALIGN_SOURCEBLOCK
 
-  switch (iAMavg)
+  // check if break happen before all positions check
+  if (iStoreIdx != iNumAMPos)
   {
+    //half of search positions equal to input MV to AreaMode - return it as major anyway
+    workarea.bestMV = vAMResults[0];
+  }
+  else
+  {
+    switch (iAMavg)
+    {
     case 0:
       GetModeVECTORxy<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos, false);
       break;
@@ -5171,62 +5211,63 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
     case 3:
       GetModeVECTORvld<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
-  }
-
-  // calc abs MVs difference and apply as SAD hint (to MDegrain and others) of resulted MV quality
-  if (iAMDiffSAD > 0)
-  {
-    // scale ?
-    // Calc mean MVs abs difference ?
-    int iAMMVsDiff = CalcMeanABSMVsDiff(&vAMResults[0], iNumAMPos);
-
-    workarea.bestMV.sad = workarea.bestMV.sad + iAMMVsDiff * iAMDiffSAD;
-  }
-
-  // check for AM skip MV conditions
-  // too unstable angles condition
-  if (fAMthVSMang < 10.0f)
-  {
-    // found first non-zero vector to compare with, if no non-zeroes - do nothing (keep bestMV)
-    int iRefdx = 0;
-    int iRefdy = 0;
-    for (int i = 0; i < iNumAMPos; i++)
-    {
-      if (vAMResults[i].x != 0)
-      {
-        iRefdx = vAMResults[i].x;
-        iRefdy = vAMResults[i].y;
-        break; // exit loop
-      }
-      if (vAMResults[i].y != 0)
-      {
-        iRefdx = vAMResults[i].x;
-        iRefdy = vAMResults[i].y;
-        break; // exit loop
-      }
     }
 
-    if ((iRefdx != 0) || (iRefdy != 0)) // process only if Ref MV non-zero
+    // calc abs MVs difference and apply as SAD hint (to MDegrain and others) of resulted MV quality
+    if (iAMDiffSAD > 0)
     {
-      float fSumAngDiff = 0.0f;
+      // scale ?
+      // Calc mean MVs abs difference ?
+      int iAMMVsDiff = CalcMeanABSMVsDiff(&vAMResults[0], iNumAMPos);
 
-      for (int i = 0; i < iNumAMPos; i++) // check all because we do not know the selected ref, one more zero in sum is only some performance penalty
-        fSumAngDiff += fDiffAngleVect(iRefdx, iRefdy, vAMResults[i].x, vAMResults[i].y);
-
-      //attempt to normalize to AM search quads ?
-      float fNorm = float((iAreaMode * iAMnumPosInStep * 2) - 1); // max DiffAngleVect is 2.0 per checked pair
-      fSumAngDiff /= fNorm; // normalized to 0..1.0f range for any AMFLAGS mode ?
-
-      if (fSumAngDiff > fAMthVSMang) // fail AM MV and replace with initial predictor (interpolated only)
-      {
-        workarea.bestMV = workarea.predictor;
-      }
+      workarea.bestMV.sad = workarea.bestMV.sad + iAMMVsDiff * iAMDiffSAD;
     }
 
-  }
+    // check for AM skip MV conditions
+    // too unstable angles condition
+    if (fAMthVSMang < 10.0f)
+    {
+      // found first non-zero vector to compare with, if no non-zeroes - do nothing (keep bestMV)
+      int iRefdx = 0;
+      int iRefdy = 0;
+      for (int i = 0; i < iNumAMPos; i++)
+      {
+        if (vAMResults[i].x != 0)
+        {
+          iRefdx = vAMResults[i].x;
+          iRefdy = vAMResults[i].y;
+          break; // exit loop
+        }
+        if (vAMResults[i].y != 0)
+        {
+          iRefdx = vAMResults[i].x;
+          iRefdy = vAMResults[i].y;
+          break; // exit loop
+        }
+      }
 
-  // too unstable ModeDM condition
-  // todo
+      if ((iRefdx != 0) || (iRefdy != 0)) // process only if Ref MV non-zero
+      {
+        float fSumAngDiff = 0.0f;
+
+        for (int i = 0; i < iNumAMPos; i++) // check all because we do not know the selected ref, one more zero in sum is only some performance penalty
+          fSumAngDiff += fDiffAngleVect(iRefdx, iRefdy, vAMResults[i].x, vAMResults[i].y);
+
+        //attempt to normalize to AM search quads ?
+        float fNorm = float((iAreaMode * iAMnumPosInStep * 2) - 1); // max DiffAngleVect is 2.0 per checked pair
+        fSumAngDiff /= fNorm; // normalized to 0..1.0f range for any AMFLAGS mode ?
+
+        if (fSumAngDiff > fAMthVSMang) // fail AM MV and replace with initial predictor (interpolated only)
+        {
+          workarea.bestMV = workarea.predictor;
+        }
+      }
+
+    }
+
+    // too unstable ModeDM condition
+    // todo
+  }
 
   if (!bRecalc)
   {
@@ -5236,6 +5277,21 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
     vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
   }
 
+}
+
+MV_FORCEINLINE bool PlaneOfBlocks::CheckForAMMVsEq(VECTOR* vAMResults, int iNumMVs)
+{
+  int iNumEqMVs = 0;
+  for (int i = 0; i <= iNumMVs; i++)
+  {
+    if ((vAMResults[0].x == vAMResults[i].x) && (vAMResults[0].y == vAMResults[i].y))
+      iNumEqMVs++;
+  }
+
+  if (iNumEqMVs == iNumMVs + 1)
+    return true;
+  else
+    return false;
 }
 
 template<typename pixel_t>
