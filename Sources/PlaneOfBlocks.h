@@ -123,7 +123,7 @@ public:
     int flags, sad_t *out, const VECTOR *globalMVec, short * outfilebuf, int fieldShiftCur,
     int * meanLumaChange, int divideExtra,
     int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
-    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg);
+    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg, int _AMpt, SearchType _AMst, int _AMsp);
 
 
   /* plane initialisation */
@@ -294,7 +294,10 @@ private:
   float fAMresNorm;
   float fAMthVSMang;
   int iAMflags;
-  int iAMavg; 
+  int iAMavg;
+  int iAMpredictortype;
+  SearchType AMsearchtype;
+  int iAMsearchparam;
   VECTOR vAMResults[MAX_AREAMODE_STEPS];
 
   // Working area

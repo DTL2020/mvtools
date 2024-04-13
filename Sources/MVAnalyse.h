@@ -150,6 +150,9 @@ protected:
   int iAMpel;
   int iAMflags;
   int iAMavg;
+  int iAMpt;
+  SearchType AMsearchType;
+  int iAMsp;
 
 public:
 
@@ -164,7 +167,7 @@ public:
     float _scaleCSADfine, int _accnum, int _iUseSubShift, PClip _child_cur,
     int _iSearchDirMode, int _DMFlags,
     int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, int _AMpel,
-    int _PTpel, int _AMflags, int _AMavg,
+    int _PTpel, int _AMflags, int _AMavg, int _AMpt, int _AMst, int _AMsp,
     IScriptEnvironment* env);
   ~MVAnalyse();
 

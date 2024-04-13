@@ -52,7 +52,7 @@ MVAnalyse::MVAnalyse(
   float _scaleCSADfine, int _accnum, int _iUseSubShift, PClip _child_cur,
   int _iSearchDirMode, int _DMFlags,
   int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, int _AMpel, int _PTpel,
-  int _AMflags, int _AMavg,
+  int _AMflags, int _AMavg, int _AMpt, int _AMst, int _AMsp,
   IScriptEnvironment* env
 )
   : ::GenericVideoFilter(_child)
@@ -79,6 +79,8 @@ MVAnalyse::MVAnalyse(
   , iPTpel(_PTpel)
   , iAMflags(_AMflags)
   , iAMavg(_AMavg)
+  , iAMpt(_AMpt)
+  , iAMsp(_AMsp)
 {
   has_at_least_v8 = true;
   try { env->CheckVersion(8); }
@@ -505,6 +507,42 @@ MVAnalyse::MVAnalyse(
   default:
     searchType = LOGARITHMIC;
     nSearchParam = (stp < 1) ? 1 : stp;
+  }
+
+  switch (_AMst)
+  {
+  case 0:
+    AMsearchType = ONETIME;
+    iAMsp = (_AMsp < 1) ? 1 : _AMsp;
+    break;
+  case 1:
+    AMsearchType = NSTEP;
+    iAMsp = (_AMsp < 0) ? 0 : _AMsp;
+    break;
+  case 3:
+    AMsearchType = EXHAUSTIVE;
+    iAMsp = (_AMsp < 1) ? 1 : _AMsp;
+    break;
+  case 4:
+    AMsearchType = HEX2SEARCH;
+    iAMsp = (_AMsp < 1) ? 1 : _AMsp;
+    break;
+  case 5:
+    AMsearchType = UMHSEARCH;
+    iAMsp = (_AMsp < 1) ? 1 : _AMsp; // really min is 4
+    break;
+  case 6:
+    AMsearchType = HSEARCH;
+    iAMsp = (_AMsp < 1) ? 1 : _AMsp;
+    break;
+  case 7:
+    AMsearchType = VSEARCH;
+    iAMsp = (_AMsp < 1) ? 1 : _AMsp;
+    break;
+  case 2:
+  default:
+    AMsearchType = LOGARITHMIC;
+    iAMsp = (_AMsp < 1) ? 1 : _AMsp;
   }
 
   // not below value of 0 at finest level
@@ -1411,7 +1449,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         searchType, nSearchParam, nPelSearch, nLambda, lsad, pnew, plevel,
         global, srd._analysis_data.nFlags, reinterpret_cast<int*>(pDst),
         outfilebuf, fieldShift, pzero, pglobal, badSAD, badrange,
-        meander, pVecPrevOrNull, tryMany, optPredictorType, iPTpel, iAMflags, iAMavg
+        meander, pVecPrevOrNull, tryMany, optPredictorType, iPTpel, iAMflags, iAMavg, iAMpt, AMsearchType, iAMsp
       );
     }
 

@@ -297,7 +297,7 @@ void PlaneOfBlocks::SearchMVs(
   int plevel, int flags, sad_t *out, const VECTOR * globalMVec,
   short *outfilebuf, int fieldShift, sad_t * pmeanLumaChange,
   int divideExtra, int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
-  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg
+  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg, int _AMpt, SearchType _AMst, int _AMsp
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -337,6 +337,9 @@ void PlaneOfBlocks::SearchMVs(
   iAMoffset = _AMoffset;
   iAMflags = _AMflags;
   iAMavg = _AMavg;
+  iAMpredictortype = _AMpt;
+  AMsearchtype = _AMst;
+  iAMsearchparam = _AMsp;
   fAMthVSMang = 10.0f; // curently disabled
   iAMnumPosInStep = 0;
 
@@ -5067,6 +5070,14 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
   vAMResults[0].y = workarea.bestMV.y;
   vAMResults[0].sad = workarea.bestMV.sad;
 
+  // save center search params and set to AM search params
+  int iCenterPT = _predictorType;
+  SearchType CenterSearchType = searchType;
+  int iCenterSearchParam = nSearchParam;
+  _predictorType = iAMpredictortype;
+  searchType = AMsearchtype;
+  nSearchParam = iAMsearchparam;
+
   // performance optimization for Mode* average - check only half of positions first +1 (input) for equality
   int iHalfSearchPos;
   if ((iAMavg == 0) || (iAMavg == 2) || (iAMavg == 3)) // only full mean avg require all positions always search
@@ -5277,6 +5288,11 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
     vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
   }
 
+  // restore center search params
+  _predictorType = iAMpredictortype;
+  searchType = CenterSearchType;
+  nSearchParam = iCenterSearchParam;
+
 }
 
 MV_FORCEINLINE bool PlaneOfBlocks::CheckForAMMVsEq(VECTOR* vAMResults, int iNumMVs)
@@ -5288,7 +5304,7 @@ MV_FORCEINLINE bool PlaneOfBlocks::CheckForAMMVsEq(VECTOR* vAMResults, int iNumM
       iNumEqMVs++;
   }
 
-  if (iNumEqMVs == iNumMVs + 1)
+  if (iNumEqMVs == (iNumMVs + 1))
     return true;
   else
     return false;
