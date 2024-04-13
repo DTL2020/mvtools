@@ -1985,18 +1985,24 @@ MV_FORCEINLINE bool PlaneOfBlocks::IsVectorChecked(uint64_t xy) // 2.7.46
 template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
 {
-  if (_predictorType < 0)
-  {
-    FetchMorePredictors<pixel_t>(workarea);
-  }
-
   typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
-  if (sse41 && optSearchOption > 0)
+
+  // skip predictors recalculation in AreaMode
+  if ((workarea.am_shift.x == 0) && (workarea.am_shift.y == 0))
   {
-    FetchPredictors_sse41<pixel_t>(workarea);
+
+    if (_predictorType < 0)
+    {
+      FetchMorePredictors<pixel_t>(workarea);
+    }
+
+    if (sse41 && optSearchOption > 0)
+    {
+      FetchPredictors_sse41<pixel_t>(workarea);
+    }
+    else
+      FetchPredictors<pixel_t>(workarea);
   }
-  else
-    FetchPredictors<pixel_t>(workarea);
 
   iNumCheckedVectors = 0;
 
@@ -2264,9 +2270,37 @@ void PlaneOfBlocks::PseudoEPZSearch_no_pred(WorkingArea& workarea) // no new pre
   }
   else
   {
-    workarea.bestMV = workarea.predictor;
-    sad = workarea.predictor.sad;
-    workarea.nMinCost = (sad * 2) + ((penaltyNew * (safe_sad_t)sad) >> 8); // *2 - typically sad from previous level is lower about 2 times. depend on noise/spectrum ?  
+    if ((workarea.am_shift.x == 0) && (workarea.am_shift.x == 0))
+    {
+      workarea.bestMV = workarea.predictor;
+      sad = workarea.predictor.sad;
+      workarea.nMinCost = (sad * 2) + ((penaltyNew * (safe_sad_t)sad) >> 8); // *2 - typically sad from previous level is lower about 2 times. depend on noise/spectrum ?
+    }
+    else // AreaMode
+    {
+      workarea.bestMV.x = zeroMVfieldShifted.x;
+      workarea.bestMV.y = zeroMVfieldShifted.y;
+
+      sad_t sad;
+      sad_t cost;
+
+      sad = GetDM<pixel_t>(workarea, 0, zeroMVfieldShifted.y); // check zero 
+
+      workarea.bestMV.sad = sad;
+      workarea.nMinCost = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2
+
+      sad = GetDM<pixel_t>(workarea, workarea.predictor.x, workarea.predictor.y); // check hierarchy predictor
+      cost = sad;
+
+      if (cost < workarea.nMinCost)
+      {
+        workarea.bestMV.x = workarea.predictor.x;
+        workarea.bestMV.y = workarea.predictor.y;
+        workarea.bestMV.sad = sad;
+        workarea.nMinCost = cost;
+      }
+    }
+    
   }
 
   // then, we refine, according to the search type
@@ -2326,12 +2360,18 @@ template<typename pixel_t>
 void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
 {
     typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
-    if (sse41 && optSearchOption > 0)
+
+    // skip predictors recalculation in AreaMode
+    if ((workarea.am_shift.x == 0) && (workarea.am_shift.y == 0))
     {
-      FetchPredictors_sse41<pixel_t>(workarea);
+
+      if (sse41 && optSearchOption > 0)
+      {
+        FetchPredictors_sse41<pixel_t>(workarea);
+      }
+      else
+        FetchPredictors<pixel_t>(workarea);
     }
-    else
-      FetchPredictors<pixel_t>(workarea);
 
     iNumCheckedVectors = 0;
     
@@ -2339,19 +2379,15 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
     sad_t saduv;
     sad_t cost;
 
-/*    int iRefPitchY = 0;
-    int iRefPitchU = 0;
-    int iRefPitchV = 0;*/
-
     // We treat zero alone
     // Do we bias zero with not taking into account distorsion ?
     workarea.bestMV.x = zeroMVfieldShifted.x;
     workarea.bestMV.y = zeroMVfieldShifted.y;
 
-    VECTOR bestMVMany[3]; // zero, global, median predictor only
-    int nMinCostMany[3];
+    VECTOR bestMVMany[4]; // zero, global, hierarchy, median predictor only
+    int nMinCostMany[4];
 
-    for (int i = 0; i < 3; i++) nMinCostMany[i] = verybigSAD + 1; // init with verybig values to prevent bug with skipped already checked positions !
+    for (int i = 0; i < 4; i++) nMinCostMany[i] = verybigSAD + 1; // init with verybig values to prevent bug with skipped already checked positions !
 
     sad = GetDM<pixel_t>(workarea, 0, zeroMVfieldShifted.y);
     workarea.bestMV.sad = sad;
@@ -2394,11 +2430,9 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
         }
     }
 
-    //	}
-    //	Then, the predictor :
-    //	if (   (( workarea.predictor.x != zeroMVfieldShifted.x ) || ( workarea.predictor.y != zeroMVfieldShifted.y ))
-    //	    && (( workarea.predictor.x != workarea.globalMVPredictor.x ) || ( workarea.predictor.y != workarea.globalMVPredictor.y )))
-    //	{
+    //	
+    //	Then, the herarchy predictor :
+    //	
     if (!IsVectorChecked((uint64_t)workarea.predictor.x | ((uint64_t)workarea.predictor.y << 32)))
     {
         sad = GetDM<pixel_t>(workarea, workarea.predictor.x, workarea.predictor.y);
@@ -2421,11 +2455,36 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
         }
     }
 
+    //	
+    //	Then, the median predictor :
+    //	
+    if (!IsVectorChecked((uint64_t)workarea.predictors[0].x | ((uint64_t)workarea.predictors[0].y << 32)))
+    {
+      sad = GetDM<pixel_t>(workarea, workarea.predictors[0].x, workarea.predictors[0].y);
+      cost = sad;
+
+      if (cost < workarea.nMinCost || tryMany)
+      {
+        workarea.bestMV.x = workarea.predictors[0].x;
+        workarea.bestMV.y = workarea.predictors[0].y;
+        workarea.bestMV.sad = sad;
+        workarea.nMinCost = cost;
+      }
+
+      if (tryMany)
+      {
+        // refine around median
+        Refine<pixel_t>(workarea);    // reset bestMV
+        bestMVMany[2] = workarea.bestMV;    // save bestMV
+        nMinCostMany[2] = workarea.nMinCost;
+      }
+    }
+
     if (tryMany)
     {
       // select best of multi best
       workarea.nMinCost = verybigSAD + 1;
-      for (int i = 0; i < 3; i++)
+      for (int i = 0; i < 4; i++)
       {
         if (nMinCostMany[i] < workarea.nMinCost)
         {
@@ -2449,10 +2508,13 @@ void PlaneOfBlocks::PseudoEPZSearch_glob_med_pred(WorkingArea& workarea)
 #endif  
 
     // we store the result
-    vectors[workarea.blkIdx].x = workarea.bestMV.x;
-    vectors[workarea.blkIdx].y = workarea.bestMV.y;
-    vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
-
+    // only for center or in no AreaMode
+    if ((workarea.am_shift.x == 0) && (workarea.am_shift.y == 0))
+    {
+      vectors[workarea.blkIdx].x = workarea.bestMV.x;
+      vectors[workarea.blkIdx].y = workarea.bestMV.y;
+      vectors[workarea.blkIdx].sad = workarea.bestMV.sad;
+    }
     workarea.planeSAD += workarea.bestMV.sad; // for debug, plus fixme outer planeSAD is not used
 }
 
@@ -4916,7 +4978,7 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
         }
 
         /* search the mv */
-        workarea.am_shift.x = 0; // set to zero always at startup and non-AreaMode search to store result in 'vectors' fields at the end of EPZ search
+        workarea.am_shift.x = 0; // set to zero always at startup and non-AreaMode search
         workarea.am_shift.y = 0;
 
         workarea.predictor = ClipMV(workarea, vectors[workarea.blkIdx]);
@@ -5376,8 +5438,24 @@ MV_FORCEINLINE void PlaneOfBlocks::AreaModeSearchPos(WorkingArea& workarea, bool
 
   if (!bRecalc)
   {
-    // full search
-    PseudoEPZSearch<pixel_t>(workarea);
+    
+    switch (_predictorType)
+    {
+      // full search
+      case 0:
+        PseudoEPZSearch<pixel_t>(workarea);
+        break;
+
+      // only zero and global and median predictor
+      case 1:
+        PseudoEPZSearch_glob_med_pred<pixel_t>(workarea);
+        break;
+
+      // no predictors
+      case 2:
+        PseudoEPZSearch_no_pred<pixel_t>(workarea);
+        break;
+    }
   }
   else
   {
