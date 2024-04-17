@@ -151,7 +151,9 @@ public:
     int stp, int _lambda, sad_t _lSAD, int _pennew,
     int flags, int *out, short * outfilebuf, int fieldShift, sad_t thSAD,
     int _divideExtra, int smooth, bool meander,
-    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, float _fAMthVSMang, int _AMflags, int _AMavg);
+    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, float _fAMthVSMang, int _AMflags, int _AMavg,
+    const VECTOR* globalMVec, int _pglobal, int _pzero
+  );
 
   MVVector <VECTOR> vectors; // public to write MVs from DX12_ME
 

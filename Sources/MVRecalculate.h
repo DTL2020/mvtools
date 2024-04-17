@@ -129,6 +129,10 @@ protected:
     int iAMflags;
     int iAMavg;
 
+    bool bGlobal;
+    int  iPGlobal;
+    int  iPZero;
+
     PClip super_cur;
 
 public :
@@ -141,6 +145,7 @@ public :
     int trad, bool mt_flag, int _chromaSADScale, int _optSearchOption, int _optPredictorType, int _DMFlags,
     int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, 
     PClip _super_cur, float _fAMthVSMang, int _AMflags, int _AMavg,
+    bool _bglobal, int _pzero, int _pglobal,
     IScriptEnvironment* env
   );
   ~MVRecalculate();

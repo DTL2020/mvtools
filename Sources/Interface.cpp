@@ -591,6 +591,9 @@ AVSValue __cdecl Create_MVRecalculate(AVSValue args, void*, IScriptEnvironment* 
   int lambda;
   int pnew;
 
+  int pglobal;
+  int pzero;
+
   int overlap = args[12].AsInt(0);
 
   bool truemotion = args[10].AsBool(true); // preset added in v0.9.13
@@ -598,11 +601,15 @@ AVSValue __cdecl Create_MVRecalculate(AVSValue args, void*, IScriptEnvironment* 
   {
     lambda = args[8].AsInt(1000 * blksize*blksizeV / 64);
     pnew = args[11].AsInt(50); // relative to 256 in v1.5.8
+    pzero = args[35].AsInt(50);
+    pglobal = args[36].AsInt(50); 
   }
   else // old versions 0.9.9.1 compatibility mode
   {
     lambda = args[8].AsInt(0);
     pnew = args[11].AsInt(0);
+    pzero = args[35].AsInt(0);
+    pglobal = args[36].AsInt(0);
   }
   return new MVRecalculate(
     args[0].AsClip(),       // super
@@ -628,7 +635,7 @@ AVSValue __cdecl Create_MVRecalculate(AVSValue args, void*, IScriptEnvironment* 
     args[21].AsBool(true),   // mt
     args[22].AsInt(0), // scaleCSAD
     args[23].AsInt(0), // optsearchoption 2.7.46
-    args[24].AsInt(0), // optpredictortype 2.7.46
+    args[24].AsInt(3), // optpredictortype 2.7.46. Value 3 = pre-2.7.46 no new predictors, Refine() only
     args[25].AsInt(1), // DMFlags, default 1 = SAD only
     args[26].AsInt(0), // AreaMode
     args[27].AsInt(0), // AMdiffSAD
@@ -638,9 +645,14 @@ AVSValue __cdecl Create_MVRecalculate(AVSValue args, void*, IScriptEnvironment* 
     args[31].AsFloat(10.0f), // AMthVSMang - threshold of angular Vectors Stability Metric, default 10.0f - disabled
     args[32].AsInt(1), // AMflags
     args[33].AsInt(0), // AMavg
+    args[34].AsBool(true), // global (use global predictor or not
+    pzero,
+    pglobal,
     env
   );
 }
+
+//    [global]b[pzero]i[pglobal]i
 
 AVSValue __cdecl Create_MVBlockFps(AVSValue args, void*, IScriptEnvironment* env)
 {
@@ -772,7 +784,7 @@ AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Linkage* const vectors) {
   env->AddFunction("MDegrain5", "cccccccccccc[thSAD]i[thSADC]i[plane]i[limit]f[limitC]f[thSCD1]i[thSCD2]i[isse]b[planar]b[lsb]b[mt]b[out16]b[out32]b", Create_MVDegrainX, (void *)5);
   env->AddFunction("MDegrain6", "cccccccccccccc[thSAD]i[thSADC]i[plane]i[limit]f[limitC]f[thSCD1]i[thSCD2]i[isse]b[planar]b[lsb]b[mt]b[out16]b[out32]b", Create_MVDegrainX, (void *)6);
   env->AddFunction("MDegrainN", "ccci[thSAD]i[thSADC]i[plane]i[limit]f[limitC]f[thSCD1]i[thSCD2]i[isse]b[planar]b[lsb]b[thsad2]i[thsadc2]i[mt]b[out16]b[wpow]i[adjSADzeromv]f[adjSADcohmv]f[thCohMV]i[MVLPFCutoff]f[MVLPFSlope]f[MVLPFGauss]f[thMVLPFCorr]i[adjSADLPFedmv]f[UseSubShift]i[IntOvlp]i[mvmultirs]c[thFWBWmvpos]i[MPBthSub]i[MPBthAdd]i[MPBNumIt]i[MPB_SPCsub]f[MPB_SPCadd]f[MPB_PartBlend]b[MPBthIVS]i[showIVSmask]b[mvmultivs]c[MPB_DMFlags]i[MPBchroma]i[MPBtgtTR]i[MPB_MVlth]i[pmode]i[TTH_DMFlags]i[TTH_thUPD]i[TTH_BAS]i[TTH_chroma]b[dnmask]c[thSADA_a]f[thSADA_b]f[MVMedF]i[MVMedF_em]i[MVMedF_cm]i[MVF_fm]i[MGR]i[MGR_sr]i[MGR_st]i[MGR_pm]i", Create_MDegrainN, 0);
-  env->AddFunction("MRecalculate", "cc[thsad]i[smooth]i[blksize]i[blksizeV]i[search]i[searchparam]i[lambda]i[chroma]b[truemotion]b[pnew]i[overlap]i[overlapV]i[outfile]s[dct]i[divide]i[sadx264]i[isse]b[meander]b[tr]i[mt]b[scaleCSAD]i[optsearchoption]i[optpredictortype]i[DMFlags]i[AreaMode]i[AMdiffSAD]i[AMstep]i[AMoffset]i[SuperCurrent]c[AMthVSMang]f[AMflags]i[AMavg]i", Create_MVRecalculate, 0);
+  env->AddFunction("MRecalculate", "cc[thsad]i[smooth]i[blksize]i[blksizeV]i[search]i[searchparam]i[lambda]i[chroma]b[truemotion]b[pnew]i[overlap]i[overlapV]i[outfile]s[dct]i[divide]i[sadx264]i[isse]b[meander]b[tr]i[mt]b[scaleCSAD]i[optsearchoption]i[optpredictortype]i[DMFlags]i[AreaMode]i[AMdiffSAD]i[AMstep]i[AMoffset]i[SuperCurrent]c[AMthVSMang]f[AMflags]i[AMavg]i[global]b[pzero]i[pglobal]i", Create_MVRecalculate, 0);
   env->AddFunction("MBlockFps", "cccc[num]i[den]i[mode]i[ml]f[blend]b[thSCD1]i[thSCD2]i[isse]b[planar]b[mt]b", Create_MVBlockFps, 0);
   env->AddFunction("MSuper", "c[hpad]i[vpad]i[pel]i[levels]i[chroma]b[sharp]i[rfilter]i[pelclip]c[isse]b[planar]b[mt]b[pelrefine]b", Create_MVSuper, 0);
   env->AddFunction("MStoreVect", "c+[vccs]s", Create_MStoreVect, 0);

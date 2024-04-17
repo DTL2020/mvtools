@@ -372,7 +372,10 @@ void	GroupOfPlanes::RecalculateMVs(
   int AMoffset,
   float fAMthVSMang,
   int AMflags,
-  int AMavg)
+  int AMavg,
+  bool _global,
+  int pglobal,
+  int pzero)
 {
   nFlags |= flags;
 
@@ -385,6 +388,27 @@ void	GroupOfPlanes::RecalculateMVs(
   out += 2;
 
   //int meanLumaChange = 0;
+    // create and init global motion vector as zero
+  VECTOR globalMV;
+  globalMV.x = zeroMV.x;
+  globalMV.y = zeroMV.y;
+  globalMV.sad = zeroMV.sad;
+  if (!_global)
+  {
+    pglobal = pzero;
+  }
+
+  PlaneOfBlocks::Slicer	slicer_glob(_mt_flag);
+  if (_global)
+  {
+    // get updated global MV (doubled)
+    planes[0]->EstimateGlobalMVDoubled(&globalMV, slicer_glob);
+    //			DebugPrintf("SearchMV globalMV %i, %i", globalMV.x, globalMV.y);
+  }
+  if (_global) // can be moved after Interpolate, since it does not use the global mv results
+  {
+    slicer_glob.wait();
+  }
 
   // Search the motion vectors, for the low details interpolations first
   // Refining the search until we reach the highest detail interpolation.
@@ -412,7 +436,10 @@ void	GroupOfPlanes::RecalculateMVs(
     AMoffset,
     fAMthVSMang,
     AMflags,
-    AMavg
+    AMavg,
+    &globalMV,
+    pglobal,
+    pzero
   );
 
   out += planes[0]->GetArraySize(divideExtra);

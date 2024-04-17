@@ -484,7 +484,8 @@ void PlaneOfBlocks::RecalculateMVs(
   SearchType st, int stp, int lambda, sad_t lsad, int pnew,
   int flags, int *out,
   short *outfilebuf, int fieldShift, sad_t thSAD, int divideExtra, int smooth, bool meander,
-  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, float _fAMthVSMang, int _AMflags, int _AMavg 
+  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, float _fAMthVSMang, int _AMflags, int _AMavg,
+  const VECTOR* globalMVec, int _pglobal, int _pzero
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -497,10 +498,13 @@ void PlaneOfBlocks::RecalculateMVs(
   dctweight16 = 8;//min(16,abs(*pmeanLumaChange)/(nBlkSizeX*nBlkSizeY)); //equal dct and spatial weights for meanLumaChange=8 (empirical)
 #endif	// ALLOW_DCT
 
-  // Actually the global predictor is not used in RecalculateMVs().
-  _glob_mv_pred_def.x = 0;
-  _glob_mv_pred_def.y = fieldShift;
-  _glob_mv_pred_def.sad = 9999999;
+  // now used in some optPredictorType searches (2.7.46)
+  _glob_mv_pred_def.x = globalMVec->x * nPel;	
+  _glob_mv_pred_def.y = globalMVec->y * nPel + fieldShift;
+  _glob_mv_pred_def.sad = globalMVec->sad;
+
+  penaltyZero = _pzero;
+  pglobal = _pglobal;
 
   //	int nOutPitchY = nBlkX * (nBlkSizeX - nOverlapX) + nOverlapX;
   //	int nOutPitchUV = (nBlkX * (nBlkSizeX - nOverlapX) + nOverlapX) / 2; // xRatioUV=2

@@ -80,7 +80,8 @@ public :
     MVClip &mvClip, MVGroupOfFrames *pSrcGOF, MVGroupOfFrames *pRefGOF,
     SearchType _searchType, int _nSearchParam, int _nLambda, sad_t _lsad,
     int _pnew, int flags, int *out, short * outfilebuf, int fieldShift,
-    sad_t thSAD, int smooth, bool meander, int optPredictorType, int AreaMode, int AMstep, int AMoffset, float fAMthVSMang, int AMflags, int AMavg);
+    sad_t thSAD, int smooth, bool meander, int optPredictorType, int AreaMode, int AMstep, int AMoffset, float fAMthVSMang, int AMflags, int AMavg,
+    bool _global, int pglobal, int pzero);
   PlaneOfBlocks* GetPlane(int iPlane) { return planes[iPlane]; };
 };
 
