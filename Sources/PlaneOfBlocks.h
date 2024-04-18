@@ -451,6 +451,9 @@ private:
   MV_FORCEINLINE void GetMedianVECTORg(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs); // geometric median
 
   template<typename pixel_t>
+  MV_FORCEINLINE void Get_IQM_VECTORxy(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs); // IQM for x and y separately
+
+  template<typename pixel_t>
   MV_FORCEINLINE void AreaModeSearchPos(WorkingArea& workarea, bool bRecalc);
 
   template<typename pixel_t>

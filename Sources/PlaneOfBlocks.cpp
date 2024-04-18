@@ -1438,6 +1438,55 @@ MV_FORCEINLINE void PlaneOfBlocks::GetMedianVECTORg(WorkingArea& workarea, VECTO
 
 }
 
+template<typename pixel_t>
+MV_FORCEINLINE void PlaneOfBlocks::Get_IQM_VECTORxy(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
+{
+  int vX[MAX_AREAMODE_STEPS];
+  int vY[MAX_AREAMODE_STEPS];
+
+  // copy to temp vectors
+  for (int i = 0; i < iNumMVs; i++)
+  {
+    vX[i] = toMedian[i].x;
+    vY[i] = toMedian[i].y;
+  }
+
+  // make ordering sort
+  std::sort(vX, vX + (iNumMVs - 0));
+  std::sort(vY, vY + (iNumMVs - 0));
+
+  if (iNumMVs < 4) // 3 possible ?
+  {
+    vOut[0].x = vX[1];
+    vOut[0].y = vY[1];
+  }
+  else
+  {
+    int qStart = (iNumMVs + 1) / 4; // do we want bias here ?
+    int qEnd = iNumMVs - ((iNumMVs + 1 ) / 4);
+
+    int iXmean = 0;
+    int iYmean = 0;
+    for (int i = qStart; i < qEnd; i++)
+    {
+      iXmean += vX[i];
+      iYmean += vY[i];
+    }
+    int iBias = (qEnd - qStart) / 2;
+
+    iXmean = (iXmean + iBias) / (qEnd - qStart);
+    iYmean = (iYmean + iBias) / (qEnd - qStart);
+
+    vOut[0].x = iXmean;
+    vOut[0].y = iYmean;
+  }
+
+  if ((vOut[0].x == toMedian[0].x) && (vOut[0].y == toMedian[0].y))
+    vOut[0].sad = toMedian[0].sad; // MV already checked in inpit of AreaMode
+  else
+    vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
+
+}
 
 template<typename pixel_t>
 MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
@@ -5363,6 +5412,10 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
 
     case 4:
       GetMedianVECTORg<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos);
+      break;
+
+    case 5:
+      Get_IQM_VECTORxy<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
     }
 
