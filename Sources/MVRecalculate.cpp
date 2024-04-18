@@ -102,9 +102,9 @@ MVRecalculate::MVRecalculate(
     env->ThrowError("MRecalculate: Clip must be YUV or YUY2");
   }
 
-  if (_optPredictorType != 0 && _optPredictorType != 1 && _optPredictorType != 2)
+  if (_optPredictorType != 0 && _optPredictorType != 1 && _optPredictorType != 2 && _optPredictorType != 3)
   {
-    env->ThrowError("MRecalculate: parameter 'optPredictorType' must be 0, 1 or 2");
+    env->ThrowError("MRecalculate: parameter 'optPredictorType' must be 0, 1 or 2, or 3");
   }
 
   vi.num_frames *= _nbr_srd;

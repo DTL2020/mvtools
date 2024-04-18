@@ -1037,6 +1037,17 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
     
       m_VideoEncodeCommandList->EstimateMotion(spVideoMotionEstimator.Get(), &outputArgsEM, &inputArgsEM);
 
+/*      // DEBUG - test +8x runs to simulate AM=2
+      m_VideoEncodeCommandList->EstimateMotion(spVideoMotionEstimator.Get(), &outputArgsEM, &inputArgsEM);
+      m_VideoEncodeCommandList->EstimateMotion(spVideoMotionEstimator.Get(), &outputArgsEM, &inputArgsEM);
+      m_VideoEncodeCommandList->EstimateMotion(spVideoMotionEstimator.Get(), &outputArgsEM, &inputArgsEM);
+      m_VideoEncodeCommandList->EstimateMotion(spVideoMotionEstimator.Get(), &outputArgsEM, &inputArgsEM);
+
+      m_VideoEncodeCommandList->EstimateMotion(spVideoMotionEstimator.Get(), &outputArgsEM, &inputArgsEM);
+      m_VideoEncodeCommandList->EstimateMotion(spVideoMotionEstimator.Get(), &outputArgsEM, &inputArgsEM);
+      m_VideoEncodeCommandList->EstimateMotion(spVideoMotionEstimator.Get(), &outputArgsEM, &inputArgsEM);
+      m_VideoEncodeCommandList->EstimateMotion(spVideoMotionEstimator.Get(), &outputArgsEM, &inputArgsEM);
+      */
       const D3D12_RESOLVE_VIDEO_MOTION_VECTOR_HEAP_OUTPUT outputArgsRMVH = {
           spResolvedMotionVectors.Get(),
           {} };
@@ -1060,6 +1071,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       }
       */
       m_VideoEncodeCommandList->ResolveMotionVectorHeap(&outputArgsRMVH, &inputArgsRMVH);
+      
 
 //      m_VideoEncodeCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(spResolvedMotionVectors.Get(), D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE, D3D12_RESOURCE_STATE_COMMON));
       auto rbt008 = CD3DX12_RESOURCE_BARRIER::Transition(spResolvedMotionVectors.Get(), D3D12_RESOURCE_STATE_VIDEO_ENCODE_WRITE, D3D12_RESOURCE_STATE_COMMON);

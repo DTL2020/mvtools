@@ -448,6 +448,9 @@ private:
   MV_FORCEINLINE void GetMeanVECTORxy(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs);
 
   template<typename pixel_t>
+  MV_FORCEINLINE void GetMedianVECTORg(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs); // geometric median
+
+  template<typename pixel_t>
   MV_FORCEINLINE void AreaModeSearchPos(WorkingArea& workarea, bool bRecalc);
 
   template<typename pixel_t>

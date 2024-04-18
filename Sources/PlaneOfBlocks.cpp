@@ -1268,8 +1268,8 @@ MV_FORCEINLINE void PlaneOfBlocks::GetMeanVECTORxy(WorkingArea& workarea, VECTOR
     sum_dy += toMedian[i].y;
   }
 
-  sum_dx /= iNumMVs;
-  sum_dy /= iNumMVs;
+  sum_dx = (sum_dx + (iNumMVs>>1)) / iNumMVs;
+  sum_dy = (sum_dy + (iNumMVs>>1)) / iNumMVs;
 
   vOut[0].x = sum_dx;
   vOut[0].y = sum_dy;
@@ -1364,6 +1364,78 @@ MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvld(WorkingArea& workarea, VECTO
     vOut[0].sad = toMedian[0].sad; // MV already checked in inpit of AreaMode
   else
     vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
+}
+
+template<typename pixel_t>
+MV_FORCEINLINE void PlaneOfBlocks::GetMedianVECTORg(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs) // geometric median
+{
+  const int test_steps_dx[] = { -1, 0, 1, 0 };
+  const int test_steps_dy[] = { 0, 1, 0, -1 };
+
+  VECTOR_XY vGMedian;
+  int iMinDist=0;
+
+  // need to estimate max radius of vectors area ?
+  int iStep = 4 * nPel; // 16 max for pel=4, need to be lower at high levels ?
+
+  // first estimation - center of gravity
+  int iMeanX = 0;
+  int iMeanY = 0;
+  for (int i = 0; i < iNumMVs; i++)
+  {
+    iMeanX += toMedian[i].x;
+    iMeanY += toMedian[i].y;
+  }
+
+  vGMedian.x = (iMeanX + (iNumMVs>>1)) / iNumMVs;
+  vGMedian.y = (iMeanY + (iNumMVs>>1)) / iNumMVs;
+
+  // init iMinDist with first estimate
+  for (int i = 0; i < iNumMVs; i++)
+  {
+    iMinDist += (toMedian[i].x - vGMedian.x) * (toMedian[i].x - vGMedian.x) + (toMedian[i].y - vGMedian.y) * (toMedian[i].y - vGMedian.y);
+  }
+
+  if (iMinDist > 0)
+  {
+    while (iStep > 0)
+    {
+      bool bDone = false;
+      for (int i = 0; i < 4; ++i)
+      {
+        VECTOR_XY vToCheck;
+        vToCheck.x = vGMedian.x + iStep * test_steps_dx[i];
+        vToCheck.y = vGMedian.y + iStep * test_steps_dy[i];
+
+        int iCheckedSum = 0;
+        for (int i = 0; i < iNumMVs; i++)
+        {
+          iCheckedSum += (toMedian[i].x - vToCheck.x) * (toMedian[i].x - vToCheck.x) + (toMedian[i].y - vToCheck.y) * (toMedian[i].y - vToCheck.y);
+        }
+
+        if (iCheckedSum < iMinDist)
+        {
+          iMinDist = iCheckedSum;
+          vGMedian = vToCheck;
+
+          bDone = true;
+          break;
+        }
+      }
+
+      if (!bDone)
+        iStep /= 2;
+    }
+  }// if iMinDist > 0
+
+  vOut[0].x = vGMedian.x;
+  vOut[0].y = vGMedian.y;
+
+  if ((vOut[0].x == toMedian[0].x) && (vOut[0].y == toMedian[0].y))
+    vOut[0].sad = toMedian[0].sad; // MV already checked in inpit of AreaMode
+  else
+    vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
+
 }
 
 
@@ -5287,6 +5359,10 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
 
     case 3:
       GetModeVECTORvld<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos);
+      break;
+
+    case 4:
+      GetMedianVECTORg<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
     }
 
