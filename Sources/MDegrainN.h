@@ -68,6 +68,7 @@ public:
     int _MPB_MVlth, int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, ::PClip _dnmask,
     float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm, int _MVF_fm,
     int _MGR, int _MGR_sr, int _MGR_st, int _MGR_pm,
+    int _LtComp,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -266,6 +267,10 @@ private:
   int iMGR_sr; // search radius
   int iMGR_st; // search type, 0 - NStepSearch, 1 - Logariphmic/Diamond, 2 - Exhaustive, 3 - Hexagon, 4 - UMH ?
   int iMGR_pm;  // predictors bitmask (1 - input source, 2 - after MVF)
+
+  // Lighting compensation
+  int iLtComp; // 0 - disabled, 1 - DC compensation only mode
+  uint8_t* pCompRefsBlksY;
 
   // Single iteration degrain blend (support both normal and overlap blending modes)
   MV_FORCEINLINE void DegrainBlendBlock_LC(

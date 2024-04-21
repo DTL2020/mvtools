@@ -765,6 +765,7 @@ MDegrainN::MDegrainN(
   int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, PClip _dnmask,
   float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm, int _MVF_fm,
   int _MGR, int _MGR_sr, int _MGR_st, int _MGR_pm,
+  int _LtComp,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -854,6 +855,7 @@ MDegrainN::MDegrainN(
   , iMGR_sr(_MGR_sr)
   , iMGR_st(_MGR_st)
   , iMGR_pm(_MGR_pm)
+  , iLtComp(_LtComp)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -1482,6 +1484,13 @@ MDegrainN::MDegrainN(
     iMaxBly = (nHeight - iKS_sh_d2) * nPel;
   }
 
+  // Lighting compensation - memory allocation for temp buf for compensated ref blocks
+  if (iLtComp > 0)
+  {
+    SIZE_T stSizeToAlloc = nBlkSizeX * nBlkSizeY * pixelsize * ( 2 * _trad); // all ref blocks, Y only blocks for now
+    pCompRefsBlksY = new uint8_t[stSizeToAlloc];
+  }
+
   // DN mask check and select
   if (dnmask != 0)
   {
@@ -1559,6 +1568,11 @@ MDegrainN::~MDegrainN()
 
       delete DM_cache_arr[i];
     }
+  }
+
+  if (iLtComp > 0)
+  {
+    delete pCompRefsBlksY;
   }
 
 }
