@@ -14,14 +14,14 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <RemoteDebuggerCommand>I:\Distr\rem_debug\rem_debug\x64\avsmeter64.exe</RemoteDebuggerCommand>
-    <RemoteDebuggerCommandArguments>src_pp.avs</RemoteDebuggerCommandArguments>
+    <RemoteDebuggerCommandArguments>src_spt_dx12me.avs</RemoteDebuggerCommandArguments>
     <RemoteDebuggerWorkingDirectory>I:\Distr\rem_debug\rem_debug\x64\</RemoteDebuggerWorkingDirectory>
     <RemoteDebuggerServerName>192.168.126.97:4024</RemoteDebuggerServerName>
     <RemoteDebuggerConnection>RemoteWithoutAuthentication</RemoteDebuggerConnection>
     <DeploymentDirectory>I:\Distr\rem_debug\rem_debug\x64\</DeploymentDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommand>C:\cpp\tmp\vd64\Veedub64.exe</LocalDebuggerCommand>
-    <LocalDebuggerCommandArguments>src.avs</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommand>C:\Distr\VirtualDub-1.10.4-AMD64\Veedub64.exe</LocalDebuggerCommand>
+    <LocalDebuggerCommandArguments>src_msh3_amsim.avs</LocalDebuggerCommandArguments>
     <LocalDebuggerWorkingDirectory>.\x64\Debug</LocalDebuggerWorkingDirectory>
   </PropertyGroup>
 </Project>

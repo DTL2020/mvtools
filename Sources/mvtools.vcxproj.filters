@@ -144,6 +144,9 @@
     <ClCompile Include="COVARFunctions.cpp" />
     <ClCompile Include="BlockArea.cpp" />
     <ClCompile Include="dm_cache.cpp" />
+    <ClCompile Include="MAverage.cpp">
+      <Filter>Filters</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MDegrainN.h">
@@ -432,6 +435,9 @@
     <ClInclude Include="COVARFunctions.h" />
     <ClInclude Include="BlockArea.h" />
     <ClInclude Include="dm_cache.h" />
+    <ClInclude Include="MAverage.h">
+      <Filter>Filters</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="cpu.h" />

@@ -58,11 +58,13 @@
 
 #define CACHE_LINE_SIZE 64
 
+/*
 struct VECTOR_XY
 {
   int x;
   int y;
 };
+*/
 
 enum {
   AMFLAG_DIA = 1 << 0,

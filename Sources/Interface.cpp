@@ -44,6 +44,7 @@
 #include "MVAnalyse.h"
 #include "MVRecalculate.h"
 #include "MVSuper.h"
+#include "MAverage.h"
 
 // Test & helpers filters
 #include "Padding.h"
@@ -727,6 +728,28 @@ AVSValue __cdecl Create_MStoreVect(AVSValue args, void*, IScriptEnvironment* env
   );
 }
 
+AVSValue __cdecl Create_MAverage(AVSValue args, void*, IScriptEnvironment* env_ptr)
+{
+  const int		nbr_clips = args[0].ArraySize();
+  if (nbr_clips < 1)
+  {
+    env_ptr->ThrowError("MAverage: you must specify at least one vector clip.");
+  }
+
+  std::vector <::PClip>	vect_arr;
+  for (int clip_cnt = 0; clip_cnt < nbr_clips; ++clip_cnt)
+  {
+    ::PClip			clip_ptr = args[0][clip_cnt].AsClip();
+    vect_arr.push_back(clip_ptr);
+  }
+
+  return new MAverage(
+    vect_arr,               // vectors
+    args[1].AsInt(0), // mode
+    env_ptr
+  );
+}
+
 AVSValue __cdecl Create_MRestoreVect(AVSValue args, void*, IScriptEnvironment* env_ptr)
 {
   return new MRestoreVect(
@@ -792,6 +815,7 @@ AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Linkage* const vectors) {
   env->AddFunction("MRestoreVect", "c[index]i", Create_MRestoreVect, 0);
   env->AddFunction("MScaleVect", "c[scale]f[scaleV]f[mode]i[flip]b[adjustSubPel]b[bits]i", Create_MScaleVect, 0);
   //	env->AddFunction("MVFinest",     "c[isse]b", Create_MVFinest, 0);
+  env->AddFunction("MAverage", "c+[mode]i", Create_MAverage, 0);
   return("MVTools : set of tools based on a motion estimation engine");
 }
 

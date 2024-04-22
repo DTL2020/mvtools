@@ -40,5 +40,11 @@ struct VECTOR
 
 #pragma pack (pop)
 
+struct VECTOR_XY
+{
+  int x;
+  int y;
+};
+
 
 #endif	// __MV_VECTOR__
