@@ -154,6 +154,9 @@ protected:
   SearchType AMsearchType;
   int iAMsp;
 
+  int iTMAvg;
+  int iMDp;
+
 public:
 
   MVAnalyse(
@@ -168,6 +171,7 @@ public:
     int _iSearchDirMode, int _DMFlags,
     int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, int _AMpel,
     int _PTpel, int _AMflags, int _AMavg, int _AMpt, int _AMst, int _AMsp,
+    int _TMavg, int _MDp,
     IScriptEnvironment* env);
   ~MVAnalyse();
 

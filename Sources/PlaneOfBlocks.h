@@ -125,7 +125,8 @@ public:
     int flags, sad_t *out, const VECTOR *globalMVec, short * outfilebuf, int fieldShiftCur,
     int * meanLumaChange, int divideExtra,
     int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
-    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg, int _AMpt, SearchType _AMst, int _AMsp);
+    int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg, int _AMpt, SearchType _AMst, int _AMsp,
+    int _TMAvg, int _MDp);
 
 
   /* plane initialisation */
@@ -186,7 +187,7 @@ private:
   const bool     _mt_flag;         // Allows multithreading
   const int      chromaSADscale;   // PF experimental 2.7.18.22 allow e.g. YV24 chroma to have the same magnitude as for YV12
   int            effective_chromaSADscale;   // PF experimental 2.7.18.22 allow e.g. YV24 chroma to have the same magnitude as for YV12
-  const int      optSearchOption; // DTL test != 0: allow
+  const int      optSearchOption; // DTL test != 0: allow new performance optimizations
   const float    scaleCSADfine; // DTL test - float finetune of luma/chroma SADs ratio in total SAD
   const int      iUseSubShift; // DTL test - use or not subshifted call to MVPlane for sub sample shifted block's view
 
@@ -284,6 +285,9 @@ private:
   //  const VECTOR zeroMV = {0,0,(sad_t)-1};
   int _predictorType; // 2.7.46
 
+  int      iTMAvg; // trymany averaging modes, -1 - default - minimumSAD(DM)
+  int      iMDp; // MotionDistorion predictor used, -1 - hierarchy predictor, 0 and higher - AMAvg averaging of some predictors
+
   uint64_t checked_mv_vectors[MAX_PREDICTOR]; // 2.7.46
   int iNumCheckedVectors; // 2.7.46
 
@@ -339,6 +343,7 @@ private:
     sad_t nMinCost_multi[MAX_MULTI_BLOCKS_8x8_AVX512]; // 2.7.46
     VECTOR predictor;           /* best predictor for the current vector */
     VECTOR predictors[MAX_PREDICTOR];   /* set of predictors for the current block */
+    VECTOR MDpredictor;         /* predictor for MotionDistortion measurement */
 
     int nDxMin;                 /* minimum x coordinate for the vector */ //need to be in order DxMin, DyMin for ClipMV faster load
     int nDyMin;                 /* minimum y coordinate for the vector */
@@ -437,23 +442,17 @@ private:
   template<typename pixel_t>
   MV_FORCEINLINE void FetchMorePredictors(WorkingArea& workarea);
 
-  template<typename pixel_t>
-  MV_FORCEINLINE void GetModeVECTORxy(WorkingArea& workarea, VECTOR* toMedian, VECTOR *vOut, int iNumMVs, bool bUpdateDM);
+  MV_FORCEINLINE void GetMedoidVECTORxy(VECTOR* toMed, VECTOR* vOut, int iNumMVs);
 
-  template<typename pixel_t>
-  MV_FORCEINLINE void GetModeVECTORvad(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs);
+  MV_FORCEINLINE void GetMedoidVECTORvad(VECTOR* toMed, VECTOR* vOut, int iNumMVs);
 
-  template<typename pixel_t>
-  MV_FORCEINLINE void GetModeVECTORvld(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs);
+  MV_FORCEINLINE void GetMedoidVECTORvld(VECTOR* toMed, VECTOR* vOut, int iNumMVs);
 
-  template<typename pixel_t>
-  MV_FORCEINLINE void GetMeanVECTORxy(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs);
+  MV_FORCEINLINE void GetMeanVECTORxy(VECTOR* toMean, VECTOR* vOut, int iNumMVs);
 
-  template<typename pixel_t>
-  MV_FORCEINLINE void GetMedianVECTORg(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs); // geometric median
+  MV_FORCEINLINE void GetMedianVECTORg(VECTOR* toMed, VECTOR* vOut, int iNumMVs); // geometric median
 
-  template<typename pixel_t>
-  MV_FORCEINLINE void Get_IQM_VECTORxy(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs); // IQM for x and y separately
+  MV_FORCEINLINE void Get_IQM_VECTORxy(VECTOR* toMed, VECTOR* vOut, int iNumMVs); // IQM for x and y separately
 
   template<typename pixel_t>
   MV_FORCEINLINE void AreaModeSearchPos(WorkingArea& workarea, bool bRecalc);
@@ -464,6 +463,8 @@ private:
   MV_FORCEINLINE int CalcMeanABSMVsDiff(VECTOR* vAMResults, int iNumMVs);
 
   MV_FORCEINLINE bool CheckForAMMVsEq(VECTOR* vAMResults, int iNumMVs);
+
+  MV_FORCEINLINE VECTOR GetMDpredictor(WorkingArea& workarea); // helper extract to make FetchPredictors() shorter
 
   template<typename pixel_t> 
   MV_FORCEINLINE void RecalculateSearch(WorkingArea& workarea); // to use in single search or AreaMode in MRecalculate

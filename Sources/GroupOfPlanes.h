@@ -72,7 +72,8 @@ public :
     sad_t _lsad, int _pnew, int _plevel, bool _global, int flags, int *out,
     short * outfilebuf, int fieldShift, int _pzero, int _pglobal, sad_t badSAD,
     int badrange, bool meander, int *vecPrev, bool tryMany, int optPredictorType, int PTpel,
-    int AMflags, int AMavg, int AMpt, SearchType AMst, int AMsp);
+    int AMflags, int AMavg, int AMpt, SearchType AMst, int AMsp,
+    int TMAvg, int MDp);
   void           WriteDefaultToArray (int *array);
   int            GetArraySize ();
   void           ExtraDivide (int *out, int flags);

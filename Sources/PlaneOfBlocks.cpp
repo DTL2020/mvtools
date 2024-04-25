@@ -297,7 +297,8 @@ void PlaneOfBlocks::SearchMVs(
   int plevel, int flags, sad_t *out, const VECTOR * globalMVec,
   short *outfilebuf, int fieldShift, sad_t * pmeanLumaChange,
   int divideExtra, int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
-  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg, int _AMpt, SearchType _AMst, int _AMsp
+  int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg, int _AMpt, SearchType _AMst, int _AMsp,
+  int _TMAvg, int _MDp
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -342,6 +343,9 @@ void PlaneOfBlocks::SearchMVs(
   iAMsearchparam = _AMsp;
   fAMthVSMang = 10.0f; // curently disabled
   iAMnumPosInStep = 0;
+
+  iTMAvg = _TMAvg;
+  iMDp = _MDp;
 
   if (iAreaMode > 0)
   {
@@ -1106,6 +1110,8 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
   // replaced hard threshold by soft in v1.10.2 by Fizick (a liitle complex expression to avoid overflow)
   //	int a = LSAD/(LSAD + (workarea.predictor.sad>>1));
   //	workarea.nLambda = workarea.nLambda*a*a;
+
+  workarea.MDpredictor = GetMDpredictor(workarea);
 }
 
 template<typename pixel_t>
@@ -1138,7 +1144,8 @@ void PlaneOfBlocks::FetchMorePredictors(WorkingArea& workarea)
     }
   }
 
-  GetModeVECTORxy<pixel_t>(workarea, &toMedian[0], &toClip, 3*3, false);
+//  GetModeVECTORxy<pixel_t>(workarea, &toMedian[0], &toClip, 3*3, false);
+  GetMedoidVECTORxy(&toMedian[0], &toClip, 3 * 3);
 
   workarea.predictors[iPredIdx] = ClipMV(workarea, toClip);
 
@@ -1165,7 +1172,8 @@ void PlaneOfBlocks::FetchMorePredictors(WorkingArea& workarea)
     }
   }
 
-  GetModeVECTORxy<pixel_t>(workarea, &toMedian[0], &toClip, 5 * 5, false);
+//  GetModeVECTORxy<pixel_t>(workarea, &toMedian[0], &toClip, 5 * 5, false);
+  GetMedoidVECTORxy(&toMedian[0], &toClip, 5 * 5);
 
   workarea.predictors[iPredIdx + 1] = ClipMV(workarea, toClip);
 
@@ -1192,15 +1200,15 @@ void PlaneOfBlocks::FetchMorePredictors(WorkingArea& workarea)
     }
   }
 
-  GetModeVECTORxy<pixel_t>(workarea, &toMedian[0], &toClip, 7 * 7, false);
+//  GetModeVECTORxy<pixel_t>(workarea, &toMedian[0], &toClip, 7 * 7, false);
+  GetMedoidVECTORxy(&toMedian[0], &toClip, 7 * 7);
 
   workarea.predictors[iPredIdx + 2] = ClipMV(workarea, toClip);
 
 
 }
 
-template<typename pixel_t>
-MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORxy(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs, bool bUpdateDM)
+MV_FORCEINLINE void PlaneOfBlocks::GetMedoidVECTORxy(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
 {
   // process dual coords in scalar C ?
   const int iMaxMVlength = std::max(nBlkX * nBlkSizeX, nBlkY * nBlkSizeY) * 2 * nPel; // hope it is enough ? todo: make global constant ?
@@ -1244,20 +1252,14 @@ MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORxy(WorkingArea& workarea, VECTOR
 
   vOut[0].x = toMedian[i_idx_minrow_x].x;
   vOut[0].y = toMedian[i_idx_minrow_y].y;
-  if (!bUpdateDM)
-    vOut[0].sad = std::max(toMedian[i_idx_minrow_x].sad, toMedian[i_idx_minrow_y].sad); // may be make func param for max or min ?
-  else
-  {
-    if ((vOut[0].x == toMedian[0].x) && (vOut[0].y == toMedian[0].y))
-      vOut[0].sad = toMedian[0].sad; // MV already checked in inpit of AreaMode
-    else
-      vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
-  }
 
+  if ((vOut[0].x == toMedian[0].x) && (vOut[0].y == toMedian[0].y))
+    vOut[0].sad = toMedian[0].sad; // MV already checked in input of AreaMode
+  else
+    vOut[0].sad = verybigSAD + 1; // invalidate - need re-check if used later
 }
 
-template<typename pixel_t>
-MV_FORCEINLINE void PlaneOfBlocks::GetMeanVECTORxy(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
+MV_FORCEINLINE void PlaneOfBlocks::GetMeanVECTORxy(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
 {
   int sum_dx = 0;
   int sum_dy = 0;
@@ -1268,21 +1270,20 @@ MV_FORCEINLINE void PlaneOfBlocks::GetMeanVECTORxy(WorkingArea& workarea, VECTOR
     sum_dy += toMedian[i].y;
   }
 
-  sum_dx = (sum_dx + (iNumMVs>>1)) / iNumMVs;
-  sum_dy = (sum_dy + (iNumMVs>>1)) / iNumMVs;
+  sum_dx = (sum_dx + (iNumMVs >> 1)) / iNumMVs;
+  sum_dy = (sum_dy + (iNumMVs >> 1)) / iNumMVs;
 
   vOut[0].x = sum_dx;
   vOut[0].y = sum_dy;
 
   if ((vOut[0].x == toMedian[0].x) && (vOut[0].y == toMedian[0].y))
-    vOut[0].sad = toMedian[0].sad; // MV already checked in inpit of AreaMode
+    vOut[0].sad = toMedian[0].sad; // MV already checked in input of AreaMode
   else
-    vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
+    vOut[0].sad = verybigSAD + 1; // invalidate - need re-check if used later
 
 }
 
-template<typename pixel_t>
-MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvad(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
+MV_FORCEINLINE void PlaneOfBlocks::GetMedoidVECTORvad(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
 {
   // process dual coords in scalar C ?
   const int iMaxAngDiff = 3; // hope it is enough ? 
@@ -1318,14 +1319,13 @@ MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvad(WorkingArea& workarea, VECTO
   vOut[0].y = toMedian[i_idx_minrow].y;
 
   if ((vOut[0].x == toMedian[0].x) && (vOut[0].y == toMedian[0].y))
-    vOut[0].sad = toMedian[0].sad; // MV already checked in inpit of AreaMode
+    vOut[0].sad = toMedian[0].sad; // MV already checked in input of AreaMode
   else
-    vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
+    vOut[0].sad = verybigSAD + 1; // invalidate - need re-check if used later
 
 }
 
-template<typename pixel_t>
-MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvld(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
+MV_FORCEINLINE void PlaneOfBlocks::GetMedoidVECTORvld(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
 {
   // process dual coords in scalar C ?
   const int iMaxMVlength = std::max(nBlkX * nBlkSizeX, nBlkY * nBlkSizeY) * 2 * nPel; // hope it is enough ? todo: make global constant ?
@@ -1361,19 +1361,18 @@ MV_FORCEINLINE void PlaneOfBlocks::GetModeVECTORvld(WorkingArea& workarea, VECTO
   vOut[0].y = toMedian[i_idx_minrow].y;
 
   if ((vOut[0].x == toMedian[0].x) && (vOut[0].y == toMedian[0].y))
-    vOut[0].sad = toMedian[0].sad; // MV already checked in inpit of AreaMode
+    vOut[0].sad = toMedian[0].sad; // MV already checked in input of AreaMode
   else
-    vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
+    vOut[0].sad = verybigSAD + 1; // invalidate - need re-check if used later
 }
 
-template<typename pixel_t>
-MV_FORCEINLINE void PlaneOfBlocks::GetMedianVECTORg(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs) // geometric median
+MV_FORCEINLINE void PlaneOfBlocks::GetMedianVECTORg(VECTOR* toMedian, VECTOR* vOut, int iNumMVs) // geometric median
 {
   const int test_steps_dx[] = { -1, 0, 1, 0 };
   const int test_steps_dy[] = { 0, 1, 0, -1 };
 
   VECTOR_XY vGMedian;
-  int iMinDist=0;
+  int iMinDist = 0;
 
   // need to estimate max radius of vectors area ?
   int iStep = 4 * nPel; // 16 max for pel=4, need to be lower at high levels ?
@@ -1387,8 +1386,8 @@ MV_FORCEINLINE void PlaneOfBlocks::GetMedianVECTORg(WorkingArea& workarea, VECTO
     iMeanY += toMedian[i].y;
   }
 
-  vGMedian.x = (iMeanX + (iNumMVs>>1)) / iNumMVs;
-  vGMedian.y = (iMeanY + (iNumMVs>>1)) / iNumMVs;
+  vGMedian.x = (iMeanX + (iNumMVs >> 1)) / iNumMVs;
+  vGMedian.y = (iMeanY + (iNumMVs >> 1)) / iNumMVs;
 
   // init iMinDist with first estimate
   for (int i = 0; i < iNumMVs; i++)
@@ -1432,14 +1431,13 @@ MV_FORCEINLINE void PlaneOfBlocks::GetMedianVECTORg(WorkingArea& workarea, VECTO
   vOut[0].y = vGMedian.y;
 
   if ((vOut[0].x == toMedian[0].x) && (vOut[0].y == toMedian[0].y))
-    vOut[0].sad = toMedian[0].sad; // MV already checked in inpit of AreaMode
+    vOut[0].sad = toMedian[0].sad; // MV already checked in input of AreaMode
   else
-    vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
+    vOut[0].sad = verybigSAD + 1; // invalidate - need re-check if used later
 
 }
 
-template<typename pixel_t>
-MV_FORCEINLINE void PlaneOfBlocks::Get_IQM_VECTORxy(WorkingArea& workarea, VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
+MV_FORCEINLINE void PlaneOfBlocks::Get_IQM_VECTORxy(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
 {
   int vX[MAX_AREAMODE_STEPS];
   int vY[MAX_AREAMODE_STEPS];
@@ -1459,11 +1457,12 @@ MV_FORCEINLINE void PlaneOfBlocks::Get_IQM_VECTORxy(WorkingArea& workarea, VECTO
   {
     vOut[0].x = vX[1];
     vOut[0].y = vY[1];
+    vOut[0].sad = toMedian[1].sad;
   }
   else
   {
     int qStart = (iNumMVs + 1) / 4; // do we want bias here ?
-    int qEnd = iNumMVs - ((iNumMVs + 1 ) / 4);
+    int qEnd = iNumMVs - ((iNumMVs + 1) / 4);
 
     int iXmean = 0;
     int iYmean = 0;
@@ -1482,9 +1481,9 @@ MV_FORCEINLINE void PlaneOfBlocks::Get_IQM_VECTORxy(WorkingArea& workarea, VECTO
   }
 
   if ((vOut[0].x == toMedian[0].x) && (vOut[0].y == toMedian[0].y))
-    vOut[0].sad = toMedian[0].sad; // MV already checked in inpit of AreaMode
+    vOut[0].sad = toMedian[0].sad; // MV already checked in input of AreaMode
   else
-    vOut[0].sad = GetDM<pixel_t>(workarea, vOut[0].x, vOut[0].y); // update DM for current block pos and selected bestMV
+    vOut[0].sad = verybigSAD + 1; // invalidate - need re-check if used later
 
 }
 
@@ -1695,6 +1694,8 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
    // replaced hard threshold by soft in v1.10.2 by Fizick (a liitle complex expression to avoid overflow)
    //	int a = LSAD/(LSAD + (workarea.predictor.sad>>1));
    //	workarea.nLambda = workarea.nLambda*a*a;
+
+  workarea.MDpredictor = GetMDpredictor(workarea);
 }
 
 template<typename pixel_t>
@@ -1857,6 +1858,8 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41_intraframe(WorkingArea&
    // replaced hard threshold by soft in v1.10.2 by Fizick (a liitle complex expression to avoid overflow)
    //	int a = LSAD/(LSAD + (workarea.predictor.sad>>1));
    //	workarea.nLambda = workarea.nLambda*a*a;
+
+  workarea.MDpredictor = GetMDpredictor(workarea);
 }
 
 template<typename pixel_t>
@@ -2004,6 +2007,8 @@ void PlaneOfBlocks::FetchPredictors_avx2_intraframe(WorkingArea& workarea) // li
    //	workarea.nLambda = workarea.nLambda*a*a;
 
   _mm256_zeroupper();
+
+  workarea.MDpredictor = GetMDpredictor(workarea);
 
 }
 
@@ -5395,29 +5400,32 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
     switch (iAMavg)
     {
     case 0:
-      GetModeVECTORxy<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos, false);
+      GetMedoidVECTORxy(&vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
 
     case 1:
-      GetMeanVECTORxy<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos);
+      GetMeanVECTORxy(&vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
 
     case 2:
-      GetModeVECTORvad<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos);
+      GetMedoidVECTORvad(&vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
 
     case 3:
-      GetModeVECTORvld<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos);
+      GetMedoidVECTORvld(&vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
 
     case 4:
-      GetMedianVECTORg<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos);
+      GetMedianVECTORg(&vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
 
     case 5:
-      Get_IQM_VECTORxy<pixel_t>(workarea, &vAMResults[0], &workarea.bestMV, iNumAMPos);
+      Get_IQM_VECTORxy(&vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
     }
+
+    if ((workarea.bestMV.x != vAMResults[0].x) && (workarea.bestMV.y != vAMResults[0].y))
+      workarea.bestMV.sad = GetDM<pixel_t>(workarea, workarea.bestMV.x, workarea.bestMV.y); // update DM for current block pos and selected bestMV
 
     // calc abs MVs difference and apply as SAD hint (to MDegrain and others) of resulted MV quality
     if (iAMDiffSAD > 0)
@@ -7198,7 +7206,8 @@ PlaneOfBlocks::WorkingArea::~WorkingArea()
 template<typename pixel_t>
 MV_FORCEINLINE sad_t PlaneOfBlocks::WorkingArea::MotionDistorsion(int vx, int vy) const
 {
-  int dist = SquareDifferenceNorm(predictor, vx, vy);
+//  int dist = SquareDifferenceNorm(predictor, vx, vy);
+  int dist = SquareDifferenceNorm(MDpredictor, vx, vy);
   if constexpr(sizeof(pixel_t) == 1)
   {
 #if 0
@@ -9041,6 +9050,82 @@ MV_FORCEINLINE sad_t PlaneOfBlocks::GetDMLuma(WorkingArea& workarea, int vx, int
   }
 
   return sad;
+}
+
+MV_FORCEINLINE VECTOR PlaneOfBlocks::GetMDpredictor(WorkingArea& workarea)
+{
+  VECTOR vPredictors[MAX_PREDICTOR];
+  VECTOR vOut;
+
+  if (iMDp == -1) // old 2.7.45 - hierarchy predictor
+    return workarea.predictor; 
+
+  /* fill vPredictors with some of ready to use predictors:
+  1. zero (?)
+  2. median predictor (or all 3 predictors ? performance is better with median but weight will be less)
+  3. global predictor
+  4. temporal predictor
+
+     better to do MDp as bitflags for any possible predictors configurable by user at filter call
+  */
+
+  int iNumPredictors;
+/*  if (temporal)
+    iNumPredictors = 4;
+  else
+    iNumPredictors = 3;
+
+  vPredictors[0] = zeroMVfieldShifted;
+  vPredictors[1] = workarea.predictors[0];
+  vPredictors[2] = workarea.globalMVPredictor;
+  if (temporal)
+    vPredictors[3] = workarea.predictors[4];*/
+
+  if (temporal)
+    iNumPredictors = 6;
+  else
+    iNumPredictors = 5;
+
+  vPredictors[0] = zeroMVfieldShifted;
+  vPredictors[1] = workarea.predictors[1];
+  vPredictors[2] = workarea.predictors[2];
+  vPredictors[3] = workarea.predictors[3];
+  vPredictors[4] = workarea.globalMVPredictor;
+  if (temporal)
+    vPredictors[5] = workarea.predictors[4];
+
+
+  switch (iMDp)
+  {
+    case 0:
+      GetMedoidVECTORxy(&vPredictors[0], &vOut, iNumPredictors);
+      break;
+
+    case 1:
+      GetMeanVECTORxy(&vPredictors[0], &vOut, iNumPredictors);
+      break;
+
+    case 2:
+      GetMedoidVECTORvad(&vPredictors[0], &vOut, iNumPredictors);
+      break;
+
+    case 3:
+      GetMedoidVECTORvld(&vPredictors[0], &vOut, iNumPredictors);
+      break;
+
+    case 4:
+      GetMedianVECTORg(&vPredictors[0], &vOut, iNumPredictors);
+      break;
+
+    case 5:
+      Get_IQM_VECTORxy(&vPredictors[0], &vOut, iNumPredictors);
+      break;
+  }
+
+  vOut = ClipMV(workarea, vOut); // for safety Clip one more time ?
+
+  return vOut;
+
 }
 
 

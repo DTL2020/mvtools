@@ -130,7 +130,9 @@ void	GroupOfPlanes::SearchMVs(
   int    AMavg,
   int    AMpt,
   SearchType    AMst,
-  int    AMsp
+  int    AMsp,
+  int    TMAvg,
+  int    MDp
 )
 {
   nFlags |= flags;
@@ -231,7 +233,9 @@ void	GroupOfPlanes::SearchMVs(
     AMavg,
     AMpt,
     AMst,
-    AMsp
+    AMsp,
+    TMAvg,
+    MDp
   );
 
   out += planes[nLevelCount - 1]->GetArraySize(divideExtra);
@@ -337,7 +341,9 @@ void	GroupOfPlanes::SearchMVs(
       AMavg,
       AMpt,
       AMst,
-      AMsp
+      AMsp,
+      TMAvg,
+      MDp
     );
 
     out += planes[i]->GetArraySize(divideExtra);
