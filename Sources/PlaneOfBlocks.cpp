@@ -1148,9 +1148,9 @@ MV_FORCEINLINE VECTOR PlaneOfBlocks::GetAreaAvgVECTOR(WorkingArea& workarea, int
   VECTOR toMedian[MAX_MEDIAN_PREDICTORS]; // to be more SIMD friendly we not need SAD for this computing
   VECTOR vOut;
 
-  for (int dy = -1 * iASize; dy < (iASize * 2 + 1); dy++)
+  for (int dy = -1 * iASize; dy < (iASize + 1); dy++)
   {
-    for (int dx = -1 * iASize; dx < (iASize * 2 + 1); dx++)
+    for (int dx = -1 * iASize; dx < (iASize + 1); dx++)
     {
       int iGetIdx;
       // scan linearly from left to right and from top to bottom
