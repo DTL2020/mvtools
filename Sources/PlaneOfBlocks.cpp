@@ -1117,16 +1117,40 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
 template<typename pixel_t>
 void PlaneOfBlocks::FetchMorePredictors(WorkingArea& workarea)
 {
-  VECTOR toMedian[MAX_MEDIAN_PREDICTORS]; // to be more SIMD friendly we not need SAD for this computing
+//  VECTOR toMedian[MAX_MEDIAN_PREDICTORS]; // to be more SIMD friendly we not need SAD for this computing
   VECTOR toClip;
 
   int iPredIdx = (temporal) ? 5 : 4; // place additional predictors after temporal (if present)
 
   // _predictorType of -1 : 3x3 median predictor, workarea.predictors[5]
+  toClip = GetAreaAvgVECTOR(workarea, 1);
 
-  for (int dy = -1; dy < 2; dy++)
+  workarea.predictors[iPredIdx] = ClipMV(workarea, toClip);
+
+  if (_predictorType >= -1) return;
+
+  // _predictorType of -2 : 5x5 median predictor
+  toClip = GetAreaAvgVECTOR(workarea, 2);
+
+  workarea.predictors[iPredIdx + 1] = ClipMV(workarea, toClip);
+
+  if (_predictorType >= -2) return;
+
+  // _predictorType of -3 : 7x7 median predictor
+
+  toClip = GetAreaAvgVECTOR(workarea, 3);
+  workarea.predictors[iPredIdx + 2] = ClipMV(workarea, toClip);
+
+}
+
+MV_FORCEINLINE VECTOR PlaneOfBlocks::GetAreaAvgVECTOR(WorkingArea& workarea, int iASize)
+{
+  VECTOR toMedian[MAX_MEDIAN_PREDICTORS]; // to be more SIMD friendly we not need SAD for this computing
+  VECTOR vOut;
+
+  for (int dy = -1 * iASize; dy < (iASize + 1); dy++)
   {
-    for (int dx = -1; dx < 2; dx++)
+    for (int dx = -1 * iASize; dx < (iASize + 1); dx++)
     {
       int iGetIdx;
       // scan linearly from left to right and from top to bottom
@@ -1144,68 +1168,9 @@ void PlaneOfBlocks::FetchMorePredictors(WorkingArea& workarea)
     }
   }
 
-//  GetModeVECTORxy<pixel_t>(workarea, &toMedian[0], &toClip, 3*3, false);
-  GetMedoidVECTORxy(&toMedian[0], &toClip, 3 * 3);
+  GetMedoidVECTORxy(&toMedian[0], &vOut, (iASize * 2 + 1) * (iASize * 2 + 1));
 
-  workarea.predictors[iPredIdx] = ClipMV(workarea, toClip);
-
-  if (_predictorType >= -1) return;
-
-  // _predictorType of -2 : 5x5 median predictor
-  for (int dy = -2; dy < 3; dy++)
-  {
-    for (int dx = -2; dx < 3; dx++)
-    {
-      int iGetIdx;
-      // scan linearly from left to right and from top to bottom
-      // check for lower than zero or over max index
-      iGetIdx = workarea.blkIdx + dy * nBlkX + dx;
-
-      if ((iGetIdx < 0) || (iGetIdx > nBlkCount - 1))
-      {
-        toMedian[(dy + 2) * 5 + (dx + 2)] = zeroMVfieldShifted;
-      }
-      else
-      {
-        toMedian[(dy + 2) * 5 + (dx + 2)] = vectors[iGetIdx];
-      }
-    }
-  }
-
-//  GetModeVECTORxy<pixel_t>(workarea, &toMedian[0], &toClip, 5 * 5, false);
-  GetMedoidVECTORxy(&toMedian[0], &toClip, 5 * 5);
-
-  workarea.predictors[iPredIdx + 1] = ClipMV(workarea, toClip);
-
-  if (_predictorType >= -2) return;
-
-  // _predictorType of -3 : 7x7 median predictor
-  for (int dy = -3; dy < 4; dy++)
-  {
-    for (int dx = -3; dx < 4; dx++)
-    {
-      int iGetIdx;
-      // scan linearly from left to right and from top to bottom
-      // check for lower than zero or over max index
-      iGetIdx = workarea.blkIdx + dy * nBlkX + dx;
-
-      if ((iGetIdx < 0) || (iGetIdx > nBlkCount - 1))
-      {
-        toMedian[(dy + 3) * 7 + (dx + 3)] = zeroMVfieldShifted;
-      }
-      else
-      {
-        toMedian[(dy + 3) * 7 + (dx + 3)] = vectors[iGetIdx];
-      }
-    }
-  }
-
-//  GetModeVECTORxy<pixel_t>(workarea, &toMedian[0], &toClip, 7 * 7, false);
-  GetMedoidVECTORxy(&toMedian[0], &toClip, 7 * 7);
-
-  workarea.predictors[iPredIdx + 2] = ClipMV(workarea, toClip);
-
-
+  return vOut;
 }
 
 MV_FORCEINLINE void PlaneOfBlocks::GetMedoidVECTORxy(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
@@ -9061,41 +9026,28 @@ MV_FORCEINLINE VECTOR PlaneOfBlocks::GetMDpredictor(WorkingArea& workarea)
   if (iMDp == -1) // old 2.7.45 - hierarchy predictor 
     return workarea.predictor; 
 
-  /* fill vPredictors with some of ready to use predictors:
-  1. zero (?)
-  2. median predictor (or all 3 predictors ? performance is better with median but weight will be less)
-  3. global predictor
-  4. temporal predictor
+  int iASize = 1;
+  int iNumPredictors = iNumPredictors = (iASize * 2 + 1) * (iASize * 2 + 1);;
 
-     better to do MDp as bitflags for any possible predictors configurable by user at filter call
-  */
+  for (int dy = -1 * iASize; dy < (iASize + 1); dy++)
+  {
+    for (int dx = -1 * iASize; dx < (iASize + 1); dx++)
+    {
+      int iGetIdx;
+      // scan linearly from left to right and from top to bottom
+      // check for lower than zero or over max index
+      iGetIdx = workarea.blkIdx + dy * nBlkX + dx;
 
-  int iNumPredictors;
-  /*
-
-  if (temporal)
-    iNumPredictors = 4;
-  else
-    iNumPredictors = 3;
-
-  vPredictors[0] = zeroMVfieldShifted;
-  vPredictors[1] = workarea.predictor;
-  vPredictors[2] = workarea.globalMVPredictor;
-  if (temporal)
-    vPredictors[3] = workarea.predictors[4]; */
-
-  if (temporal)
-    iNumPredictors = 5;
-  else
-    iNumPredictors = 4;
-
-  vPredictors[0] = zeroMVfieldShifted;
-  vPredictors[1] = workarea.predictor;
-  vPredictors[2] = workarea.predictors[0];
-  vPredictors[3] = workarea.globalMVPredictor;
-  if (temporal)
-    vPredictors[4] = workarea.predictors[4];
-    
+      if ((iGetIdx < 0) || (iGetIdx > nBlkCount - 1))
+      {
+        vPredictors[(dy + 1) * 3 + (dx + 1)] = zeroMVfieldShifted;
+      }
+      else
+      {
+        vPredictors[(dy + 1) * 3 + (dx + 1)] = vectors[iGetIdx];
+      }
+    }
+  }
 
   switch (iMDp)
   {

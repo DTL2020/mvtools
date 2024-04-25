@@ -442,6 +442,8 @@ private:
   template<typename pixel_t>
   MV_FORCEINLINE void FetchMorePredictors(WorkingArea& workarea);
 
+  MV_FORCEINLINE VECTOR GetAreaAvgVECTOR(WorkingArea& workarea, int iASize);
+
   MV_FORCEINLINE void GetMedoidVECTORxy(VECTOR* toMed, VECTOR* vOut, int iNumMVs);
 
   MV_FORCEINLINE void GetMedoidVECTORvad(VECTOR* toMed, VECTOR* vOut, int iNumMVs);
