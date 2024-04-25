@@ -5143,6 +5143,7 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
           {
             ProcessAreaMode<pixel_t>(workarea, false);
           }
+
         }
 
         // workarea.bestMV = zeroMV; // debug
@@ -9057,7 +9058,7 @@ MV_FORCEINLINE VECTOR PlaneOfBlocks::GetMDpredictor(WorkingArea& workarea)
   VECTOR vPredictors[MAX_PREDICTOR];
   VECTOR vOut;
 
-  if (iMDp == -1) // old 2.7.45 - hierarchy predictor
+  if (iMDp == -1) // old 2.7.45 - hierarchy predictor 
     return workarea.predictor; 
 
   /* fill vPredictors with some of ready to use predictors:
@@ -9070,30 +9071,31 @@ MV_FORCEINLINE VECTOR PlaneOfBlocks::GetMDpredictor(WorkingArea& workarea)
   */
 
   int iNumPredictors;
-/*  if (temporal)
+  /*
+
+  if (temporal)
     iNumPredictors = 4;
   else
     iNumPredictors = 3;
 
   vPredictors[0] = zeroMVfieldShifted;
-  vPredictors[1] = workarea.predictors[0];
+  vPredictors[1] = workarea.predictor;
   vPredictors[2] = workarea.globalMVPredictor;
   if (temporal)
-    vPredictors[3] = workarea.predictors[4];*/
+    vPredictors[3] = workarea.predictors[4]; */
 
   if (temporal)
-    iNumPredictors = 6;
-  else
     iNumPredictors = 5;
+  else
+    iNumPredictors = 4;
 
   vPredictors[0] = zeroMVfieldShifted;
-  vPredictors[1] = workarea.predictors[1];
-  vPredictors[2] = workarea.predictors[2];
-  vPredictors[3] = workarea.predictors[3];
-  vPredictors[4] = workarea.globalMVPredictor;
+  vPredictors[1] = workarea.predictor;
+  vPredictors[2] = workarea.predictors[0];
+  vPredictors[3] = workarea.globalMVPredictor;
   if (temporal)
-    vPredictors[5] = workarea.predictors[4];
-
+    vPredictors[4] = workarea.predictors[4];
+    
 
   switch (iMDp)
   {

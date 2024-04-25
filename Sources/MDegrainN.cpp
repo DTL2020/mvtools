@@ -1198,16 +1198,29 @@ MDegrainN::MDegrainN(
     // OverlapsFunction
     // in M(V)DegrainX: DenoiseXFunction
   arch_t arch;
-  if ((_cpuFlags & CPUF_AVX2) != 0)
-    arch = USE_AVX2;
-  else if ((_cpuFlags & CPUF_AVX) != 0)
-    arch = USE_AVX;
-  else if ((_cpuFlags & CPUF_SSE4_1) != 0)
-    arch = USE_SSE41;
-  else if ((_cpuFlags & CPUF_SSE2) != 0)
-    arch = USE_SSE2;
-  else
-    arch = NO_SIMD;
+
+  if ((nBlkSizeX == 8) && (nBlkSizeY == 8))
+  {
+    if ((_cpuFlags & CPUF_AVX2) != 0)
+      arch = USE_AVX2;
+    else if ((_cpuFlags & CPUF_AVX) != 0)
+      arch = USE_AVX;
+    else if ((_cpuFlags & CPUF_SSE4_1) != 0)
+      arch = USE_SSE41;
+    else if ((_cpuFlags & CPUF_SSE2) != 0)
+      arch = USE_SSE2;
+    else
+      arch = NO_SIMD;
+  }
+  else // no SSSE3 x264 SAD - requires 16bytes ref block align
+  {
+    if ((_cpuFlags & CPUF_AVX2) != 0)
+      arch = USE_AVX2;
+    else if ((_cpuFlags & CPUF_AVX) != 0)
+      arch = USE_AVX;
+    else
+      arch = NO_SIMD;
+  }
 
   SAD = get_sad_function(nBlkSizeX, nBlkSizeY, bits_per_pixel, arch);
   SADCHROMA = get_sad_function(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits_per_pixel, arch);
