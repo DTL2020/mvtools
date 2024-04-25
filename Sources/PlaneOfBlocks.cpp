@@ -1148,9 +1148,9 @@ MV_FORCEINLINE VECTOR PlaneOfBlocks::GetAreaAvgVECTOR(WorkingArea& workarea, int
   VECTOR toMedian[MAX_MEDIAN_PREDICTORS]; // to be more SIMD friendly we not need SAD for this computing
   VECTOR vOut;
 
-  for (int dy = -1 * iASize; dy < (iASize + 1); dy++)
+  for (int dy = -1 * iASize; dy < (iASize * 2 + 1); dy++)
   {
-    for (int dx = -1 * iASize; dx < (iASize + 1); dx++)
+    for (int dx = -1 * iASize; dx < (iASize * 2 + 1); dx++)
     {
       int iGetIdx;
       // scan linearly from left to right and from top to bottom
@@ -1159,11 +1159,11 @@ MV_FORCEINLINE VECTOR PlaneOfBlocks::GetAreaAvgVECTOR(WorkingArea& workarea, int
 
       if ((iGetIdx < 0) || (iGetIdx > nBlkCount - 1))
       {
-        toMedian[(dy + 1) * 3 + (dx + 1)] = zeroMVfieldShifted;
+        toMedian[(dy + iASize) * (iASize * 2 + 1) + (dx + iASize)] = zeroMVfieldShifted;
       }
       else
       {
-        toMedian[(dy + 1) * 3 + (dx + 1)] = vectors[iGetIdx];
+        toMedian[(dy + iASize) * (iASize * 2 + 1) + (dx + iASize)] = vectors[iGetIdx];
       }
     }
   }
@@ -9027,7 +9027,7 @@ MV_FORCEINLINE VECTOR PlaneOfBlocks::GetMDpredictor(WorkingArea& workarea)
     return workarea.predictor; 
 
   int iASize = 1;
-  int iNumPredictors = iNumPredictors = (iASize * 2 + 1) * (iASize * 2 + 1);;
+  int iNumPredictors  = (iASize * 2 + 1) * (iASize * 2 + 1); // 3x3 of already checked ?
 
   for (int dy = -1 * iASize; dy < (iASize + 1); dy++)
   {
@@ -9040,11 +9040,11 @@ MV_FORCEINLINE VECTOR PlaneOfBlocks::GetMDpredictor(WorkingArea& workarea)
 
       if ((iGetIdx < 0) || (iGetIdx > nBlkCount - 1))
       {
-        vPredictors[(dy + 1) * 3 + (dx + 1)] = zeroMVfieldShifted;
+        vPredictors[(dy + iASize) * ((iASize * 2) + 1) + (dx + iASize)] = zeroMVfieldShifted;
       }
       else
       {
-        vPredictors[(dy + 1) * 3 + (dx + 1)] = vectors[iGetIdx];
+        vPredictors[(dy + iASize) * ((iASize * 2) + 1) + (dx + iASize)] = vectors[iGetIdx];
       }
     }
   }
