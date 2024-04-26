@@ -4919,7 +4919,17 @@ void MDegrainN::InterpolateOverlap_4x(VECTOR* pInterpolatedMVs, const VECTOR* pI
       j = byInp * nInputBlkX + bxInp;
       // original MVs in each 2nd MV
       if ((bx % 2) == 0)
-        pInterpolatedMVs[i] = pInputMVs[j];
+      {
+        if (iInterpolateOverlap == 1)
+        {
+          // re-check SAD always
+          pInterpolatedMVs[i].x = pInputMVs[j].x;
+          pInterpolatedMVs[i].y = pInputMVs[j].y;
+          pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, pInputMVs[j].x, pInputMVs[j].y);
+        }
+        else
+          pInterpolatedMVs[i] = pInputMVs[j];
+      }
       else
       {
         const int blx = (pInputMVs[j].x + pInputMVs[j + 1].x) / 2;
@@ -4990,7 +5000,15 @@ void MDegrainN::InterpolateOverlap_2x(VECTOR* pInterpolatedMVs, const VECTOR* pI
 
       if ((by % 2) == 0) // even lines 0,2,4,.. simply copy MV
       {
-        pInterpolatedMVs[i] = pInputMVs[j];
+        if (iInterpolateOverlap == 3)
+        {
+          // re-check SAD always
+          pInterpolatedMVs[i].x = pInputMVs[j].x;
+          pInterpolatedMVs[i].y = pInputMVs[j].y;
+          pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, pInputMVs[j].x, pInputMVs[j].y);
+        }
+        else
+          pInterpolatedMVs[i] = pInputMVs[j];
         continue;
       }
 
