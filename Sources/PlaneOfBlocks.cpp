@@ -1066,26 +1066,26 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
   {
     isTop = workarea.blky == workarea.blky_end;  
     const bool isBottomR = workarea.blky == workarea.blky_beg - 1;
-    // Up predictor
-    if (!isTop)
+    // (Up)bottom predictor
+    if (!isBottomR)
     {
-      workarea.predictors[2] = ClipMV(workarea, vectors[workarea.blkIdx - nBlkX]);
+      workarea.predictors[2] = ClipMV(workarea, vectors[workarea.blkIdx + nBlkX]);
     }
     else
     {
       workarea.predictors[2] = ClipMV(workarea, zeroMVfieldShifted);
     }
-  // bottom-right predictor (from coarse level, interpolated but not refined) 
-    if (!isBottomR &&
+  // (bottom)top-right predictor (from coarse level, interpolated but not refined) 
+    if (!isTop &&
       !smallestPlane && // v2.7.44
       ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
     {
-      workarea.predictors[3] = ClipMV(workarea, vectors[workarea.blkIdx + nBlkX + workarea.blkScanDir]);
-    }
-    // Up-right predictor
-    else if (!isTop && ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
-    {
       workarea.predictors[3] = ClipMV(workarea, vectors[workarea.blkIdx - nBlkX + workarea.blkScanDir]);
+    }
+    // (Up)bottom-right predictor
+    else if (isTop && ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
+    {
+      workarea.predictors[3] = ClipMV(workarea, vectors[workarea.blkIdx + nBlkX + workarea.blkScanDir]);
     }
     else
     {
@@ -1599,26 +1599,26 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
   {
     isTop = workarea.blky == workarea.blky_end;
     const bool isBottomR = workarea.blky == workarea.blky_beg - 1;
-    // Up predictor
-    if (!isTop)
+    // (Up) Bottom predictor
+    if (!isBottomR)
     {
-      v2 = vectors[workarea.blkIdx - nBlkX];
+      v2 = vectors[workarea.blkIdx + nBlkX];
     }
     else
     {
       v2 = zeroMVfieldShifted;
     }
-    // bottom-right predictor (from coarse level, interpolated but not refined) 
-    if (!isBottomR &&
+    // (bottom)top-right predictor (from coarse level, interpolated but not refined) 
+    if (!isTop &&
       !smallestPlane && // v2.7.44
       ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
     {
-      v3 = vectors[workarea.blkIdx + nBlkX + workarea.blkScanDir];
-    }
-    // Up-right predictor
-    else if (!isTop && ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
-    {
       v3 = vectors[workarea.blkIdx - nBlkX + workarea.blkScanDir];
+    }
+    // (Up)bottom-right predictor
+    else if (isTop && ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
+    {
+      v3 = vectors[workarea.blkIdx + nBlkX + workarea.blkScanDir];
     }
     else
     {
