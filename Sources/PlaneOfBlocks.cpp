@@ -1065,7 +1065,7 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
   else // reverse V search - workarea.blky_beg is end of Y (bottom) and workarea.blky_end is start of Y (top)
   {
     isTop = workarea.blky == workarea.blky_end;  
-    const bool isBottomR = workarea.blky == workarea.blky_beg - 1;
+    const bool isBottomR = workarea.blky == workarea.blky_beg;
     // (Up)bottom predictor
     if (!isBottomR)
     {
@@ -1598,7 +1598,7 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
   else // reverse V search - workarea.blky_beg is end of Y (bottom) and workarea.blky_end is start of Y (top)
   {
     isTop = workarea.blky == workarea.blky_end;
-    const bool isBottomR = workarea.blky == workarea.blky_beg - 1;
+    const bool isBottomR = workarea.blky == workarea.blky_beg;
     // (Up) Bottom predictor
     if (!isBottomR)
     {
