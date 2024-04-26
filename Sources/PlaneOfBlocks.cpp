@@ -298,7 +298,7 @@ void PlaneOfBlocks::SearchMVs(
   short *outfilebuf, int fieldShift, sad_t * pmeanLumaChange,
   int divideExtra, int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
   int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg, int _AMpt, SearchType _AMst, int _AMsp,
-  int _TMAvg, int _MDp
+  int _TMAvg, int _MDp, bool _bVScanDir
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -346,6 +346,7 @@ void PlaneOfBlocks::SearchMVs(
 
   iTMAvg = _TMAvg;
   iMDp = _MDp;
+  bVScanDir = _bVScanDir; // true - top to botton, false - reverse
 
   if (iAreaMode > 0)
   {
@@ -464,11 +465,17 @@ void PlaneOfBlocks::SearchMVs(
     }
     else
     {
-      slicer.start(nBlkY, *this, &PlaneOfBlocks::search_mv_slice<uint8_t>, 4);
+      if (bVScanDir)
+        slicer.start(nBlkY, *this, &PlaneOfBlocks::search_mv_slice<uint8_t>, 4);
+      else
+        slicer.start(nBlkY, *this, &PlaneOfBlocks::search_mv_slice_rv<uint8_t>, 4);
     }
   }
   else
-    slicer.start(nBlkY, *this, &PlaneOfBlocks::search_mv_slice<uint16_t>, 4);
+    if (bVScanDir)
+      slicer.start(nBlkY, *this, &PlaneOfBlocks::search_mv_slice<uint16_t>, 4);
+    else
+      slicer.start(nBlkY, *this, &PlaneOfBlocks::search_mv_slice_rv<uint16_t>, 4);
 
   slicer.wait();
 
@@ -1011,45 +1018,81 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
   {
     workarea.predictors[1] = ClipMV(workarea, zeroMVfieldShifted); // v1.11.1 - values instead of pointer
   }
-  // fixme note:
-  // MAnalyze mt-inconsistency reason #1
-  // this is _not_ internal mt friendly, since here up or bottom predictors
-  // are omitted for top/bottom data. Not non-mt case this happens only for
-  // the most top and bottom blocks.
-  // In vertically sliced multithreaded case it happens an _each_ top/bottom of the sliced block
-  const bool isTop = workarea.blky == workarea.blky_beg;
-  const bool isBottom = workarea.blky == workarea.blky_end - 1;
+
+  bool isTop;
+
+  if (bVScanDir) // true - standard search from top to bottom
+  {
+    // fixme note:
+    // MAnalyze mt-inconsistency reason #1
+    // this is _not_ internal mt friendly, since here up or bottom predictors
+    // are omitted for top/bottom data. Not non-mt case this happens only for
+    // the most top and bottom blocks.
+    // In vertically sliced multithreaded case it happens an _each_ top/bottom of the sliced block
+    isTop = workarea.blky == workarea.blky_beg;
+    const bool isBottom = workarea.blky == workarea.blky_end - 1;
     // Up predictor
-  if (!isTop)
-  {
-    workarea.predictors[2] = ClipMV(workarea, vectors[workarea.blkIdx - nBlkX]);
-  }
-  else
-  {
-    workarea.predictors[2] = ClipMV(workarea, zeroMVfieldShifted);
-  }
+    if (!isTop)
+    {
+      workarea.predictors[2] = ClipMV(workarea, vectors[workarea.blkIdx - nBlkX]);
+    }
+    else
+    {
+      workarea.predictors[2] = ClipMV(workarea, zeroMVfieldShifted);
+    }
     // Original problem: random, small, rare, mostly irreproducible differences between multiple encodings.
     // In all, I spent at least a week on the problem during a half year, losing hope
     // and restarting again four times. Nasty bug it was.
     // !smallestPlane: use bottom right only if a coarser level exists or else we get random
     // crap from a previous frame.
   // bottom-right predictor (from coarse level)
-  if (!isBottom && 
-    !smallestPlane && // v2.7.44
-    ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
-  {
-    workarea.predictors[3] = ClipMV(workarea, vectors[workarea.blkIdx + nBlkX + workarea.blkScanDir]);
+    if (!isBottom &&
+      !smallestPlane && // v2.7.44
+      ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
+    {
+      workarea.predictors[3] = ClipMV(workarea, vectors[workarea.blkIdx + nBlkX + workarea.blkScanDir]);
+    }
+    // Up-right predictor
+    else if (!isTop && ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
+    {
+      workarea.predictors[3] = ClipMV(workarea, vectors[workarea.blkIdx - nBlkX + workarea.blkScanDir]);
+    }
+    else
+    {
+      workarea.predictors[3] = ClipMV(workarea, zeroMVfieldShifted);
+    }
   }
-  // Up-right predictor
-  else if (!isTop && ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
+  else // reverse V search - workarea.blky_beg is end of Y (bottom) and workarea.blky_end is start of Y (top)
   {
-    workarea.predictors[3] = ClipMV(workarea, vectors[workarea.blkIdx - nBlkX + workarea.blkScanDir]);
-  }
-  else
-  {
-    workarea.predictors[3] = ClipMV(workarea, zeroMVfieldShifted);
-  }
+    isTop = workarea.blky == workarea.blky_end;  
+    const bool isBottomR = workarea.blky == workarea.blky_beg - 1;
+    // Up predictor
+    if (!isTop)
+    {
+      workarea.predictors[2] = ClipMV(workarea, vectors[workarea.blkIdx - nBlkX]);
+    }
+    else
+    {
+      workarea.predictors[2] = ClipMV(workarea, zeroMVfieldShifted);
+    }
+  // bottom-right predictor (from coarse level, interpolated but not refined) 
+    if (!isBottomR &&
+      !smallestPlane && // v2.7.44
+      ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
+    {
+      workarea.predictors[3] = ClipMV(workarea, vectors[workarea.blkIdx + nBlkX + workarea.blkScanDir]);
+    }
+    // Up-right predictor
+    else if (!isTop && ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
+    {
+      workarea.predictors[3] = ClipMV(workarea, vectors[workarea.blkIdx - nBlkX + workarea.blkScanDir]);
+    }
+    else
+    {
+      workarea.predictors[3] = ClipMV(workarea, zeroMVfieldShifted);
+    }
 
+  }
   // Median predictor
   if (!isTop) // replaced 1 by 0 - Fizick
   {
@@ -1474,6 +1517,8 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
   // are omitted for top/bottom data. Not non-mt case this happens only for
   // the most top and bottom blocks.
   // In vertically sliced multithreaded case it happens an _each_ top/bottom of the sliced block */
+
+/*
   const bool isTop = workarea.blky == workarea.blky_beg;
   const bool isBottom = workarea.blky == workarea.blky_end - 1;
   // Up predictor
@@ -1505,6 +1550,80 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
   else
   {
     v3 = zeroMVfieldShifted;
+  }
+  */
+  bool isTop;
+
+  if (bVScanDir) // true - standard search from top to bottom
+  {
+    // fixme note:
+    // MAnalyze mt-inconsistency reason #1
+    // this is _not_ internal mt friendly, since here up or bottom predictors
+    // are omitted for top/bottom data. Not non-mt case this happens only for
+    // the most top and bottom blocks.
+    // In vertically sliced multithreaded case it happens an _each_ top/bottom of the sliced block
+    isTop = workarea.blky == workarea.blky_beg;
+    const bool isBottom = workarea.blky == workarea.blky_end - 1;
+    // Up predictor
+    if (!isTop)
+    {
+      v2 = vectors[workarea.blkIdx - nBlkX];
+    }
+    else
+    {
+      v2 = zeroMVfieldShifted;
+    }
+    // Original problem: random, small, rare, mostly irreproducible differences between multiple encodings.
+    // In all, I spent at least a week on the problem during a half year, losing hope
+    // and restarting again four times. Nasty bug it was.
+    // !smallestPlane: use bottom right only if a coarser level exists or else we get random
+    // crap from a previous frame.
+  // bottom-right predictor (from coarse level)
+    if (!isBottom &&
+      !smallestPlane && // v2.7.44
+      ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
+    {
+      v3 = vectors[workarea.blkIdx + nBlkX + workarea.blkScanDir];
+    }
+    // Up-right predictor
+    else if (!isTop && ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
+    {
+      v3 = vectors[workarea.blkIdx - nBlkX + workarea.blkScanDir];
+    }
+    else
+    {
+      v3 = zeroMVfieldShifted;
+    }
+  }
+  else // reverse V search - workarea.blky_beg is end of Y (bottom) and workarea.blky_end is start of Y (top)
+  {
+    isTop = workarea.blky == workarea.blky_end;
+    const bool isBottomR = workarea.blky == workarea.blky_beg - 1;
+    // Up predictor
+    if (!isTop)
+    {
+      v2 = vectors[workarea.blkIdx - nBlkX];
+    }
+    else
+    {
+      v2 = zeroMVfieldShifted;
+    }
+    // bottom-right predictor (from coarse level, interpolated but not refined) 
+    if (!isBottomR &&
+      !smallestPlane && // v2.7.44
+      ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
+    {
+      v3 = vectors[workarea.blkIdx + nBlkX + workarea.blkScanDir];
+    }
+    // Up-right predictor
+    else if (!isTop && ((workarea.blkScanDir == 1 && workarea.blkx < nBlkX - 1) || (workarea.blkScanDir == -1 && workarea.blkx > 0)))
+    {
+      v3 = vectors[workarea.blkIdx - nBlkX + workarea.blkScanDir];
+    }
+    else
+    {
+      v3 = zeroMVfieldShifted;
+    }
   }
 
   // Copy SADs
@@ -5219,6 +5338,328 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
 
   _workarea_pool.return_obj(workarea);
 } // search_mv_slice
+
+
+template<typename pixel_t>
+void	PlaneOfBlocks::search_mv_slice_rv(Slicer::TaskData& td)
+{
+  assert(&td != 0);
+
+  short* outfilebuf = _outfilebuf;
+
+  WorkingArea& workarea = *(_workarea_pool.take_obj());
+  assert(&workarea != 0);
+
+//  workarea.blky_beg = td._y_beg;
+//  workarea.blky_end = td._y_end;
+  workarea.blky_beg = td._y_end - 1; // y_end is last row index (exclusive - so -1)
+  workarea.blky_end = td._y_beg;
+
+
+  workarea.DCT = 0;
+#ifdef ALLOW_DCT
+  if (_dct_pool_ptr != 0)
+  {
+    workarea.DCT = _dct_pool_ptr->take_obj();
+  }
+#endif	// ALLOW_DCT
+
+  int* pBlkData = _out + 1 + workarea.blky_beg * nBlkX * N_PER_BLOCK;
+  if (outfilebuf != NULL)
+  {
+//    outfilebuf += workarea.blky_beg * nBlkX * 4;// 4 short word per block
+    outfilebuf += workarea.blky_end * nBlkX * 4;// 4 short word per block
+    // short vx, short vy, uint32_t sad
+  }
+
+  workarea.y[0] = pSrcFrame->GetPlane(YPLANE)->GetVPadding();
+  workarea.y[0] += workarea.blky_beg * (nBlkSizeY - nOverlapY);
+
+  // fixme: use if(chroma) like in recalculate
+  if (pSrcFrame->GetMode() & UPLANE)
+  {
+    workarea.y[1] = pSrcFrame->GetPlane(UPLANE)->GetVPadding();
+    workarea.y[1] += workarea.blky_beg * ((nBlkSizeY - nOverlapY) >> nLogyRatioUV);
+  }
+  if (pSrcFrame->GetMode() & VPLANE)
+  {
+    workarea.y[2] = pSrcFrame->GetPlane(VPLANE)->GetVPadding();
+    workarea.y[2] += workarea.blky_beg * ((nBlkSizeY - nOverlapY) >> nLogyRatioUV);
+  }
+
+  workarea.planeSAD = 0; // for debug, plus fixme outer planeSAD is not used
+  workarea.sumLumaChange = 0;
+
+  int nBlkSizeX_Ovr[3] = { (nBlkSizeX - nOverlapX), (nBlkSizeX - nOverlapX) >> nLogxRatioUV, (nBlkSizeX - nOverlapX) >> nLogxRatioUV };
+  int nBlkSizeY_Ovr[3] = { (nBlkSizeY - nOverlapY), (nBlkSizeY - nOverlapY) >> nLogyRatioUV, (nBlkSizeY - nOverlapY) >> nLogyRatioUV };
+
+//  for (workarea.blky = workarea.blky_beg; workarea.blky < workarea.blky_end; workarea.blky++)
+  for (workarea.blky = workarea.blky_beg; workarea.blky >= workarea.blky_end; workarea.blky--) // reverse V
+  {
+    workarea.blkScanDir = (workarea.blky % 2 == 0 || !_meander_flag) ? 1 : -1;
+    // meander (alternate) scan blocks (even row left to right, odd row right to left)
+    int blkxStart = (workarea.blky % 2 == 0 || !_meander_flag) ? 0 : nBlkX - 1;
+    if (workarea.blkScanDir == 1) // start with leftmost block
+    {
+      workarea.x[0] = pSrcFrame->GetPlane(YPLANE)->GetHPadding();
+      if (chroma)
+      {
+        workarea.x[1] = pSrcFrame->GetPlane(UPLANE)->GetHPadding();
+        workarea.x[2] = pSrcFrame->GetPlane(VPLANE)->GetHPadding();
+      }
+    }
+    else // start with rightmost block, but it is already set at prev row
+    {
+      workarea.x[0] = pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nBlkSizeX_Ovr[0] * (nBlkX - 1);
+      if (chroma)
+      {
+        workarea.x[1] = pSrcFrame->GetPlane(UPLANE)->GetHPadding() + nBlkSizeX_Ovr[1] * (nBlkX - 1);
+        workarea.x[2] = pSrcFrame->GetPlane(VPLANE)->GetHPadding() + nBlkSizeX_Ovr[2] * (nBlkX - 1);
+      }
+    }
+
+    if (_predictorType != 4)
+    {
+      for (int iblkx = 0; iblkx < nBlkX; iblkx++)
+      {
+        workarea.blkx = blkxStart + iblkx * workarea.blkScanDir;
+        workarea.blkIdx = workarea.blky * nBlkX + workarea.blkx;
+        workarea.iter = 0;
+        //			DebugPrintf("BlkIdx = %d \n", workarea.blkIdx);
+        PROFILE_START(MOTION_PROFILE_ME);
+
+        // Resets the global predictor (it may have been clipped during the
+        // previous block scan)
+
+        // fixme: why recalc is resetting only outside, why, maybe recalc is not using that at all?
+        workarea.globalMVPredictor = _glob_mv_pred_def; // need to reset every time in AreaMode next searches (because am_shift added before clipping internally in the EPZ search)
+
+#if (ALIGN_SOURCEBLOCK > 1)
+        //store the pitch
+        const BYTE* pY = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
+        //create aligned copy
+        BLITLUMA(workarea.pSrc_temp[0], nSrcPitch[0], pY, nSrcPitch_plane[0]);
+        //set the to the aligned copy
+        workarea.pSrc[0] = workarea.pSrc_temp[0];
+        if (chroma)
+        {
+          workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
+          BLITCHROMA(workarea.pSrc_temp[1], nSrcPitch[1], workarea.pSrc[1], nSrcPitch_plane[1]);
+          workarea.pSrc[1] = workarea.pSrc_temp[1];
+          workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
+          BLITCHROMA(workarea.pSrc_temp[2], nSrcPitch[2], workarea.pSrc[2], nSrcPitch_plane[2]);
+          workarea.pSrc[2] = workarea.pSrc_temp[2];
+        }
+#else	// ALIGN_SOURCEBLOCK
+        workarea.pSrc[0] = pSrcFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
+        if (chroma)
+        {
+          workarea.pSrc[1] = pSrcFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
+          workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
+        }
+#endif	// ALIGN_SOURCEBLOCK
+
+        // fixme note:
+        // MAnalyze mt-inconsistency reason #3
+        // this is _not_ internal mt friendly
+        // because workarea.nLambda is set to 0 differently:
+        // In vertically sliced multithreaded case it happens an _each_ top of the sliced block
+        // In non-mt: only for the most top blocks
+
+        if (workarea.blky == workarea.blky_beg)
+        {
+          workarea.nLambda = 0;
+        }
+        else
+        {
+          workarea.nLambda = _lambda_level;
+        }
+
+        // fixme:
+        // not exacly nice, but works
+        // different threads are writing, but the are the same always and come from parameters _pnew, _lsad
+        penaltyNew = _pnew; // penalty for new vector
+        LSAD = _lsad;    // SAD limit for lambda using
+        // may be they must be scaled by nPel ?
+
+        // decreased padding of coarse levels
+        int nHPaddingScaled = pSrcFrame->GetPlane(YPLANE)->GetHPadding() >> nLogScale;
+        int nVPaddingScaled = pSrcFrame->GetPlane(YPLANE)->GetVPadding() >> nLogScale;
+
+        /* additional AreaMode limits*/
+        int iAMmaxOffset = (iAreaMode * iAMstep) + iAMoffset;
+
+        /* computes search boundaries */
+        if (iUseSubShift == 0)
+        {
+          workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled - iAMmaxOffset);
+          workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled - iAMmaxOffset);
+          workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled - iAMmaxOffset);
+          workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled - iAMmaxOffset);
+        }
+        else
+        {
+          int iKS_sh_d2 = ((SHIFTKERNELSIZE / 2) + 2); // +2 is to prevent run out of buffer for UV planes
+          workarea.nDxMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedWidth() - workarea.x[0] - nBlkSizeX - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled - iKS_sh_d2);
+          workarea.nDyMax = nPel * (pSrcFrame->GetPlane(YPLANE)->GetExtendedHeight() - workarea.y[0] - nBlkSizeY - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled - iKS_sh_d2);
+          workarea.nDxMin = -nPel * (workarea.x[0] - pSrcFrame->GetPlane(YPLANE)->GetHPadding() + nHPaddingScaled - iKS_sh_d2);
+          workarea.nDyMin = -nPel * (workarea.y[0] - pSrcFrame->GetPlane(YPLANE)->GetVPadding() + nVPaddingScaled - iKS_sh_d2);
+        }
+
+        /* search the mv */
+        workarea.am_shift.x = 0; // set to zero always at startup and non-AreaMode search
+        workarea.am_shift.y = 0;
+
+        workarea.predictor = ClipMV(workarea, vectors[workarea.blkIdx]);
+        if (temporal)
+        {
+          workarea.predictors[4] = ClipMV(workarea, *reinterpret_cast<VECTOR*>(&_vecPrev[workarea.blkIdx * N_PER_BLOCK])); // temporal predictor
+        }
+        else
+        {
+          workarea.predictors[4] = ClipMV(workarea, zeroMV);
+        }
+
+        //        if (optSearchOption == 5 || optSearchOption == 6) // only calc sad for x,y from DX12_ME
+        if (optSearchOption == 6) // only calc sad for x,y from DX12_ME, SO=5 is shader SAD now
+        {
+          workarea.bestMV = workarea.predictor; // clip outside - no need in MDegrain 
+          workarea.bestMV.sad = GetDM<pixel_t>(workarea, workarea.predictor.x, workarea.predictor.y);
+        }
+        else
+        {
+          // Possible point of placement selection of 'predictors control'
+          if (_predictorType <= 0)
+            PseudoEPZSearch<pixel_t>(workarea); // all predictors (original)
+          else if (_predictorType == 1) // DTL: partial predictors
+            PseudoEPZSearch_glob_med_pred<pixel_t>(workarea);
+          else if (_predictorType == 2) // DTL: no predictiors
+            PseudoEPZSearch_no_pred<pixel_t>(workarea);
+          else // DTL: no refine (at level = 0 typically)
+            PseudoEPZSearch_no_refine<pixel_t>(workarea);
+
+          if (iAreaMode > 0)
+          {
+            ProcessAreaMode<pixel_t>(workarea, false);
+          }
+
+        }
+
+        // workarea.bestMV = zeroMV; // debug
+
+        if (outfilebuf != NULL) // write vector to outfile
+        {
+          outfilebuf[workarea.blkx * 4 + 0] = workarea.bestMV.x;
+          outfilebuf[workarea.blkx * 4 + 1] = workarea.bestMV.y;
+          outfilebuf[workarea.blkx * 4 + 2] = (*(uint32_t*)(&workarea.bestMV.sad) & 0x0000ffff); // low word
+          outfilebuf[workarea.blkx * 4 + 3] = (*(uint32_t*)(&workarea.bestMV.sad) >> 16);     // high word, usually null
+        }
+
+        /* write the results */
+        pBlkData[workarea.blkx * N_PER_BLOCK + 0] = workarea.bestMV.x;
+        pBlkData[workarea.blkx * N_PER_BLOCK + 1] = workarea.bestMV.y;
+        pBlkData[workarea.blkx * N_PER_BLOCK + 2] = *(uint32_t*)(&workarea.bestMV.sad);
+
+        PROFILE_STOP(MOTION_PROFILE_ME);
+
+
+        if (smallestPlane) // do we need it with DX12_ME ??? 
+        {
+          /*
+          int64_t i64_1 = 0;
+          int64_t i64_2 = 0;
+          int32_t i32 = 0;
+          unsigned int a1 = 200;
+          unsigned int a2 = 201;
+
+          i64_1 += a1 - a2; // 0x00000000 FFFFFFFF   !!!!!
+          i64_2 = i64_2 + a1 - a2; // 0xFFFFFFFF FFFFFFFF O.K.!
+          i32 += a1 - a2; // 0xFFFFFFFF
+          */
+
+          // int64_t += uint32_t - uint32_t is not ok, if diff would be negative
+          // LUMA diff can be negative! we should cast from uint32_t
+          // 64 bit cast or else: int64_t += uint32t - uint32_t results in int64_t += (uint32_t)(uint32t - uint32_t)
+          // which is baaaad 0x00000000 FFFFFFFF instead of 0xFFFFFFFF FFFFFFFF
+
+          // 161204 todo check: why is it not abs(lumadiff)?
+          typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
+          workarea.sumLumaChange += (safe_sad_t)LUMA(GetRefBlock(workarea, 0, 0), nRefPitch[0]) - (safe_sad_t)LUMA(workarea.pSrc[0], nSrcPitch[0]);
+        }
+
+        /* increment indexes & pointers */
+        if (iblkx < nBlkX - 1)
+        {
+          workarea.x[0] += nBlkSizeX_Ovr[0] * workarea.blkScanDir;
+          workarea.x[1] += nBlkSizeX_Ovr[1] * workarea.blkScanDir;
+          workarea.x[2] += nBlkSizeX_Ovr[2] * workarea.blkScanDir;
+        }
+      }	// for iblkx
+    }// if predictorType != 4
+    else
+    {
+      for (int iblkx = 0; iblkx < nBlkX; iblkx++)
+      {
+        workarea.blkx = iblkx;
+        workarea.blkIdx = workarea.blky * nBlkX + workarea.blkx;
+
+        workarea.bestMV = vectors[workarea.blkIdx]; // may be not safe somewhere in MDegrain without clipping ??
+
+        if (outfilebuf != NULL) // write vector to outfile
+        {
+          outfilebuf[workarea.blkx * 4 + 0] = workarea.bestMV.x;
+          outfilebuf[workarea.blkx * 4 + 1] = workarea.bestMV.y;
+          outfilebuf[workarea.blkx * 4 + 2] = (*(uint32_t*)(&workarea.bestMV.sad) & 0x0000ffff); // low word
+          outfilebuf[workarea.blkx * 4 + 3] = (*(uint32_t*)(&workarea.bestMV.sad) >> 16);     // high word, usually null
+        }
+
+        /* write the results */
+        pBlkData[workarea.blkx * N_PER_BLOCK + 0] = workarea.bestMV.x;
+        pBlkData[workarea.blkx * N_PER_BLOCK + 1] = workarea.bestMV.y;
+        pBlkData[workarea.blkx * N_PER_BLOCK + 2] = *(uint32_t*)(&workarea.bestMV.sad);
+
+      }	// for iblkx
+
+    } // opt_predictorType=4
+
+//    pBlkData += nBlkX * N_PER_BLOCK;
+    pBlkData -= nBlkX * N_PER_BLOCK; // reverse V
+    if (outfilebuf != NULL) // write vector to outfile
+    {
+      outfilebuf += nBlkX * 4;// 4 short word per block
+    }
+
+/*    workarea.y[0] += nBlkSizeY_Ovr[0];
+    workarea.y[1] += nBlkSizeY_Ovr[1];
+    workarea.y[2] += nBlkSizeY_Ovr[2];*/
+    workarea.y[0] -= nBlkSizeY_Ovr[0];
+    workarea.y[1] -= nBlkSizeY_Ovr[1];
+    workarea.y[2] -= nBlkSizeY_Ovr[2];
+
+  }	// for workarea.blky
+
+  planeSAD += workarea.planeSAD; // for debug, plus fixme outer planeSAD is not used
+  sumLumaChange += workarea.sumLumaChange;
+
+  if (isse)
+  {
+#ifndef _M_X64
+    _mm_empty();
+#endif
+  }
+
+#ifdef ALLOW_DCT
+  if (_dct_pool_ptr != 0)
+  {
+    _dct_pool_ptr->return_obj(*(workarea.DCT));
+    workarea.DCT = 0;
+  }
+#endif
+
+  _workarea_pool.return_obj(workarea);
+} // search_mv_slice_rv
+
+
 
 template<typename pixel_t>
 MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool bRecalc)

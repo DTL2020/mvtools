@@ -156,6 +156,7 @@ protected:
 
   int iTMAvg;
   int iMDp;
+  int iVScansNum;
 
 public:
 
@@ -171,7 +172,7 @@ public:
     int _iSearchDirMode, int _DMFlags,
     int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, int _AMpel,
     int _PTpel, int _AMflags, int _AMavg, int _AMpt, int _AMst, int _AMsp,
-    int _TMavg, int _MDp,
+    int _TMavg, int _MDp, int _VScansNum, 
     IScriptEnvironment* env);
   ~MVAnalyse();
 

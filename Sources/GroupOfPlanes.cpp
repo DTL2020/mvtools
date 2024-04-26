@@ -132,10 +132,17 @@ void	GroupOfPlanes::SearchMVs(
   SearchType    AMst,
   int    AMsp,
   int    TMAvg,
-  int    MDp
+  int    MDp,
+  int    VScansNum
 )
 {
   nFlags |= flags;
+
+  bool bVScanDir;
+  if (VScansNum == 1)
+    bVScanDir = true; // top to down
+  else
+    bVScanDir = false; // down to top
 
   // temporal untill no 'array' of arguments for optPredictorType:
   bool bDoPT3search = false;
@@ -202,6 +209,8 @@ void	GroupOfPlanes::SearchMVs(
     (nLevelCount == 1) ? nPelSearch : nSearchParam;
   DebugPrintf("SearchType %i", searchType);
   bool				tryManyLevel = (tryMany && nLevelCount > 1);
+
+
   planes[nLevelCount - 1]->SearchMVs(
     pSrcGOF->GetFrame(nLevelCount - 1),
     pRefGOF->GetFrame(nLevelCount - 1),
@@ -235,7 +244,8 @@ void	GroupOfPlanes::SearchMVs(
     AMst,
     AMsp,
     TMAvg,
-    MDp
+    MDp,
+    bVScanDir 
   );
 
   out += planes[nLevelCount - 1]->GetArraySize(divideExtra);
@@ -343,8 +353,10 @@ void	GroupOfPlanes::SearchMVs(
       AMst,
       AMsp,
       TMAvg,
-      MDp
+      MDp,
+      bVScanDir
     );
+
 
     out += planes[i]->GetArraySize(divideExtra);
     if (vecPrev)

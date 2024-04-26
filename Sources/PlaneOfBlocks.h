@@ -126,7 +126,7 @@ public:
     int * meanLumaChange, int divideExtra,
     int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
     int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg, int _AMpt, SearchType _AMst, int _AMsp,
-    int _TMAvg, int _MDp);
+    int _TMAvg, int _MDp, bool _bVScanDir);
 
 
   /* plane initialisation */
@@ -284,6 +284,7 @@ private:
   sad_t _thSAD;
   //  const VECTOR zeroMV = {0,0,(sad_t)-1};
   int _predictorType; // 2.7.46
+  bool bVScanDir;
 
   int      iTMAvg; // trymany averaging modes, -1 - default - minimumSAD(DM)
   int      iMDp; // MotionDistorion predictor used, -1 - hierarchy predictor, 0 and higher - AMAvg averaging of some predictors
@@ -688,6 +689,9 @@ private:
 
   template<typename pixel_t>
   void	search_mv_slice(Slicer::TaskData &td);
+
+  template<typename pixel_t>
+  void	search_mv_slice_rv(Slicer::TaskData& td); // temp test of reverset V scan
 
   template<typename pixel_t>
   void	search_mv_slice_SO2(Slicer::TaskData& td); // with optSearchOption = 2 set of params
