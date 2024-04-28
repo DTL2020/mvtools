@@ -758,7 +758,7 @@ AVSValue __cdecl Create_MTransform(AVSValue args, void*, IScriptEnvironment* env
 {
   return new MTransform(
     args[0].AsClip(), // mvclip
-    args[1].AsInt(0), // mode
+    args[1].AsInt(0), // mode (0 - flip H, 1 - flip V)
     env_ptr
   );
 }

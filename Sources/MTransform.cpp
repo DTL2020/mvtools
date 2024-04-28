@@ -109,7 +109,6 @@ MTransform::MTransform(PClip clip, int _mode, IScriptEnvironment *env)
   int* pEnd = pPlanes + *pPlanes;
   pPlanes += 2;
 
-
   int* pPlane = (int*)(reinterpret_cast<const char*>(pDataSrc) + headerSize);
   if (pPlane[1] == 0) return dst; // Marked invalid 
   int* pSrcPlanes = pPlane + 2;
@@ -118,6 +117,10 @@ MTransform::MTransform(PClip clip, int _mode, IScriptEnvironment *env)
   {
   case 0:
     FlipHorizontal(pSrcPlanes, pPlanes, pEnd, env_ptr);
+    break;
+
+  case 1:
+    FlipVertical(pSrcPlanes, pPlanes, pEnd, env_ptr);
     break;
   }
 
@@ -212,5 +215,92 @@ void MTransform::FlipHorizontal(int* pSrcPlanes, int* pDstPlanes, int* pEnd, ::I
   if (/*pPlanes*/pDstPlanes != pEnd) env_ptr->ThrowError("MTransform: Internal error"); // Debugging check
 
 }
+
+void MTransform::FlipVertical(int* pSrcPlanes, int* pDstPlanes, int* pEnd, ::IScriptEnvironment* env_ptr)
+{
+  // Dimensions of frame covered by blocks (where frame is not exactly divisible by block size there is a small border that will not be motion compensated)
+  int widthCovered = (mVectorsInfo.nBlkSizeX - mVectorsInfo.nOverlapX) * mVectorsInfo.nBlkX + mVectorsInfo.nOverlapX;
+  int heightCovered = (mVectorsInfo.nBlkSizeY - mVectorsInfo.nOverlapY) * mVectorsInfo.nBlkY + mVectorsInfo.nOverlapY;
+
+  // Go through blocks at each level
+  int level = mVectorsInfo.nLvCount - 1; // Start at coarsest level
+  while (level >= 0)
+  {
+    int blocksSize = *pDstPlanes;//*pPlanes;
+    VECTOR* pBlocks = reinterpret_cast<VECTOR*>(/*pPlanes*/pDstPlanes + 1);
+    /*pPlanes*/ pDstPlanes += blocksSize;
+
+    VECTOR* pSrcBlocks = reinterpret_cast<VECTOR*>(pSrcPlanes + 1);
+    pSrcPlanes += blocksSize;
+
+
+    // Width and height of this level in blocks...
+    int levelNumBlocksX = ((widthCovered >> level) - mVectorsInfo.nOverlapX) / (mVectorsInfo.nBlkSizeX - mVectorsInfo.nOverlapX);
+    int levelNumBlocksY = ((heightCovered >> level) - mVectorsInfo.nOverlapY) / (mVectorsInfo.nBlkSizeY - mVectorsInfo.nOverlapY);
+
+    // ... and in pixels
+    int levelWidth = mVectorsInfo.nWidth;
+    int levelHeight = mVectorsInfo.nHeight;
+    for (int i = 1; i <= level; i++)
+    {
+      int xRatioUV = mVectorsInfo.xRatioUV;
+      int yRatioUV = mVectorsInfo.yRatioUV;
+      levelWidth = (mVectorsInfo.nHPadding >= xRatioUV) ? ((levelWidth / xRatioUV + 1) / 2) * xRatioUV : ((levelWidth / xRatioUV) / 2) * xRatioUV;
+      levelHeight = (mVectorsInfo.nVPadding >= yRatioUV) ? ((levelHeight / yRatioUV + 1) / 2) * yRatioUV : ((levelHeight / yRatioUV) / 2) * yRatioUV;
+    }
+    int extendedWidth = levelWidth + 2 * mVectorsInfo.nHPadding; // Including padding
+    int extendedHeight = levelHeight + 2 * mVectorsInfo.nVPadding;
+
+    // Padding is effectively smaller on coarser levels
+    int paddingXScaled = mVectorsInfo.nHPadding >> level;
+    int paddingYScaled = mVectorsInfo.nVPadding >> level;
+
+    // Loop through block positions (top-left of each block, coordinates relative to top-left of padding)
+    int x = mVectorsInfo.nHPadding;
+    int y = mVectorsInfo.nVPadding;
+    int xEnd = x + levelNumBlocksX * (mVectorsInfo.nBlkSizeX - mVectorsInfo.nOverlapX);
+    int yEnd = y + levelNumBlocksY * (mVectorsInfo.nBlkSizeY - mVectorsInfo.nOverlapY);
+
+
+    while (y < yEnd)
+    {
+      // Max/min vector length for this block
+      int yMin = -mVectorsInfo.nPel * (y - mVectorsInfo.nVPadding + paddingYScaled);
+      int yMax = mVectorsInfo.nPel * (extendedHeight - y - mVectorsInfo.nBlkSizeY - mVectorsInfo.nVPadding + paddingYScaled);
+
+      // start from last row of Src rows
+      VECTOR* pSrcRowBlocks = pSrcBlocks + (levelNumBlocksY - 1) * levelNumBlocksX;
+
+      while (x < xEnd)
+      {
+        int xMin = -mVectorsInfo.nPel * (x - mVectorsInfo.nHPadding + paddingXScaled);
+        int xMax = mVectorsInfo.nPel * (extendedWidth - x - mVectorsInfo.nBlkSizeX - mVectorsInfo.nHPadding + paddingXScaled);
+
+        VECTOR vProc = *pSrcRowBlocks;
+        VECTOR vOut;
+
+        vOut.x = vProc.x;
+        vOut.y = 0 - vProc.y;
+        vOut.sad = vProc.sad;
+
+        *pBlocks = vOut;
+
+        pBlocks++;
+        pSrcRowBlocks++;
+
+        // Next block position
+        x += mVectorsInfo.nBlkSizeX - mVectorsInfo.nOverlapX;
+      }
+      x = mVectorsInfo.nHPadding;
+      y += mVectorsInfo.nBlkSizeY - mVectorsInfo.nOverlapY;
+      pSrcBlocks -= levelNumBlocksX;
+    }
+    if (reinterpret_cast<int*>(pBlocks) != /*pPlanes*/ pDstPlanes) env_ptr->ThrowError("MTransform: Internal error"); // Debugging check
+    level--;
+  }
+  if (/*pPlanes*/pDstPlanes != pEnd) env_ptr->ThrowError("MTransform: Internal error"); // Debugging check
+
+}
+
 
 /*\\\ EOF \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*/

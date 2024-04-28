@@ -77,6 +77,8 @@ private:
 
             void FlipHorizontal(int* pSrcPlanes, int* pDstPlanes, int* pEnd, ::IScriptEnvironment* env_ptr);
 
+            void FlipVertical(int* pSrcPlanes, int* pDstPlanes, int* pEnd, ::IScriptEnvironment* env_ptr);
+
 
 };	// class MTransform
 
