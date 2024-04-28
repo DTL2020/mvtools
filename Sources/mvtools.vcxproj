@@ -1160,7 +1160,7 @@
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
-      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions</EnableEnhancedInstructionSet>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -1757,6 +1757,7 @@
     <ClCompile Include="MRestoreVect.cpp" />
     <ClCompile Include="MScaleVect.cpp" />
     <ClCompile Include="MStoreVect.cpp" />
+    <ClCompile Include="MTransform.cpp" />
     <ClCompile Include="MVAnalyse.cpp" />
     <ClCompile Include="MVBlockFps.cpp" />
     <ClCompile Include="MVClip.cpp" />
@@ -1957,6 +1958,7 @@
     <ClInclude Include="MTFlowGraphSched.hpp" />
     <ClInclude Include="MTFlowGraphSimple.h" />
     <ClInclude Include="MTFlowGraphSimple.hpp" />
+    <ClInclude Include="MTransform.h" />
     <ClInclude Include="MTSlicer.h" />
     <ClInclude Include="MTSlicer.hpp" />
     <ClInclude Include="MVAnalyse.h" />

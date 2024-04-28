@@ -46,12 +46,14 @@
 #include "MVSuper.h"
 #include "MAverage.h"
 
+
 // Test & helpers filters
 #include "Padding.h"
 #include "MVFinest.h"
 #include "MRestoreVect.h"
 #include "MScaleVect.h"
 #include "MStoreVect.h"
+#include "MTransform.h"
 
 #include <avisynth.h>
 #include <stdint.h>
@@ -658,8 +660,6 @@ AVSValue __cdecl Create_MVRecalculate(AVSValue args, void*, IScriptEnvironment* 
   );
 }
 
-//    [global]b[pzero]i[pglobal]i
-
 AVSValue __cdecl Create_MVBlockFps(AVSValue args, void*, IScriptEnvironment* env)
 {
   return new MVBlockFps(
@@ -754,6 +754,15 @@ AVSValue __cdecl Create_MAverage(AVSValue args, void*, IScriptEnvironment* env_p
   );
 }
 
+AVSValue __cdecl Create_MTransform(AVSValue args, void*, IScriptEnvironment* env_ptr)
+{
+  return new MTransform(
+    args[0].AsClip(), // mvclip
+    args[1].AsInt(0), // mode
+    env_ptr
+  );
+}
+
 AVSValue __cdecl Create_MRestoreVect(AVSValue args, void*, IScriptEnvironment* env_ptr)
 {
   return new MRestoreVect(
@@ -820,6 +829,7 @@ AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Linkage* const vectors) {
   env->AddFunction("MScaleVect", "c[scale]f[scaleV]f[mode]i[flip]b[adjustSubPel]b[bits]i", Create_MScaleVect, 0);
   //	env->AddFunction("MVFinest",     "c[isse]b", Create_MVFinest, 0);
   env->AddFunction("MAverage", "c+[mode]i", Create_MAverage, 0);
+  env->AddFunction("MTransform", "c[mode]i", Create_MTransform, 0);
   return("MVTools : set of tools based on a motion estimation engine");
 }
 

@@ -147,6 +147,9 @@
     <ClCompile Include="MAverage.cpp">
       <Filter>Filters</Filter>
     </ClCompile>
+    <ClCompile Include="MTransform.cpp">
+      <Filter>Filters</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MDegrainN.h">
@@ -436,6 +439,9 @@
     <ClInclude Include="BlockArea.h" />
     <ClInclude Include="dm_cache.h" />
     <ClInclude Include="MAverage.h">
+      <Filter>Filters</Filter>
+    </ClInclude>
+    <ClInclude Include="MTransform.h">
       <Filter>Filters</Filter>
     </ClInclude>
   </ItemGroup>
