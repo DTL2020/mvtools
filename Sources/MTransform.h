@@ -45,6 +45,8 @@ public:
             GetFrame (int n, ::IScriptEnvironment *env_ptr);
 
 
+  MVAnalysisData mad_dst;
+
 
 /*\\\ PROTECTED \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*/
 
@@ -78,6 +80,10 @@ private:
             void FlipHorizontal(int* pSrcPlanes, int* pDstPlanes, int* pEnd, ::IScriptEnvironment* env_ptr);
 
             void FlipVertical(int* pSrcPlanes, int* pDstPlanes, int* pEnd, ::IScriptEnvironment* env_ptr);
+
+            void TurnLeft(int* pSrcPlanes, int* pDstPlanes, int* pEnd, ::IScriptEnvironment* env_ptr);
+
+            void TurnRight(int* pSrcPlanes, int* pDstPlanes, int* pEnd, ::IScriptEnvironment* env_ptr);
 
 
 };	// class MTransform
