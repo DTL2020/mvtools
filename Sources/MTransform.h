@@ -66,20 +66,7 @@ private:
 
   CHECK_COMPILE_TIME (SizeOfInt, (sizeof (int) == sizeof (int32_t)));
 
-  class VectData
-  {
-  public:
-    ::PClip			_clip_sptr;
-    int				_data_offset;	// int32_t words, based only on width, not pitch
-    int				_data_len;		// int32_t words, same as above.
-  };
-  typedef	std::vector <VectData>	VectArray;
-
-  VectArray		_vect_arr;
-  int				_end_offset;		// int32_t words
   int iMode;
-
-
 
 /*\\\ FORBIDDEN MEMBER FUNCTIONS \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*/
 
