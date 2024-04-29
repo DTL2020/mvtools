@@ -16,6 +16,7 @@
 // http://www.gnu.org/copyleft/gpl.html .
 
 #include "DisMetric.h"
+#include "Math.h"
 
 DisMetric::DisMetric(int iBlkSizeX, int iBlkSizeY, int iBPP, int _pixelsize, arch_t _arch, int metric_flags)
 {
@@ -39,6 +40,11 @@ DisMetric::DisMetric(int iBlkSizeX, int iBlkSizeY, int iBPP, int _pixelsize, arc
   if (metric_flags & MEF_SSIM_CS)
   {
     SSIM_CS = get_ssim_function_cs(nBlkSizeX, nBlkSizeY, nBPP, arch);
+  }
+
+  if (metric_flags & MEF_SSIM_S)
+  {
+    SSIM_S = get_ssim_function_s(nBlkSizeX, nBlkSizeY, nBPP, arch);
   }
 
   if ((metric_flags & MEF_SSIM_CS) && (metric_flags & MEF_SSIM_L))
@@ -96,7 +102,17 @@ int DisMetric::GetDisMetric(const uint8_t* pSrc, int nSrcPitch, const uint8_t* p
 
   if ((nMetricFlags & MEF_SSIM_CS) && !(nMetricFlags & MEF_SSIM_L))
   {
+/*    float fCSpos_SADnorm = ((1.0f - SSIM_CS(pSrc, nSrcPitch, pRef, nRefPitch)) * (float)(maxSAD >> 1));
+    float fnorm = fCSpos_SADnorm /(float)maxSAD; // norm to 0..1
+    float fpc = powf(fnorm, 1.0f);
+    iRetDisMetric += (int)(fpc * (float)maxSAD * 0.04f);*/
+
     iRetDisMetric += (int)(((1.0f - SSIM_CS(pSrc, nSrcPitch, pRef, nRefPitch)) * (float)(maxSAD >> 1)) * 0.04f); // SSIM may be low as -1.0f
+  }
+
+  if (nMetricFlags & MEF_SSIM_S)
+  {
+    iRetDisMetric += (int)(((1.0f - SSIM_S(pSrc, nSrcPitch, pRef, nRefPitch)) * (float)(maxSAD >> 1)) * 0.04f); // SSIM may be low as -1.0f
   }
 
   if ((nMetricFlags & MEF_SSIM_CS) && (nMetricFlags & MEF_SSIM_L))

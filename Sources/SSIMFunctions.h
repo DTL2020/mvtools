@@ -33,6 +33,8 @@ SSIMFunction* get_ssim_function_l(int BlockX, int BlockY, int bits_per_pixel, ar
 
 SSIMFunction* get_ssim_function_cs(int BlockX, int BlockY, int bits_per_pixel, arch_t arch);
 
+SSIMFunction* get_ssim_function_s(int BlockX, int BlockY, int bits_per_pixel, arch_t arch);
+
 SSIMFunction* get_ssim_function_full(int BlockX, int BlockY, int bits_per_pixel, arch_t arch);
 
 float mvt_ssim_full_4x4_8_avx2(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);

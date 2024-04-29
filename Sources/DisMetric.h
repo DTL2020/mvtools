@@ -31,13 +31,14 @@
 #include "COVARFunctions.h"
 
 enum {
-  MEF_SAD = 0x01,       // SAD
-  MEF_SSIM_L = 0x02,    // SSIM luma
-  MEF_SSIM_CS = 0x04,   // SSIM contrast and structure
-  MEF_MS_SSIM = 0x08,   // MS-SSIM (multi-scale SSIM)
-  MEF_VIFA_DWT = 0x10,  // VIF DWT Approximation  
-  MEF_VIFE_DWT = 0x20,  // VIF DWT Edges
-  MEF_COVAR = 0x40      // covariance only
+  MEF_SAD = 0x01,       // 1, SAD
+  MEF_SSIM_L = 0x02,    // 2, SSIM luma only
+  MEF_SSIM_CS = 0x04,   // 4, SSIM contrast and structure only
+  MEF_MS_SSIM = 0x08,   // 8, MS-SSIM (multi-scale SSIM)
+  MEF_VIFA_DWT = 0x10,  // 16, VIF DWT Approximation  
+  MEF_VIFE_DWT = 0x20,  // 32, VIF DWT Edges
+  MEF_COVAR = 0x40,      // 64, covariance only
+  MEF_SSIM_S = 0x80      // 128, SSIM structure only
 };
 
 
@@ -47,6 +48,7 @@ class DisMetric
 
   SSIMFunction* SSIM_L; /* function which computes the SSIM luma only */
   SSIMFunction* SSIM_CS; /* function which computes the SSIM contrast and structure */
+  SSIMFunction* SSIM_S; /* function which computes the SSIM structure */
   SSIMFunction* SSIM_FULL; /* function which computes the SSIM full components (luma and contrast and structure) */
 
   VIFFunction* VIF_A; /* function which computes the VIF DWT Approximation subband only */
@@ -69,8 +71,6 @@ public:
 
 int GetDisMetric(const uint8_t* pSrc, int nSrcPitch, const uint8_t* pRef, int nRefPitch);
 };
-
-
 
 
 #endif	// __MV_DisMetric__

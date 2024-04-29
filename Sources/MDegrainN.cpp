@@ -765,7 +765,7 @@ MDegrainN::MDegrainN(
   int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, PClip _dnmask,
   float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm, int _MVF_fm,
   int _MGR, int _MGR_sr, int _MGR_st, int _MGR_pm,
-  int _LtComp,
+  int _LtComp, int _NEW_DMFlags,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -856,6 +856,7 @@ MDegrainN::MDegrainN(
   , iMGR_st(_MGR_st)
   , iMGR_pm(_MGR_pm)
   , iLtComp(_LtComp)
+  , iNEW_DMFlags(_NEW_DMFlags)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -1234,6 +1235,11 @@ MDegrainN::MDegrainN(
   DM_TTH_Luma = new DisMetric(nBlkSizeX, nBlkSizeY, bits_per_pixel, pixelsize, arch, TTH_DMFlags);
   DM_TTH_Chroma = new DisMetric(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits_per_pixel, pixelsize, arch, TTH_DMFlags);
 
+  if (iNEW_DMFlags != 0)
+  {
+    DM_NEW_Luma = new DisMetric(nBlkSizeX, nBlkSizeY, bits_per_pixel, pixelsize, arch, iNEW_DMFlags);
+    DM_NEW_Chroma = new DisMetric(nBlkSizeX / xRatioUV, nBlkSizeY / yRatioUV, bits_per_pixel, pixelsize, arch, iNEW_DMFlags);
+  }
 
 // C only -> NO_SIMD
   _oversluma_lsb_ptr = get_overlaps_lsb_function(nBlkSizeX, nBlkSizeY, sizeof(uint8_t), NO_SIMD);
@@ -4358,7 +4364,12 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
     int idx_mvto = (_trad - k - 1) * 2 + 1;
 
     if (vLPFed.sad != veryBigSAD)
-      vLPFed.sad = CheckSAD(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
+    {
+      if (iNEW_DMFlags == 0)
+        vLPFed.sad = CheckSAD(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
+      else
+        vLPFed.sad = GetDM(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
+    }
     // else - block invalidated - do not recheck sad again
 
     vOrig = pMVsWorkPlanesArrays[(_trad - k - 1) * 2 + 1][i];
@@ -4390,7 +4401,12 @@ MV_FORCEINLINE void MDegrainN::FilterBlkMVs(int i, int bx, int by)
     int idx_mvto = (k - 1) * 2;
 
     if (vLPFed.sad != veryBigSAD)
-      vLPFed.sad = CheckSAD(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
+    {
+      if (iNEW_DMFlags == 0)
+        vLPFed.sad = CheckSAD(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
+      else
+        vLPFed.sad = GetDM(bx, by, idx_mvto, vLPFed.x, vLPFed.y);
+    }
     //else - block invalidated - do not recheck sad
 
     vOrig = pMVsWorkPlanesArrays[(k - 1) * 2][i];
@@ -4925,7 +4941,10 @@ void MDegrainN::InterpolateOverlap_4x(VECTOR* pInterpolatedMVs, const VECTOR* pI
           // re-check SAD always
           pInterpolatedMVs[i].x = pInputMVs[j].x;
           pInterpolatedMVs[i].y = pInputMVs[j].y;
-          pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, pInputMVs[j].x, pInputMVs[j].y);
+          if (iNEW_DMFlags == 0)
+            pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, pInputMVs[j].x, pInputMVs[j].y);
+          else
+            pInterpolatedMVs[i].sad = GetDM(bx, by, idx, pInputMVs[j].x, pInputMVs[j].y);
         }
         else
           pInterpolatedMVs[i] = pInputMVs[j];
@@ -4938,7 +4957,12 @@ void MDegrainN::InterpolateOverlap_4x(VECTOR* pInterpolatedMVs, const VECTOR* pI
         pInterpolatedMVs[i].y = bly;
         // update SAD
         if (iInterpolateOverlap == 1)
-          pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly); // better quality - slower
+        {
+          if (iNEW_DMFlags == 0)
+            pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly); // better quality - slower
+          else
+            pInterpolatedMVs[i].sad = GetDM(bx, by, idx, blx, bly); // better quality - slower
+        }
         else
           pInterpolatedMVs[i].sad = (pInputMVs[j].sad + pInputMVs[j + 1].sad) / 2; // faster mode
 
@@ -4966,7 +4990,12 @@ void MDegrainN::InterpolateOverlap_4x(VECTOR* pInterpolatedMVs, const VECTOR* pI
       pInterpolatedMVs[i].y = bly;
       // update SAD
       if (iInterpolateOverlap == 1)
-        pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly); // better quality - slower
+      {
+        if (iNEW_DMFlags == 0)
+          pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly); // better quality - slower
+        else
+          pInterpolatedMVs[i].sad = GetDM(bx, by, idx, blx, bly); // better quality - slower
+      }
       else
         pInterpolatedMVs[i].sad = (pInterpolatedMVs[j].sad + pInterpolatedMVs[j + nBlkX * 2].sad) / 2; // faster mode
 
@@ -5005,7 +5034,10 @@ void MDegrainN::InterpolateOverlap_2x(VECTOR* pInterpolatedMVs, const VECTOR* pI
           // re-check SAD always
           pInterpolatedMVs[i].x = pInputMVs[j].x;
           pInterpolatedMVs[i].y = pInputMVs[j].y;
-          pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, pInputMVs[j].x, pInputMVs[j].y);
+          if (iNEW_DMFlags == 0)
+            pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, pInputMVs[j].x, pInputMVs[j].y);
+          else
+            pInterpolatedMVs[i].sad = GetDM(bx, by, idx, pInputMVs[j].x, pInputMVs[j].y);
         }
         else
           pInterpolatedMVs[i] = pInputMVs[j];
@@ -5025,7 +5057,12 @@ void MDegrainN::InterpolateOverlap_2x(VECTOR* pInterpolatedMVs, const VECTOR* pI
         pInterpolatedMVs[i].y = bly;
         // update SAD
         if (iInterpolateOverlap == 3)
-          pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly); // better quality - slower
+        {
+          if (iNEW_DMFlags == 0)
+            pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly); // better quality - slower
+          else
+            pInterpolatedMVs[i].sad = GetDM(bx, by, idx, blx, bly); // better quality - slower
+        }
         else // == 4
           pInterpolatedMVs[i].sad = (pInputMVs[j].sad + pInputMVs[j + nInputBlkX].sad ) / 2; // faster mode
 
@@ -5038,7 +5075,12 @@ void MDegrainN::InterpolateOverlap_2x(VECTOR* pInterpolatedMVs, const VECTOR* pI
       pInterpolatedMVs[i].y = bly;
       // update SAD
       if (iInterpolateOverlap == 3)
-        pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly); // better quality - slower
+      {
+        if (iNEW_DMFlags == 0)
+          pInterpolatedMVs[i].sad = CheckSAD(bx, by, idx, blx, bly); // better quality - slower
+        else
+          pInterpolatedMVs[i].sad = GetDM(bx, by, idx, blx, bly); // better quality - slower
+      }
       else // == 4
         pInterpolatedMVs[i].sad = (pInputMVs[j].sad + pInputMVs[j + 1].sad + pInputMVs[j + nInputBlkX].sad + pInputMVs[j + nInputBlkX + 1].sad) / 4; // faster mode
 
@@ -5139,6 +5181,97 @@ MV_FORCEINLINE sad_t MDegrainN::CheckSAD(int bx_src, int by_src, int ref_idx, in
 
   return sad_out;
 }
+
+MV_FORCEINLINE sad_t MDegrainN::GetDM(int bx_src, int by_src, int ref_idx, int dx_ref, int dy_ref)
+{
+  sad_t dm_out;
+
+  if (!_usable_flag_arr[ref_idx]) // nothing to process
+  {
+    return veryBigSAD;
+  }
+
+  const int  rowsize = nBlkSizeY - nOverlapY; // num of lines in row of blocks = block height - overlap ?
+  const BYTE* pSrcCur = _src_ptr_arr[0];
+  const BYTE* pSrcCurU = _src_ptr_arr[1];
+  const BYTE* pSrcCurV = _src_ptr_arr[2];
+
+  pSrcCur += by_src * (rowsize * _src_pitch_arr[0]);
+
+  const int effective_nSrcPitch = ((nBlkSizeY - nOverlapY) >> nLogyRatioUV_super)* _src_pitch_arr[1]; // pitch is byte granularity, from 1st chroma plane
+
+  pSrcCurU += by_src * (effective_nSrcPitch);
+  pSrcCurV += by_src * (effective_nSrcPitch);
+
+  const int xx = bx_src * (nBlkSizeX - nOverlapX); // xx: indexing offset, - overlap ?
+  const int xx_uv = bx_src * ((nBlkSizeX - nOverlapX) >> nLogxRatioUV_super); // xx_uv: indexing offset
+
+  bool bChroma = (_nsupermodeyuv & UPLANE) && (_nsupermodeyuv & VPLANE); // chroma present in super clip ?
+// scaleCSAD in the MVclip props
+  int chromaSADscale = _mv_clip_arr[0]._clip_sptr->chromaSADScale; // from 1st ?
+
+  const uint8_t* pRef;
+  int npitchRef;
+
+  int blx = bx_src * (nBlkSizeX - nOverlapX) * nPel + dx_ref;
+  int bly = by_src * (nBlkSizeY - nOverlapY) * nPel + dy_ref;
+
+  ClipBlxBly
+
+    if (nPel != 1 && nUseSubShift != 0)
+    {
+      pRef = _planes_ptr[ref_idx][0]->GetPointerSubShift(blx, bly, npitchRef);
+    }
+    else
+    {
+      pRef = _planes_ptr[ref_idx][0]->GetPointer(blx, bly);
+      npitchRef = _planes_ptr[ref_idx][0]->GetPitch();
+    }
+
+  sad_t dm_chroma = 0;
+
+  if (bChroma)
+  {
+    const uint8_t* pRefU;
+    const uint8_t* pRefV;
+    int npitchRefU, npitchRefV;
+
+    if (/*nPel != 1 && */nUseSubShift != 0)
+    {
+      if (nLogxRatioUV_super == 1) blx++; // add bias for integer division for 4:2:x formats
+      if (nLogyRatioUV_super == 1) bly++; // add bias for integer division for 4:2:x formats
+      pRefU = _planes_ptr[ref_idx][1]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefU);
+      pRefV = _planes_ptr[ref_idx][2]->GetPointerSubShift(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super, npitchRefV);
+      //      pRefU = _planes_ptr[ref_idx][1]->GetPointerSubShiftUV(blx, bly, npitchRefU, nLogxRatioUV_super, nLogyRatioUV_super);
+      //      pRefV = _planes_ptr[ref_idx][2]->GetPointerSubShiftUV(blx, bly, npitchRefV, nLogxRatioUV_super, nLogyRatioUV_super);
+    }
+    else
+    {
+      if (nLogxRatioUV_super == 1) blx++; // add bias for integer division for 4:2:x formats
+      if (nLogyRatioUV_super == 1) bly++; // add bias for integer division for 4:2:x formats
+      pRefU = _planes_ptr[ref_idx][1]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
+      npitchRefU = _planes_ptr[ref_idx][1]->GetPitch();
+      pRefV = _planes_ptr[ref_idx][2]->GetPointer(blx >> nLogxRatioUV_super, bly >> nLogyRatioUV_super);
+      npitchRefV = _planes_ptr[ref_idx][2]->GetPitch();
+    }
+
+    dm_chroma = ScaleSadChroma(DM_NEW_Chroma->GetDisMetric(pSrcCurU + (xx_uv << pixelsize_super_shift), _src_pitch_arr[1], pRefU, npitchRefU)
+      + DM_NEW_Chroma->GetDisMetric(pSrcCurV + (xx_uv << pixelsize_super_shift), _src_pitch_arr[2], pRefV, npitchRefV), chromaSADscale);
+
+    sad_t luma_dm = DM_NEW_Luma->GetDisMetric(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
+
+    dm_out = luma_dm + dm_chroma;
+
+  }
+  else
+  {
+    dm_out = DM_NEW_Luma->GetDisMetric(pSrcCur + (xx << pixelsize_super_shift), _src_pitch_arr[0], pRef, npitchRef);
+  }
+
+  return dm_out;
+}
+
+
 
 MV_FORCEINLINE void MDegrainN::ProcessRSMVdata(void)
 {

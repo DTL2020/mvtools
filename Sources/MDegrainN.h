@@ -68,7 +68,7 @@ public:
     int _MPB_MVlth, int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, ::PClip _dnmask,
     float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm, int _MVF_fm,
     int _MGR, int _MGR_sr, int _MGR_st, int _MGR_pm,
-    int _LtComp,
+    int _LtComp, int _NEW_DMFlags,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -260,6 +260,7 @@ private:
   const uint8_t* pFilteredMVsPlanesArrays_a[MAX_TEMP_RAD * 2]; // pointers to aligned memory pages to free
   SADFunction* SAD;              /* function which computes the sad */
   SADFunction* SADCHROMA;
+  int iNEW_DMFlags;
 
 
   // Multi-generation MVs refining
@@ -339,6 +340,9 @@ private:
   DisMetric* DM_TTH_Luma;
   DisMetric* DM_TTH_Chroma;
 
+  DisMetric* DM_NEW_Luma;
+  DisMetric* DM_NEW_Chroma;
+
   bool bthLC_diff;
 
   int iInterpolateOverlap;
@@ -356,6 +360,8 @@ private:
   const uint8_t* pMVsIntOvlpPlanesArraysVS_a[MAX_TEMP_RAD * 2]; // pointers to aligned memory pages to free
   sad_t veryBigSAD;
   MV_FORCEINLINE sad_t CheckSAD(int bx_src, int by_src, int ref_idx, int dx_ref, int dy_ref);
+
+  MV_FORCEINLINE sad_t GetDM(int bx_src, int by_src, int ref_idx, int dx_ref, int dy_ref);
 
   int nUseSubShift;
   int iMaxBlx; // max blx for GetPointer*()
