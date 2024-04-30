@@ -22,7 +22,7 @@
 #include  <stdint.h>
 #include  "commonfunctions.h"
 
-float DiamondAngle(int y, int x)
+MV_FORCEINLINE float DiamondAngle(int y, int x)
 {
   if ((x + y) == 0 || (y - x) == 0 || (-y - x) == 0 || (x - y) == 0)
     return 0;
@@ -39,6 +39,28 @@ float DiamondAngle(int y, int x)
     return (x >= 0 ? fy / (fx + fy) : 1 - fx / (-fx + fy));
   else
     return (x < 0 ? 2 - fy / (-fx - fy) : 3 + fx / (fx - fy));
+
+}
+
+MV_FORCEINLINE float fDiffAngleVect(int x1, int y1, int x2, int y2)
+{
+  float fResult = 0.0f;
+  // check if any of 2 input vectors is zero vector - return 0
+  if ((x1 == 0) && (y1 == 0) || (x2 == 0) && (y2 == 0))
+    return 0.0f;
+
+  int iUpper = x1 * x2 + y1 * y2;
+
+  if (iUpper > 0)
+  {
+    fResult = 1.0f - ((float)(iUpper * iUpper) / (float((x1 * x1 + y1 * y1) * (x2 * x2 + y2 * y2))));
+  }
+  else
+  {
+    fResult = 1.0f + ((float)(iUpper * iUpper) / (float((x1 * x1 + y1 * y1) * (x2 * x2 + y2 * y2))));
+  }
+
+  return fResult;
 
 }
 
@@ -4473,10 +4495,24 @@ MV_FORCEINLINE void MDegrainN::ProcessMVMedF(VECTOR* pVin, VECTOR* pVout)
         MedF_vect[kpos] = pVin[src_pos];
       }
 
-      if (iMVMedF_cm == 0)
-        MVMedF_xy(&MedF_vect[0], &vOut);
-      else
-        MVMedF_vl(&MedF_vect[0], &vOut);
+      switch (iMVMedF_cm)
+      {
+        case 0:
+          MVMedF_xy(&MedF_vect[0], &vOut);
+          break;
+        case 1:
+          MVMedF_vl(&MedF_vect[0], &vOut);
+          break;
+        case 2:
+          MVMedF_vad(&MedF_vect[0], &vOut);
+          break;
+        case 3:
+          MVMedF_mg(&MedF_vect[0], &vOut);
+          break;
+        case 4:
+          MVMedF_IQM(&MedF_vect[0], &vOut);
+          break;
+      }
     }
     else // non-processed edges
     {
@@ -4578,6 +4614,158 @@ MV_FORCEINLINE void MDegrainN::MVMedF_vl(VECTOR* pVin, VECTOR* pVout)
   
 }
 
+MV_FORCEINLINE void MDegrainN::MVMedF_vad(VECTOR* pVin, VECTOR* pVout)
+{
+  // process dual coords in scalar C ?
+  const int iMaxAngDiff = 3; // hope it is enough ? 
+  int MaxSumDM = iMVMedF * iMaxAngDiff;
+
+  // find lowest sum of row in DM_table and index of row in single DM scan with DM calc
+  float sum_minrow = (float)MaxSumDM;
+  int i_idx_minrow = 0;
+
+  for (int dmt_row = 0; dmt_row < (iMVMedF * 2 + 1); dmt_row++)
+  {
+    float sum_row = 0;
+
+    for (int dmt_col = 0; dmt_col < (iMVMedF * 2 + 1); dmt_col++)
+    {
+      if (dmt_row == dmt_col)
+      { // with itself => DM=0
+        continue;
+      }
+
+      //difference vector angle
+      sum_row += fDiffAngleVect(pVin[dmt_row].x, pVin[dmt_row].y, pVin[dmt_col].x, pVin[dmt_col].y);
+    }
+
+    if (sum_row < sum_minrow)
+    {
+      sum_minrow = sum_row;
+      i_idx_minrow = dmt_row;
+    }
+
+  }
+
+  pVout[0].x = pVin[i_idx_minrow].x;
+  pVout[0].y = pVin[i_idx_minrow].y;
+  pVout[0].sad = pVin[i_idx_minrow].sad;
+
+}
+
+MV_FORCEINLINE void MDegrainN::MVMedF_mg(VECTOR* pVin, VECTOR* pVout)
+{
+  const int test_steps_dx[] = { -1, 0, 1, 0 };
+  const int test_steps_dy[] = { 0, 1, 0, -1 };
+
+  VECTOR_XY vGMedian;
+  int iMinDist = 0;
+
+  // need to estimate max radius of vectors area ?
+  int iStep = 4 * nPel; // 16 max for pel=4, need to be lower at high levels ?
+
+  // first estimation - center of gravity
+  int iMeanX = 0;
+  int iMeanY = 0;
+  for (int i = 0; i < iMVMedF; i++)
+  {
+    iMeanX += pVin[i].x;
+    iMeanY += pVin[i].y;
+  }
+
+  vGMedian.x = (iMeanX + (iMVMedF >> 1)) / iMVMedF;
+  vGMedian.y = (iMeanY + (iMVMedF >> 1)) / iMVMedF;
+
+  // init iMinDist with first estimate
+  for (int i = 0; i < iMVMedF; i++)
+  {
+    iMinDist += (pVin[i].x - vGMedian.x) * (pVin[i].x - vGMedian.x) + (pVin[i].y - vGMedian.y) * (pVin[i].y - vGMedian.y);
+  }
+
+  if (iMinDist > 0)
+  {
+    while (iStep > 0)
+    {
+      bool bDone = false;
+      for (int i = 0; i < 4; ++i)
+      {
+        VECTOR_XY vToCheck;
+        vToCheck.x = vGMedian.x + iStep * test_steps_dx[i];
+        vToCheck.y = vGMedian.y + iStep * test_steps_dy[i];
+
+        int iCheckedSum = 0;
+        for (int i = 0; i < iMVMedF; i++)
+        {
+          iCheckedSum += (pVin[i].x - vToCheck.x) * (pVin[i].x - vToCheck.x) + (pVin[i].y - vToCheck.y) * (pVin[i].y - vToCheck.y);
+        }
+
+        if (iCheckedSum < iMinDist)
+        {
+          iMinDist = iCheckedSum;
+          vGMedian = vToCheck;
+
+          bDone = true;
+          break;
+        }
+      }
+
+      if (!bDone)
+        iStep /= 2;
+    }
+  }// if iMinDist > 0
+
+  pVout[0].x = vGMedian.x;
+  pVout[0].y = vGMedian.y;
+  pVout[0].sad = veryBigSAD; // invalidate - need re-check if used later
+
+}
+
+MV_FORCEINLINE void MDegrainN::MVMedF_IQM(VECTOR* pVin, VECTOR* pVout)
+{
+  int vX[MAX_TEMP_RAD * 2 + 1];
+  int vY[MAX_TEMP_RAD * 2 + 1];
+
+  // copy to temp vectors
+  for (int i = 0; i < iMVMedF; i++)
+  {
+    vX[i] = pVin[i].x;
+    vY[i] = pVin[i].y;
+  }
+
+  // make ordering sort
+  std::sort(vX, vX + iMVMedF);
+  std::sort(vY, vY + iMVMedF);
+
+  if (iMVMedF < 4) // 3 possible ?
+  {
+    pVout[0].x = vX[1];
+    pVout[0].y = vY[1];
+    pVout[0].sad = pVin[1].sad;
+  }
+  else
+  {
+    int qStart = (iMVMedF + 1) / 4; // do we want bias here ?
+    int qEnd = iMVMedF - ((iMVMedF + 1) / 4);
+
+    int iXmean = 0;
+    int iYmean = 0;
+    for (int i = qStart; i < qEnd; i++)
+    {
+      iXmean += vX[i];
+      iYmean += vY[i];
+    }
+    int iBias = (qEnd - qStart) / 2;
+
+    iXmean = (iXmean + iBias) / (qEnd - qStart);
+    iYmean = (iYmean + iBias) / (qEnd - qStart);
+
+    pVout[0].x = iXmean;
+    pVout[0].y = iYmean;
+  }
+
+  pVout[0].sad = veryBigSAD; // invalidate - need re-check if used later
+
+}
 
 MV_FORCEINLINE void MDegrainN::PrefetchMVs(int i)
 {

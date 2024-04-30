@@ -253,8 +253,13 @@ private:
   float fMVLPFKernel[MVLPFKERNELSIZE];// 10+1 odd numbered
   MV_FORCEINLINE void ProcessMVLPF(VECTOR* pVin, VECTOR* pVout);
   MV_FORCEINLINE void ProcessMVMedF(VECTOR* pVin, VECTOR* pVout);
+
   MV_FORCEINLINE void MVMedF_xy(VECTOR* pVin, VECTOR* pVout);
   MV_FORCEINLINE void MVMedF_vl(VECTOR* pVin, VECTOR* pVout);
+  MV_FORCEINLINE void MVMedF_vad(VECTOR* pVin, VECTOR* pVout);
+  MV_FORCEINLINE void MVMedF_mg(VECTOR* pVin, VECTOR* pVout);
+  MV_FORCEINLINE void MVMedF_IQM(VECTOR* pVin, VECTOR* pVout);
+  
 
   VECTOR* pFilteredMVsPlanesArrays[MAX_TEMP_RAD * 2];
   const uint8_t* pFilteredMVsPlanesArrays_a[MAX_TEMP_RAD * 2]; // pointers to aligned memory pages to free

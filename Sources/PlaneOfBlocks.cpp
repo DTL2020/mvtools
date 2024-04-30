@@ -1303,7 +1303,7 @@ MV_FORCEINLINE void PlaneOfBlocks::GetMedoidVECTORvad(VECTOR* toMedian, VECTOR* 
 
   for (int dmt_row = 0; dmt_row < iNumMVs; dmt_row++)
   {
-    int sum_row = 0;
+    float sum_row = 0;
 
     for (int dmt_col = 0; dmt_col < iNumMVs; dmt_col++)
     {
@@ -1458,8 +1458,8 @@ MV_FORCEINLINE void PlaneOfBlocks::Get_IQM_VECTORxy(VECTOR* toMedian, VECTOR* vO
   }
 
   // make ordering sort
-  std::sort(vX, vX + (iNumMVs - 0));
-  std::sort(vY, vY + (iNumMVs - 0));
+  std::sort(vX, vX + iNumMVs);
+  std::sort(vY, vY + iNumMVs);
 
   if (iNumMVs < 4) // 3 possible ?
   {

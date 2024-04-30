@@ -577,9 +577,9 @@ AVSValue __cdecl Create_MDegrainN(AVSValue args, void*, IScriptEnvironment* env)
     args[49].AsClip(), // dnmask - Y8 (?) mask clip to control ref frames additional weight (to reduce degrain at masked blocks or samples ? (depend on mask clip frame size ?))
     args[50].AsFloat(0), // thSADA_a - a-param (multiplier) of auto-thSAD calculation
     args[51].AsFloat(0), // thSADA_b - b-param (additive) of auto-thSAD calculation
-    args[52].AsInt(0), // MVDedF - MV Median-like filterting radius, 0 - default disabled
+    args[52].AsInt(0), // MVMedF - MV Median-like filterting radius, 0 - default disabled
     args[53].AsInt(0), // MVMedF_em - MV Median-like filterting temporal edges processing mode: 0 - use all edge MVs, 1 - skip non-filtered MVs (invalidate SAD)
-    args[54].AsInt(0), // MVMedF_cm - MV Median-like filterting temporal coordinates processing mode: 0 - use separated x,y filtering, 1 - use vector length dismetric
+    args[54].AsInt(0), // MVMedF_cm - MV Median-like filterting temporal coordinates processing mode: 0 - separated x,y, 1 - vector length diff, 2 - vectors angle diff, 3 - geometric median, 4 - IQM
     args[55].AsInt(0), // MVF_fm - MV filtering blocks fail mode: 0 - pass blocks with too bad filtered MVs SADs to blending, 1 - invalidate blocks with too bad filtered MVs SADs (skip from blending)
     args[56].AsInt(0), // MGR - multi-generation MVs refining processing. Integer number of additional refining generations. 0 - disabled.
     args[57].AsInt(0), // MGR_sr - search radius
