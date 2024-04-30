@@ -4667,17 +4667,17 @@ MV_FORCEINLINE void MDegrainN::MVMedF_mg(VECTOR* pVin, VECTOR* pVout)
   // first estimation - center of gravity
   int iMeanX = 0;
   int iMeanY = 0;
-  for (int i = 0; i < iMVMedF; i++)
+  for (int i = 0; i < (iMVMedF * 2 + 1); i++)
   {
     iMeanX += pVin[i].x;
     iMeanY += pVin[i].y;
   }
 
-  vGMedian.x = (iMeanX + (iMVMedF >> 1)) / iMVMedF;
-  vGMedian.y = (iMeanY + (iMVMedF >> 1)) / iMVMedF;
+  vGMedian.x = (iMeanX + ((iMVMedF * 2 + 1) >> 1)) / (iMVMedF * 2 + 1);
+  vGMedian.y = (iMeanY + ((iMVMedF * 2 + 1) >> 1)) / (iMVMedF * 2 + 1);
 
   // init iMinDist with first estimate
-  for (int i = 0; i < iMVMedF; i++)
+  for (int i = 0; i < (iMVMedF * 2 + 1); i++)
   {
     iMinDist += (pVin[i].x - vGMedian.x) * (pVin[i].x - vGMedian.x) + (pVin[i].y - vGMedian.y) * (pVin[i].y - vGMedian.y);
   }
@@ -4694,7 +4694,7 @@ MV_FORCEINLINE void MDegrainN::MVMedF_mg(VECTOR* pVin, VECTOR* pVout)
         vToCheck.y = vGMedian.y + iStep * test_steps_dy[i];
 
         int iCheckedSum = 0;
-        for (int i = 0; i < iMVMedF; i++)
+        for (int i = 0; i < (iMVMedF * 2 + 1); i++)
         {
           iCheckedSum += (pVin[i].x - vToCheck.x) * (pVin[i].x - vToCheck.x) + (pVin[i].y - vToCheck.y) * (pVin[i].y - vToCheck.y);
         }
@@ -4716,7 +4716,7 @@ MV_FORCEINLINE void MDegrainN::MVMedF_mg(VECTOR* pVin, VECTOR* pVout)
 
   pVout[0].x = vGMedian.x;
   pVout[0].y = vGMedian.y;
-  pVout[0].sad = veryBigSAD; // invalidate - need re-check if used later
+  pVout[0].sad = 0; 
 
 }
 
@@ -4726,17 +4726,17 @@ MV_FORCEINLINE void MDegrainN::MVMedF_IQM(VECTOR* pVin, VECTOR* pVout)
   int vY[MAX_TEMP_RAD * 2 + 1];
 
   // copy to temp vectors
-  for (int i = 0; i < iMVMedF; i++)
+  for (int i = 0; i < (iMVMedF * 2 + 1); i++)
   {
     vX[i] = pVin[i].x;
     vY[i] = pVin[i].y;
   }
 
   // make ordering sort
-  std::sort(vX, vX + iMVMedF);
-  std::sort(vY, vY + iMVMedF);
+  std::sort(vX, vX + (iMVMedF * 2 + 1));
+  std::sort(vY, vY + (iMVMedF * 2 + 1));
 
-  if (iMVMedF < 4) // 3 possible ?
+  if ((iMVMedF * 2 + 1) < 4) // 3 possible ?
   {
     pVout[0].x = vX[1];
     pVout[0].y = vY[1];
@@ -4744,8 +4744,8 @@ MV_FORCEINLINE void MDegrainN::MVMedF_IQM(VECTOR* pVin, VECTOR* pVout)
   }
   else
   {
-    int qStart = (iMVMedF + 1) / 4; // do we want bias here ?
-    int qEnd = iMVMedF - ((iMVMedF + 1) / 4);
+    int qStart = ((iMVMedF * 2 + 1) + 1) / 4; // do we want bias here ?
+    int qEnd = (iMVMedF * 2 + 1) - (((iMVMedF * 2 + 1) + 1) / 4);
 
     int iXmean = 0;
     int iYmean = 0;
@@ -4763,7 +4763,7 @@ MV_FORCEINLINE void MDegrainN::MVMedF_IQM(VECTOR* pVin, VECTOR* pVout)
     pVout[0].y = iYmean;
   }
 
-  pVout[0].sad = veryBigSAD; // invalidate - need re-check if used later
+  pVout[0].sad = 0; 
 
 }
 
