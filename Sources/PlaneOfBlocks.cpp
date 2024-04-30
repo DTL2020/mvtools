@@ -2322,56 +2322,59 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
   // Global MV predictor  - added by Fizick
   workarea.globalMVPredictor = ClipMV(workarea, workarea.globalMVPredictor);
 
-  //	if ( workarea.IsVectorOK(workarea.globalMVPredictor.x, workarea.globalMVPredictor.y ) )
+  if (!IsVectorChecked((uint64_t)workarea.globalMVPredictor.x | ((uint64_t)workarea.globalMVPredictor.y << 32)))
   {
-    if (!IsVectorChecked((uint64_t)workarea.globalMVPredictor.x | ((uint64_t)workarea.globalMVPredictor.y << 32)))
-    {
-      sad = GetDM<pixel_t>(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y);
-      cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
+    sad = GetDM<pixel_t>(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y);
+    cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
 
-      if (cost < workarea.nMinCost || tryMany)
-      {
-        workarea.bestMV.x = workarea.globalMVPredictor.x;
-        workarea.bestMV.y = workarea.globalMVPredictor.y;
-        workarea.bestMV.sad = sad;
-        workarea.nMinCost = cost;
-      }
-      if (tryMany)
-      {
-        // refine around global
-        Refine<pixel_t>(workarea);    // reset bestMV
-        bestMVMany[1] = workarea.bestMV;    // save bestMV
-        nMinCostMany[1] = workarea.nMinCost;
-      }
+    if (cost < workarea.nMinCost || tryMany)
+    {
+      workarea.bestMV.x = workarea.globalMVPredictor.x;
+      workarea.bestMV.y = workarea.globalMVPredictor.y;
+      workarea.bestMV.sad = sad;
+      workarea.nMinCost = cost;
     }
-    //	}
-    //	Then, the predictor :
-    //	if (   (( workarea.predictor.x != zeroMVfieldShifted.x ) || ( workarea.predictor.y != zeroMVfieldShifted.y ))
-    //	    && (( workarea.predictor.x != workarea.globalMVPredictor.x ) || ( workarea.predictor.y != workarea.globalMVPredictor.y )))
-    //	{
-    if (!IsVectorChecked((uint64_t)workarea.predictor.x | ((uint64_t)workarea.predictor.y << 32)))
+    if (tryMany)
     {
-      sad = GetDM<pixel_t>(workarea, workarea.predictor.x, workarea.predictor.y);
-      cost = sad;
+      // refine around global
+      Refine<pixel_t>(workarea);    // reset bestMV
+      bestMVMany[1] = workarea.bestMV;    // save bestMV
+      nMinCostMany[1] = workarea.nMinCost;
+    }
+  }
+  else
+    if (tryMany)
+    {
+      bestMVMany[1] = workarea.globalMVPredictor; 
+    }
 
-      if (cost < workarea.nMinCost || tryMany)
-      {
-        workarea.bestMV.x = workarea.predictor.x;
-        workarea.bestMV.y = workarea.predictor.y;
-        workarea.bestMV.sad = sad;
-        workarea.nMinCost = cost;
-      }
+  if (!IsVectorChecked((uint64_t)workarea.predictor.x | ((uint64_t)workarea.predictor.y << 32)))
+  {
+    sad = GetDM<pixel_t>(workarea, workarea.predictor.x, workarea.predictor.y);
+    cost = sad;
+
+    if (cost < workarea.nMinCost || tryMany)
+    {
+      workarea.bestMV.x = workarea.predictor.x;
+      workarea.bestMV.y = workarea.predictor.y;
+      workarea.bestMV.sad = sad;
+      workarea.nMinCost = cost;
+    }
+
+    if (tryMany)
+    {
+      // refine around predictor
+      Refine<pixel_t>(workarea);    // reset bestMV
+      bestMVMany[2] = workarea.bestMV;    // save bestMV
+      nMinCostMany[2] = workarea.nMinCost;
     }
 
   }
-
-  if (tryMany)
-  {
-    // refine around predictor
-    Refine<pixel_t>(workarea);    // reset bestMV
-    bestMVMany[2] = workarea.bestMV;    // save bestMV
-    nMinCostMany[2] = workarea.nMinCost;
-  }
+  else
+    if (tryMany)
+    {
+      bestMVMany[2] = workarea.predictor;
+    }
 
   // then all the other predictors
   int npred = (temporal) ? 5 : 4;
@@ -2389,30 +2392,87 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
     if (!IsVectorChecked((uint64_t)workarea.predictors[i].x | ((uint64_t)workarea.predictors[i].y << 32)))
     {
       CheckMV0<pixel_t>(workarea, workarea.predictors[i].x, workarea.predictors[i].y);
-    }
 
-    if (tryMany)
-    {
-      // refine around predictor
-      Refine<pixel_t>(workarea);    // reset bestMV
-      bestMVMany[i + 3] = workarea.bestMV;    // save bestMV
-      nMinCostMany[i + 3] = workarea.nMinCost;
+      if (tryMany)
+      {
+        // refine around predictor
+        Refine<pixel_t>(workarea);    // reset bestMV
+        bestMVMany[i + 3] = workarea.bestMV;    // save bestMV
+        nMinCostMany[i + 3] = workarea.nMinCost;
+      }
     }
+    else
+      if (tryMany)
+      {
+        bestMVMany[i + 3] = workarea.predictors[i];
+      }
+
   }	// for i
-
 
   if (tryMany)
   {
-    // select best of multi best
-    workarea.nMinCost = verybigSAD + 1;
-    for (int i = 0; i < npred + 3; i++)
+//    if (iTMAvg == -1)
     {
-      if (nMinCostMany[i] < workarea.nMinCost)
+      // select best of multi best
+      workarea.nMinCost = verybigSAD + 1;
+      for (int i = 0; i < npred + 3; i++)
       {
-        workarea.bestMV = bestMVMany[i];
-        workarea.nMinCost = nMinCostMany[i];
+        if (nMinCostMany[i] < workarea.nMinCost)
+        {
+          workarea.bestMV = bestMVMany[i];
+          workarea.nMinCost = nMinCostMany[i];
+        }
       }
     }
+/*    else // currently disabled until new avg algorithms using dm too implemented
+    {
+      for (int i = 0; i < npred + 3; i++)
+      {
+        vAMResults[i] = bestMVMany[i];
+      }
+
+      switch (iTMAvg)
+      {
+      case 0:
+        GetMedoidVECTORxy(&vAMResults[0], &workarea.bestMV, npred + 3);
+        break;
+
+      case 1:
+        GetMeanVECTORxy(&vAMResults[0], &workarea.bestMV, npred + 3);
+        break;
+
+      case 2:
+        GetMedoidVECTORvad(&vAMResults[0], &workarea.bestMV, npred + 3);
+        break;
+
+      case 3:
+        GetMedoidVECTORvld(&vAMResults[0], &workarea.bestMV, npred + 3);
+        break;
+
+      case 4:
+        GetMedianVECTORg(&vAMResults[0], &workarea.bestMV, npred + 3);
+        break;
+
+      case 5:
+        Get_IQM_VECTORxy(&vAMResults[0], &workarea.bestMV, npred + 3);
+        break;
+
+      case 6:
+        GetMedoidVECTORxyda(&vAMResults[0], &workarea.bestMV, npred + 3);
+        break;
+      }
+
+      if ((workarea.bestMV.x != vAMResults[0].x) && (workarea.bestMV.y != vAMResults[0].y))
+        workarea.bestMV.sad = GetDM<pixel_t>(workarea, workarea.bestMV.x, workarea.bestMV.y); // update DM for current block pos and selected bestMV
+      else
+        workarea.bestMV.sad = vAMResults[0].sad;
+
+      workarea.nMinCost = workarea.bestMV.sad;
+
+      // then, we refine, according to the search type
+      Refine<pixel_t>(workarea);
+
+    }*/
   }
   else
   {
@@ -5732,7 +5792,7 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
 
   // performance optimization for Mode* average - check only half of positions first +1 (input) for equality
   int iHalfSearchPos;
-  if ((iAMavg == 0) || (iAMavg == 2) || (iAMavg == 3)) // only full mean avg require all positions always search
+  if ((iAMavg == 0) || (iAMavg == 2) || (iAMavg == 3) || (iAMavg == 6)) // only some avg require all positions always search
     iHalfSearchPos = (iNumAMPos - 1) / 2;
   else
     iHalfSearchPos = iNumAMPos;

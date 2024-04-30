@@ -133,13 +133,13 @@ void	GroupOfPlanes::SearchMVs(
   int    AMsp,
   int    TMAvg,
   int    MDp,
-  int    VScansNum
+  int    ScanDir
 )
 {
   nFlags |= flags;
 
   bool bVScanDir;
-  if (VScansNum == 1)
+  if (ScanDir == 1)
     bVScanDir = true; // top to down
   else
     bVScanDir = false; // down to top

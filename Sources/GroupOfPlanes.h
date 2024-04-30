@@ -73,7 +73,7 @@ public :
     short * outfilebuf, int fieldShift, int _pzero, int _pglobal, sad_t badSAD,
     int badrange, bool meander, int *vecPrev, bool tryMany, int optPredictorType, int PTpel,
     int AMflags, int AMavg, int AMpt, SearchType AMst, int AMsp,
-    int TMAvg, int MDp, int VScansNum);
+    int TMAvg, int MDp, int ScanDir);
   void           WriteDefaultToArray (int *array);
   int            GetArraySize ();
   void           ExtraDivide (int *out, int flags);
