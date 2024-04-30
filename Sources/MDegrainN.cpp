@@ -22,6 +22,7 @@
 #include  <stdint.h>
 #include  "commonfunctions.h"
 
+/*
 MV_FORCEINLINE float DiamondAngle(int y, int x)
 {
   if ((x + y) == 0 || (y - x) == 0 || (-y - x) == 0 || (x - y) == 0)
@@ -29,11 +30,6 @@ MV_FORCEINLINE float DiamondAngle(int y, int x)
 
   float fy = (float)y;
   float fx = (float)x;
-/*
-  if (y >= 0)
-    return (x >= 0 ? y / (x + y) : 1 - x / (-x + y));
-  else
-    return (x < 0 ? 2 - y / (-x - y) : 3 + x / (x - y));*/
 
   if (y >= 0)
     return (x >= 0 ? fy / (fx + fy) : 1 - fx / (-fx + fy));
@@ -41,6 +37,7 @@ MV_FORCEINLINE float DiamondAngle(int y, int x)
     return (x < 0 ? 2 - fy / (-fx - fy) : 3 + fx / (fx - fy));
 
 }
+*/
 
 MV_FORCEINLINE float fDiffAngleVect(int x1, int y1, int x2, int y2)
 {
@@ -5106,7 +5103,7 @@ MV_FORCEINLINE void MDegrainN::nlimit_chroma(int P)
 
 void MDegrainN::InterpolateOverlap_4x(VECTOR* pInterpolatedMVs, const VECTOR* pInputMVs, int idx)
 {
-  VECTOR* pInp = (VECTOR*)pInputMVs;
+//  VECTOR* pInp = (VECTOR*)pInputMVs;
 
   // use linear interpolate 2x of x first
   int i;
@@ -5197,7 +5194,7 @@ void MDegrainN::InterpolateOverlap_4x(VECTOR* pInterpolatedMVs, const VECTOR* pI
 
 void MDegrainN::InterpolateOverlap_2x(VECTOR* pInterpolatedMVs, const VECTOR* pInputMVs, int idx)
 {
-  VECTOR* pInp = (VECTOR*)pInputMVs;
+//  VECTOR* pInp = (VECTOR*)pInputMVs;
 
   // use linear interpolate 2x of x first
   int i;
@@ -5508,7 +5505,6 @@ MV_FORCEINLINE void MDegrainN::ProcessRSMVdata(void)
   } // k
 
   float fPrcFailedMVs = (float)iFailedMVs / float(nInputBlkX * nInputBlkY);
-  int idbr = 0;
 }
 
 MV_FORCEINLINE int MDegrainN::AlignBlockWeights(const BYTE* pRef[], int Pitch[], const BYTE* pCurr, int iCurrPitch, int Wall[], int iBlkWidth, int iBlkHeight, bool bChroma, int iBlkNum)
@@ -6438,7 +6434,7 @@ MV_FORCEINLINE bool MDegrainN::isMVsStable(VECTOR** pMVsPlanesArrays, int iNumBl
     iVx[n] = v2.x - v1.x;
     iVy[n] = v2.y - v1.y;
 
-    fDDA[n] = DeltaDiAngle(v1, v2);
+    fDDA[n] = fDiffAngleVect(v1.x, v1.y, v2.x, v2.y);
   }
 
   // acceleration X, Y 
@@ -6457,7 +6453,7 @@ MV_FORCEINLINE bool MDegrainN::isMVsStable(VECTOR** pMVsPlanesArrays, int iNumBl
   }
   */
   int iSumAsq = 0;
-  int fSumDDA = 0.0f;
+  float fSumDDA = 0.0f;
   for (int n = 0; n < (_trad * 2) - 1; n++)
   {
     int Asq = iAx[n] * iAx[n] + iAy[n] * iAy[n];
@@ -6466,7 +6462,6 @@ MV_FORCEINLINE bool MDegrainN::isMVsStable(VECTOR** pMVsPlanesArrays, int iNumBl
   }
 
   int iTotalDif = (int)((float)iSumAsq * fSumDDA);
-//  int iTotalDif = (int)((float)iMaxAsq * fSumDDA);
 
   if (iTotalDif > MPB_thIVS)
     return false;
@@ -7400,31 +7395,6 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
   
 }
 
-
-// return minimal diamong angle between 2 vectors
-MV_FORCEINLINE float MDegrainN::DeltaDiAngle(VECTOR v1, VECTOR v2)
-{
-  float fDiaA_v1 = DiamondAngle(v1.y, v1.x); // return diamond angle in range 0..4.0f (0..2pi)
-  float fDiaA_v2 = DiamondAngle(v2.y, v2.x);
-
-  float a;
-  float b;
-
-  if (fDiaA_v1 <= fDiaA_v2)
-  {
-    a = fDiaA_v1;
-    b = fDiaA_v2;
-  }
-  else
-  {
-    a = fDiaA_v2;
-    b = fDiaA_v1;
-  }
-
-  return fmin(b - a, a - b + 4.0f);
-
-}
-
 MV_FORCEINLINE void MDegrainN::CalcAutothSADs(void)
 {
   sad_t curr_thSAD = thSAD_param_norm;
@@ -7432,7 +7402,7 @@ MV_FORCEINLINE void MDegrainN::CalcAutothSADs(void)
   sad_t curr_thSADC = thSADC_param_norm;
   sad_t curr_thSADC2 = thSADC2_param_norm;
 
-  int k;
+  int k = 0;
   bool bNearFramesUsable = false;
   if (_usable_flag_arr[0]) // try +1 frame
   {
@@ -7478,20 +7448,19 @@ MV_FORCEINLINE void MDegrainN::CalcAutothSADs(void)
      }
   }
 
-  for (int k = 0; k < _trad * 2; ++k)
+  for (int i = 0; i < _trad * 2; ++i)
   {
-    MvClipInfo& c_info = _mv_clip_arr[k];
+    MvClipInfo& c_info = _mv_clip_arr[i];
 
     // Computes the SAD thresholds for this source frame, a cosine-shaped
     // smooth transition between thsad(c) and thsad(c)2.
-    const int		d = k / 2 + 1;
+    const int		d = i / 2 + 1;
     c_info._thsad = ClipFnc::interpolate_thsad(curr_thSAD, curr_thSAD2, d, _trad);
     c_info._thsadc = ClipFnc::interpolate_thsad(curr_thSADC, curr_thSADC2, d, _trad);
-    //    c_info._thsad_sq = double(c_info._thsad) * double(c_info._thsad); // 2.7.46
-    //    c_info._thsadc_sq = double(c_info._thsadc) * double(c_info._thsadc);
+
     c_info._thsad_sq = double(c_info._thsad);
     c_info._thsadc_sq = double(c_info._thsadc);
-    for (int i = 0; i < _wpow - 1; i++)
+    for (int j = 0; j < _wpow - 1; j++)
     {
       c_info._thsad_sq *= double(c_info._thsad);
       c_info._thsadc_sq *= double(c_info._thsadc);
