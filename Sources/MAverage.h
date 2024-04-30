@@ -101,6 +101,8 @@ private:
             template<typename pixel_t>
             MV_FORCEINLINE void Get_IQM_VECTORxy(VECTOR* toMedian, VECTOR* vOut, int iNumMVs); // IQM for x and y separately
 
+            template<typename pixel_t>
+            MV_FORCEINLINE void GetModeVECTORxyda(VECTOR* toMedian, VECTOR* vOut, int iNumMVs);
 
 };	// class MStoreVect
 

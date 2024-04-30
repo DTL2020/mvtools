@@ -457,6 +457,8 @@ private:
 
   MV_FORCEINLINE void Get_IQM_VECTORxy(VECTOR* toMed, VECTOR* vOut, int iNumMVs); // IQM for x and y separately
 
+  MV_FORCEINLINE void GetMedoidVECTORxyda(VECTOR* toMed, VECTOR* vOut, int iNumMVs);
+
   template<typename pixel_t>
   MV_FORCEINLINE void AreaModeSearchPos(WorkingArea& workarea, bool bRecalc);
 

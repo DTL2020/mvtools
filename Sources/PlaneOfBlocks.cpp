@@ -1267,6 +1267,59 @@ MV_FORCEINLINE void PlaneOfBlocks::GetMedoidVECTORxy(VECTOR* toMedian, VECTOR* v
     vOut[0].sad = verybigSAD + 1; // invalidate - need re-check if used later
 }
 
+MV_FORCEINLINE void PlaneOfBlocks::GetMedoidVECTORxyda(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
+{
+  // process dual coords in scalar C ?
+  const int iMaxMVlength = std::max(nBlkX * nBlkSizeX, nBlkY * nBlkSizeY) * 2 * nPel; // hope it is enough ? todo: make global constant ?
+  int MaxSumDM = iNumMVs * (iMaxMVlength + 3); // 3 is max difangle
+
+  // find lowest sum of row in DM_table and index of row in single DM scan with DM calc
+  float sum_minrow_x = (float)MaxSumDM;
+  float sum_minrow_y = (float)MaxSumDM;
+  int i_idx_minrow_x = 0;
+  int i_idx_minrow_y = 0;
+
+  for (int dmt_row = 0; dmt_row < iNumMVs; dmt_row++)
+  {
+    float sum_row_x = 0;
+    float sum_row_y = 0;
+
+    for (int dmt_col = 0; dmt_col < iNumMVs; dmt_col++)
+    {
+      if (dmt_row == dmt_col)
+      { // with itself => DM=0
+        continue;
+      }
+
+      float fd = fDiffAngleVect(toMedian[dmt_row].x, toMedian[dmt_row].y, toMedian[dmt_col].x, toMedian[dmt_col].y);
+
+      sum_row_x += ((float)std::abs(toMedian[dmt_row].x - toMedian[dmt_col].x) + fd);
+      sum_row_y += ((float)std::abs(toMedian[dmt_row].y - toMedian[dmt_col].y) + fd);
+    }
+
+    if (sum_row_x < sum_minrow_x)
+    {
+      sum_minrow_x = sum_row_x;
+      i_idx_minrow_x = dmt_row;
+    }
+
+    if (sum_row_y < sum_minrow_y)
+    {
+      sum_minrow_y = sum_row_y;
+      i_idx_minrow_y = dmt_row;
+    }
+
+  }
+
+  vOut[0].x = toMedian[i_idx_minrow_x].x;
+  vOut[0].y = toMedian[i_idx_minrow_y].y;
+
+  if ((vOut[0].x == toMedian[0].x) && (vOut[0].y == toMedian[0].y))
+    vOut[0].sad = toMedian[0].sad; // MV already checked in input of AreaMode
+  else
+    vOut[0].sad = verybigSAD + 1; // invalidate - need re-check if used later
+}
+
 MV_FORCEINLINE void PlaneOfBlocks::GetMeanVECTORxy(VECTOR* toMedian, VECTOR* vOut, int iNumMVs)
 {
   int sum_dx = 0;
@@ -5829,6 +5882,10 @@ MV_FORCEINLINE void PlaneOfBlocks::ProcessAreaMode(WorkingArea& workarea, bool b
     case 5:
       Get_IQM_VECTORxy(&vAMResults[0], &workarea.bestMV, iNumAMPos);
       break;
+
+    case 6:
+      GetMedoidVECTORxyda(&vAMResults[0], &workarea.bestMV, iNumAMPos);
+      break;
     }
 
     if ((workarea.bestMV.x != vAMResults[0].x) && (workarea.bestMV.y != vAMResults[0].y))
@@ -9514,6 +9571,10 @@ MV_FORCEINLINE VECTOR PlaneOfBlocks::GetMDpredictor(WorkingArea& workarea)
 
     case 5:
       Get_IQM_VECTORxy(&vPredictors[0], &vOut, iNumPredictors);
+      break;
+
+    case 6:
+      GetMedoidVECTORxyda(&vPredictors[0], &vOut, iNumPredictors);
       break;
   }
 
