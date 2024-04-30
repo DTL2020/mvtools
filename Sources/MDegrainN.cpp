@@ -4694,9 +4694,9 @@ MV_FORCEINLINE void MDegrainN::MVMedF_mg(VECTOR* pVin, VECTOR* pVout)
         vToCheck.y = vGMedian.y + iStep * test_steps_dy[i];
 
         int iCheckedSum = 0;
-        for (int i = 0; i < (iMVMedF * 2 + 1); i++)
+        for (int j = 0; j < (iMVMedF * 2 + 1); j++)
         {
-          iCheckedSum += (pVin[i].x - vToCheck.x) * (pVin[i].x - vToCheck.x) + (pVin[i].y - vToCheck.y) * (pVin[i].y - vToCheck.y);
+          iCheckedSum += (pVin[j].x - vToCheck.x) * (pVin[j].x - vToCheck.x) + (pVin[j].y - vToCheck.y) * (pVin[j].y - vToCheck.y);
         }
 
         if (iCheckedSum < iMinDist)

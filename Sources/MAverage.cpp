@@ -24,7 +24,6 @@
 
 MAverage::MAverage(std::vector <::PClip> clip_arr, int _mode, IScriptEnvironment *env)
   : GenericVideoFilter(clip_arr[0])
-  , _vect_arr()
   , iMode(_mode)
 {
   assert(!clip_arr.empty());
@@ -35,13 +34,12 @@ MAverage::MAverage(std::vector <::PClip> clip_arr, int _mode, IScriptEnvironment
   catch (const AvisynthError&) { has_at_least_v8 = false; }
 
   nbr_clips = (int)clip_arr.size();
-  _vect_arr.resize(nbr_clips);
   m_clip_arr.resize(nbr_clips);
 
 
   for (int clip_cnt = 0; clip_cnt < nbr_clips; ++clip_cnt)
   {
-    VectData &vect_data = _vect_arr[clip_cnt];
+//    VectData &vect_data = _vect_arr[clip_cnt];
     const ::VideoInfo &vd_vi = clip_arr[clip_cnt]->GetVideoInfo();
 
     // Checks basic parameters
@@ -173,12 +171,12 @@ MAverage::MAverage(std::vector <::PClip> clip_arr, int _mode, IScriptEnvironment
       levelWidth = (mVectorsInfo.nHPadding >= xRatioUV) ? ((levelWidth / xRatioUV + 1) / 2) * xRatioUV : ((levelWidth / xRatioUV) / 2) * xRatioUV;
       levelHeight = (mVectorsInfo.nVPadding >= yRatioUV) ? ((levelHeight / yRatioUV + 1) / 2) * yRatioUV : ((levelHeight / yRatioUV) / 2) * yRatioUV;
     }
-    int extendedWidth = levelWidth + 2 * mVectorsInfo.nHPadding; // Including padding
-    int extendedHeight = levelHeight + 2 * mVectorsInfo.nVPadding;
+//    int extendedWidth = levelWidth + 2 * mVectorsInfo.nHPadding; // Including padding
+//    int extendedHeight = levelHeight + 2 * mVectorsInfo.nVPadding;
 
     // Padding is effectively smaller on coarser levels
-    int paddingXScaled = mVectorsInfo.nHPadding >> level;
-    int paddingYScaled = mVectorsInfo.nVPadding >> level;
+//    int paddingXScaled = mVectorsInfo.nHPadding >> level;
+//    int paddingYScaled = mVectorsInfo.nVPadding >> level;
 
     // Loop through block positions (top-left of each block, coordinates relative to top-left of padding)
     int x = mVectorsInfo.nHPadding;
@@ -188,13 +186,13 @@ MAverage::MAverage(std::vector <::PClip> clip_arr, int _mode, IScriptEnvironment
     while (y < yEnd)
     {
       // Max/min vector length for this block
-      int yMin = -mVectorsInfo.nPel * (y - mVectorsInfo.nVPadding + paddingYScaled);
-      int yMax = mVectorsInfo.nPel * (extendedHeight - y - mVectorsInfo.nBlkSizeY - mVectorsInfo.nVPadding + paddingYScaled);
+//      int yMin = -mVectorsInfo.nPel * (y - mVectorsInfo.nVPadding + paddingYScaled);
+//      int yMax = mVectorsInfo.nPel * (extendedHeight - y - mVectorsInfo.nBlkSizeY - mVectorsInfo.nVPadding + paddingYScaled);
 
       while (x < xEnd)
       {
-        int xMin = -mVectorsInfo.nPel * (x - mVectorsInfo.nHPadding + paddingXScaled);
-        int xMax = mVectorsInfo.nPel * (extendedWidth - x - mVectorsInfo.nBlkSizeX - mVectorsInfo.nHPadding + paddingXScaled);
+//        int xMin = -mVectorsInfo.nPel * (x - mVectorsInfo.nHPadding + paddingXScaled);
+//        int xMax = mVectorsInfo.nPel * (extendedWidth - x - mVectorsInfo.nBlkSizeX - mVectorsInfo.nHPadding + paddingXScaled);
 
         for (int i = 0; i < nbr_clips; i++)
         {
@@ -202,6 +200,9 @@ MAverage::MAverage(std::vector <::PClip> clip_arr, int _mode, IScriptEnvironment
         }
 
         VECTOR vOut;
+        vOut.x = 0;
+        vOut.y = 0;
+        vOut.sad = 0;
 
         switch (iMode)
         {
@@ -230,13 +231,6 @@ MAverage::MAverage(std::vector <::PClip> clip_arr, int _mode, IScriptEnvironment
             break;
         }
 
-        if (vAMResults[0].x != vOut.x)
-        {
-          int idbr = 0;
-        }
-
-//        pBlocks->x = vOut.x;
-//       pBlocks->y = vOut.y;
         *pBlocks = vOut;
 
         // need to update DM in future
@@ -356,7 +350,7 @@ MV_FORCEINLINE void MAverage::GetModeVECTORvad(VECTOR* toMedian, VECTOR* vOut, i
 
   for (int dmt_row = 0; dmt_row < iNumMVs; dmt_row++)
   {
-    int sum_row = 0;
+    float sum_row = 0;
 
     for (int dmt_col = 0; dmt_col < iNumMVs; dmt_col++)
     {
@@ -470,9 +464,9 @@ MV_FORCEINLINE void MAverage::GetMedianVECTORg(VECTOR* toMedian, VECTOR* vOut, i
         vToCheck.y = vGMedian.y + iStep * test_steps_dy[i];
 
         int iCheckedSum = 0;
-        for (int i = 0; i < iNumMVs; i++)
+        for (int j = 0; j < iNumMVs; j++)
         {
-          iCheckedSum += (toMedian[i].x - vToCheck.x) * (toMedian[i].x - vToCheck.x) + (toMedian[i].y - vToCheck.y) * (toMedian[i].y - vToCheck.y);
+          iCheckedSum += (toMedian[j].x - vToCheck.x) * (toMedian[j].x - vToCheck.x) + (toMedian[j].y - vToCheck.y) * (toMedian[j].y - vToCheck.y);
         }
 
         if (iCheckedSum < iMinDist)

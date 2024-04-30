@@ -1415,9 +1415,9 @@ MV_FORCEINLINE void PlaneOfBlocks::GetMedianVECTORg(VECTOR* toMedian, VECTOR* vO
         vToCheck.y = vGMedian.y + iStep * test_steps_dy[i];
 
         int iCheckedSum = 0;
-        for (int i = 0; i < iNumMVs; i++)
+        for (int j = 0; j < iNumMVs; j++)
         {
-          iCheckedSum += (toMedian[i].x - vToCheck.x) * (toMedian[i].x - vToCheck.x) + (toMedian[i].y - vToCheck.y) * (toMedian[i].y - vToCheck.y);
+          iCheckedSum += (toMedian[j].x - vToCheck.x) * (toMedian[j].x - vToCheck.x) + (toMedian[j].y - vToCheck.y) * (toMedian[j].y - vToCheck.y);
         }
 
         if (iCheckedSum < iMinDist)
