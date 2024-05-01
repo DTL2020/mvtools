@@ -298,7 +298,7 @@ void PlaneOfBlocks::SearchMVs(
   short *outfilebuf, int fieldShift, sad_t * pmeanLumaChange,
   int divideExtra, int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
   int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg, int _AMpt, SearchType _AMst, int _AMsp,
-  int _TMAvg, int _MDp, bool _bVScanDir
+  int _TMAvg, int _MDp, bool _bVScanDir, int _MPM
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -347,6 +347,7 @@ void PlaneOfBlocks::SearchMVs(
   iTMAvg = _TMAvg;
   iMDp = _MDp;
   bVScanDir = _bVScanDir; // true - top to botton, false - reverse
+  iMPM = _MPM;
 
   if (iAreaMode > 0)
   {
@@ -1093,26 +1094,34 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
     }
 
   }
+
   // Median predictor
-  if (!isTop) // replaced 1 by 0 - Fizick
+  workarea.MDpredictor = GetMDpredictor(workarea);
+
+  if (iMPM == 0)
   {
-    workarea.predictors[0].x = Median(workarea.predictors[1].x, workarea.predictors[2].x, workarea.predictors[3].x);
-    workarea.predictors[0].y = Median(workarea.predictors[1].y, workarea.predictors[2].y, workarea.predictors[3].y);
-    //		workarea.predictors[0].sad = Median(workarea.predictors[1].sad, workarea.predictors[2].sad, workarea.predictors[3].sad);
-        // but it is not true median vector (x and y may be mixed) and not its sad ?!
-        // we really do not know SAD, here is more safe estimation especially for phaseshift method - v1.6.0
-    workarea.predictors[0].sad = std::max(workarea.predictors[1].sad, std::max(workarea.predictors[2].sad, workarea.predictors[3].sad));
+    if (!isTop) // replaced 1 by 0 - Fizick
+    {
+      workarea.predictors[0].x = Median(workarea.predictors[1].x, workarea.predictors[2].x, workarea.predictors[3].x);
+      workarea.predictors[0].y = Median(workarea.predictors[1].y, workarea.predictors[2].y, workarea.predictors[3].y);
+      //		workarea.predictors[0].sad = Median(workarea.predictors[1].sad, workarea.predictors[2].sad, workarea.predictors[3].sad);
+          // but it is not true median vector (x and y may be mixed) and not its sad ?!
+          // we really do not know SAD, here is more safe estimation especially for phaseshift method - v1.6.0
+      workarea.predictors[0].sad = std::max(workarea.predictors[1].sad, std::max(workarea.predictors[2].sad, workarea.predictors[3].sad));
+    }
+    else
+    {
+      //		workarea.predictors[0].x = (workarea.predictors[1].x + workarea.predictors[2].x + workarea.predictors[3].x);
+      //		workarea.predictors[0].y = (workarea.predictors[1].y + workarea.predictors[2].y + workarea.predictors[3].y);
+      //		workarea.predictors[0].sad = (workarea.predictors[1].sad + workarea.predictors[2].sad + workarea.predictors[3].sad);
+          // but for top line we have only left workarea.predictor[1] - v1.6.0
+      workarea.predictors[0].x = workarea.predictors[1].x;
+      workarea.predictors[0].y = workarea.predictors[1].y;
+      workarea.predictors[0].sad = workarea.predictors[1].sad;
+    }
   }
-  else
-  {
-    //		workarea.predictors[0].x = (workarea.predictors[1].x + workarea.predictors[2].x + workarea.predictors[3].x);
-    //		workarea.predictors[0].y = (workarea.predictors[1].y + workarea.predictors[2].y + workarea.predictors[3].y);
-    //		workarea.predictors[0].sad = (workarea.predictors[1].sad + workarea.predictors[2].sad + workarea.predictors[3].sad);
-        // but for top line we have only left workarea.predictor[1] - v1.6.0
-    workarea.predictors[0].x = workarea.predictors[1].x;
-    workarea.predictors[0].y = workarea.predictors[1].y;
-    workarea.predictors[0].sad = workarea.predictors[1].sad;
-  }
+  else // iMPM > 0
+    workarea.predictors[0] = workarea.MDpredictor;
 
    // if there are no other planes, predictor is the median
   if (smallestPlane)
@@ -1153,8 +1162,6 @@ void PlaneOfBlocks::FetchPredictors(WorkingArea &workarea)
   // replaced hard threshold by soft in v1.10.2 by Fizick (a liitle complex expression to avoid overflow)
   //	int a = LSAD/(LSAD + (workarea.predictor.sad>>1));
   //	workarea.nLambda = workarea.nLambda*a*a;
-
-  workarea.MDpredictor = GetMDpredictor(workarea);
 }
 
 template<typename pixel_t>
@@ -1705,7 +1712,7 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
   __m128i xmm2_DxMin = _mm_set1_epi32(workarea.nDxMin); // for AVX2 builds - will be vpbroadcastd - enable AVX2 in C++ compiler !
   __m128i xmm3_DxMax = _mm_set1_epi32(workarea.nDxMax - 1);
   __m128i xmm4_DyMin = _mm_set1_epi32(workarea.nDyMin);
-  __m128i xmm5_DyMax = _mm_set1_epi32(workarea.nDyMax - 1); 
+  __m128i xmm5_DyMax = _mm_set1_epi32(workarea.nDyMax - 1);
 
   xmm0_x = _mm_max_epi32(xmm0_x, xmm2_DxMin); // SSE 4.1 !!
   xmm1_y = _mm_max_epi32(xmm1_y, xmm4_DyMin);
@@ -1722,55 +1729,62 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
   workarea.predictors[3].y = _mm_extract_epi32(xmm1_y, 2);
 
   // Median predictor
-  if (!isTop) // replaced 1 by 0 - Fizick
+  workarea.MDpredictor = GetMDpredictor(workarea);
+
+  if (iMPM == 0)
   {
-//   workarea.predictors[0].x = Median(workarea.predictors[1].x, workarea.predictors[2].x, workarea.predictors[3].x);
-//   workarea.predictors[0].y = Median(workarea.predictors[1].y, workarea.predictors[2].y, workarea.predictors[3].y);
-    // Median as of   a + b + c - imax(a, imax(b, c)) - imin(c, imin(a, b)) looks correct.
+    if (!isTop) // replaced 1 by 0 - Fizick
+    {
+      //   workarea.predictors[0].x = Median(workarea.predictors[1].x, workarea.predictors[2].x, workarea.predictors[3].x);
+      //   workarea.predictors[0].y = Median(workarea.predictors[1].y, workarea.predictors[2].y, workarea.predictors[3].y);
+          // Median as of   a + b + c - imax(a, imax(b, c)) - imin(c, imin(a, b)) looks correct.
 
-    /*  __m128i xmm0_a = _mm_set_epi32(0, 0, workarea.predictors[1].y, workarea.predictors[1].x);
-    __m128i xmm1_b = _mm_set_epi32(0, 0, workarea.predictors[2].y, workarea.predictors[2].x);
-    __m128i xmm2_c = _mm_set_epi32(0, 0, workarea.predictors[3].y, workarea.predictors[3].x);*/
-    
-    __m128i xmm0_a = _mm_loadl_epi64((__m128i*) & workarea.predictors[1].x);
-    __m128i xmm1_b = _mm_loadl_epi64((__m128i*) & workarea.predictors[2].x);
-    __m128i xmm2_c = _mm_loadl_epi64((__m128i*) & workarea.predictors[3].x);
+          /*  __m128i xmm0_a = _mm_set_epi32(0, 0, workarea.predictors[1].y, workarea.predictors[1].x);
+          __m128i xmm1_b = _mm_set_epi32(0, 0, workarea.predictors[2].y, workarea.predictors[2].x);
+          __m128i xmm2_c = _mm_set_epi32(0, 0, workarea.predictors[3].y, workarea.predictors[3].x);*/
 
-    __m128i xmm3_sum = _mm_add_epi32(_mm_add_epi32(xmm0_a, xmm1_b), xmm2_c);
-    __m128i xmm4_min = _mm_min_epi32(_mm_min_epi32(xmm0_a, xmm1_b), xmm2_c);
-    __m128i xmm5_max = _mm_max_epi32(_mm_max_epi32(xmm0_a, xmm1_b), xmm2_c);
+      __m128i xmm0_a = _mm_loadl_epi64((__m128i*) & workarea.predictors[1].x);
+      __m128i xmm1_b = _mm_loadl_epi64((__m128i*) & workarea.predictors[2].x);
+      __m128i xmm2_c = _mm_loadl_epi64((__m128i*) & workarea.predictors[3].x);
 
-    xmm3_sum = _mm_sub_epi32(_mm_sub_epi32(xmm3_sum, xmm5_max), xmm4_min);
+      __m128i xmm3_sum = _mm_add_epi32(_mm_add_epi32(xmm0_a, xmm1_b), xmm2_c);
+      __m128i xmm4_min = _mm_min_epi32(_mm_min_epi32(xmm0_a, xmm1_b), xmm2_c);
+      __m128i xmm5_max = _mm_max_epi32(_mm_max_epi32(xmm0_a, xmm1_b), xmm2_c);
 
-    _mm_storel_epi64((__m128i*) & workarea.predictors[0].x, xmm3_sum);
+      xmm3_sum = _mm_sub_epi32(_mm_sub_epi32(xmm3_sum, xmm5_max), xmm4_min);
 
-/*    workarea.predictors[0].x = _mm_cvtsi128_si32(xmm3_sum);
-    workarea.predictors[0].y = _mm_extract_epi32(xmm3_sum, 1);*/
+      _mm_storel_epi64((__m128i*) & workarea.predictors[0].x, xmm3_sum);
 
-    //		workarea.predictors[0].sad = Median(workarea.predictors[1].sad, workarea.predictors[2].sad, workarea.predictors[3].sad);
-        // but it is not true median vector (x and y may be mixed) and not its sad ?!
-        // we really do not know SAD, here is more safe estimation especially for phaseshift method - v1.6.0
-//    workarea.predictors[0].sad = std::max(workarea.predictors[1].sad, std::max(workarea.predictors[2].sad, workarea.predictors[3].sad));
-    __m128i xmm6_sad1, xmm7_sad2, xmm8_sad3;
+      /*    workarea.predictors[0].x = _mm_cvtsi128_si32(xmm3_sum);
+          workarea.predictors[0].y = _mm_extract_epi32(xmm3_sum, 1);*/
 
-    xmm6_sad1 = _mm_cvtsi32_si128(v1.sad);
-    xmm7_sad2 = _mm_cvtsi32_si128(v2.sad);
-    xmm8_sad3 = _mm_cvtsi32_si128(v3.sad);
+          //		workarea.predictors[0].sad = Median(workarea.predictors[1].sad, workarea.predictors[2].sad, workarea.predictors[3].sad);
+              // but it is not true median vector (x and y may be mixed) and not its sad ?!
+              // we really do not know SAD, here is more safe estimation especially for phaseshift method - v1.6.0
+      //    workarea.predictors[0].sad = std::max(workarea.predictors[1].sad, std::max(workarea.predictors[2].sad, workarea.predictors[3].sad));
+      __m128i xmm6_sad1, xmm7_sad2, xmm8_sad3;
 
-    xmm6_sad1 = _mm_max_epi32(_mm_max_epi32(xmm6_sad1, xmm7_sad2), xmm8_sad3);
+      xmm6_sad1 = _mm_cvtsi32_si128(v1.sad);
+      xmm7_sad2 = _mm_cvtsi32_si128(v2.sad);
+      xmm8_sad3 = _mm_cvtsi32_si128(v3.sad);
 
-    workarea.predictors[0].sad = _mm_cvtsi128_si32(xmm6_sad1);
+      xmm6_sad1 = _mm_max_epi32(_mm_max_epi32(xmm6_sad1, xmm7_sad2), xmm8_sad3);
+
+      workarea.predictors[0].sad = _mm_cvtsi128_si32(xmm6_sad1);
+    }
+    else
+    {
+      //		workarea.predictors[0].x = (workarea.predictors[1].x + workarea.predictors[2].x + workarea.predictors[3].x);
+      //		workarea.predictors[0].y = (workarea.predictors[1].y + workarea.predictors[2].y + workarea.predictors[3].y);
+      //		workarea.predictors[0].sad = (workarea.predictors[1].sad + workarea.predictors[2].sad + workarea.predictors[3].sad);
+          // but for top line we have only left workarea.predictor[1] - v1.6.0
+      workarea.predictors[0].x = workarea.predictors[1].x;
+      workarea.predictors[0].y = workarea.predictors[1].y;
+      workarea.predictors[0].sad = workarea.predictors[1].sad;
+    }
   }
-  else
-  {
-    //		workarea.predictors[0].x = (workarea.predictors[1].x + workarea.predictors[2].x + workarea.predictors[3].x);
-    //		workarea.predictors[0].y = (workarea.predictors[1].y + workarea.predictors[2].y + workarea.predictors[3].y);
-    //		workarea.predictors[0].sad = (workarea.predictors[1].sad + workarea.predictors[2].sad + workarea.predictors[3].sad);
-        // but for top line we have only left workarea.predictor[1] - v1.6.0
-    workarea.predictors[0].x = workarea.predictors[1].x;
-    workarea.predictors[0].y = workarea.predictors[1].y;
-    workarea.predictors[0].sad = workarea.predictors[1].sad;
-  }
+  else // if MPM > 0
+    workarea.predictors[0] = workarea.MDpredictor;
 
   // if there are no other planes, predictor is the median
   if (smallestPlane)
@@ -1831,8 +1845,6 @@ MV_FORCEINLINE void PlaneOfBlocks::FetchPredictors_sse41(WorkingArea& workarea)
    // replaced hard threshold by soft in v1.10.2 by Fizick (a liitle complex expression to avoid overflow)
    //	int a = LSAD/(LSAD + (workarea.predictor.sad>>1));
    //	workarea.nLambda = workarea.nLambda*a*a;
-
-  workarea.MDpredictor = GetMDpredictor(workarea);
 }
 
 template<typename pixel_t>
@@ -9596,9 +9608,9 @@ MV_FORCEINLINE VECTOR PlaneOfBlocks::GetMDpredictor(WorkingArea& workarea)
       // check for lower than zero or over max index
       iGetIdx = workarea.blkIdx + dy * nBlkX + dx;
 
-      if ((iGetIdx < 0) || (iGetIdx > nBlkCount - 1))
+      if ((iGetIdx < 0) || (iGetIdx > nBlkCount - 1)) // not best - need all frame borders check
       {
-        vPredictors[(dy + iASize) * ((iASize * 2) + 1) + (dx + iASize)] = zeroMVfieldShifted;
+        vPredictors[(dy + iASize) * ((iASize * 2) + 1) + (dx + iASize)] = zeroMVfieldShifted; 
       }
       else
       {

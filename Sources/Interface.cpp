@@ -222,6 +222,7 @@ AVSValue __cdecl Create_MVAnalyse(AVSValue args, void* user_data, IScriptEnviron
     args[52].AsInt(-1), // tmavg - trymany MVs averaging mode, -1 - minSAD(DM) mode, 0 and higher - equal to AMavg modes
     args[53].AsInt(-1), // mdp - MotionDistortion predictor, -1 - hierarchy predictor, 0 and higher - AMavg mode average of (some) predictors
     args[54].AsInt(1), // scandir - direction of search in the frame, 1 - lines scan top to bottom, 2 - lines bottom to top
+    args[55].AsInt(0), // mpm - median predictor mode: 0 - median of 3, 1 - copy of MD predictor
     env
   );
 }
@@ -806,7 +807,7 @@ AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Linkage* const vectors) {
   AVS_linkage = vectors;
 #endif
   env->AddFunction("MShow", "cc[scale]i[sil]i[tol]i[showsad]b[number]i[thSCD1]i[thSCD2]i[isse]b[planar]b", Create_MVShow, 0);
-  env->AddFunction("MAnalyse", "c[blksize]i[blksizeV]i[levels]i[search]i[searchparam]i[pelsearch]i[isb]b[lambda]i[chroma]b[delta]i[truemotion]b[lsad]i[plevel]i[global]b[pnew]i[pzero]i[pglobal]i[overlap]i[overlapV]i[outfile]s[dct]i[divide]i[sadx264]i[badSAD]i[badrange]i[isse]b[meander]b[temporal]b[trymany]b[multi]b[mt]b[scaleCSAD]i[optsearchoption]i[optpredictortype]i[scaleCSADfine]f[accnum]i[UseSubShift]i[SuperCurrent]c[SearchDirMode]i[DMFlags]i[AreaMode]i[AMdiffSAD]i[AMstep]i[AMoffset]i[AMpel]i[PTpel]i[AMflags]i[AMavg]i[AMpt]i[AMst]i[AMsp]i[tmavg]i[mdp]i[scandir]i", Create_MVAnalyse, 0);
+  env->AddFunction("MAnalyse", "c[blksize]i[blksizeV]i[levels]i[search]i[searchparam]i[pelsearch]i[isb]b[lambda]i[chroma]b[delta]i[truemotion]b[lsad]i[plevel]i[global]b[pnew]i[pzero]i[pglobal]i[overlap]i[overlapV]i[outfile]s[dct]i[divide]i[sadx264]i[badSAD]i[badrange]i[isse]b[meander]b[temporal]b[trymany]b[multi]b[mt]b[scaleCSAD]i[optsearchoption]i[optpredictortype]i[scaleCSADfine]f[accnum]i[UseSubShift]i[SuperCurrent]c[SearchDirMode]i[DMFlags]i[AreaMode]i[AMdiffSAD]i[AMstep]i[AMoffset]i[AMpel]i[PTpel]i[AMflags]i[AMavg]i[AMpt]i[AMst]i[AMsp]i[tmavg]i[mdp]i[scandir]i[mpm]i", Create_MVAnalyse, 0);
   env->AddFunction("MMask", "cc[ml]f[gamma]f[kind]i[time]f[Ysc]i[thSCD1]i[thSCD2]i[isse]b[planar]b", Create_MVMask, 0);
   env->AddFunction("MCompensate", "ccc[scbehavior]b[recursion]f[thSAD]i[fields]b[time]f[thSCD1]i[thSCD2]i[isse]b[planar]b[mt]b[tr]i[center]b[cclip]c[thSAD2]i[showRNB]b", Create_MVCompensate, 0);
   env->AddFunction("MSCDetection", "cc[Ysc]i[thSCD1]i[thSCD2]i[isse]b", Create_MVSCDetection, 0);

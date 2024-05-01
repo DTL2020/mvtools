@@ -53,7 +53,7 @@ MVAnalyse::MVAnalyse(
   int _iSearchDirMode, int _DMFlags,
   int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, int _AMpel, int _PTpel,
   int _AMflags, int _AMavg, int _AMpt, int _AMst, int _AMsp,
-  int _TMavg, int _MDp, int _ScanDir,
+  int _TMavg, int _MDp, int _ScanDir, int _MPM,
   IScriptEnvironment* env
 )
   : ::GenericVideoFilter(_child)
@@ -85,6 +85,7 @@ MVAnalyse::MVAnalyse(
   , iTMAvg(_TMavg)
   , iMDp(_MDp)
   , iScanDir(_ScanDir)
+  , iMPM(_MPM)
 {
   has_at_least_v8 = true;
   try { env->CheckVersion(8); }
@@ -1498,7 +1499,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         global, srd._analysis_data.nFlags, reinterpret_cast<int*>(pDst),
         outfilebuf, fieldShift, pzero, pglobal, badSAD, badrange,
         meander, pVecPrevOrNull, tryMany, optPredictorType, iPTpel, iAMflags, iAMavg, iAMpt, AMsearchType, iAMsp,
-        iTMAvg, iMDp, iScanDir
+        iTMAvg, iMDp, iScanDir, iMPM
       );
     }
 
