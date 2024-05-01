@@ -460,6 +460,8 @@ private:
 
   MV_FORCEINLINE void GetMedoidVECTORxyda(VECTOR* toMed, VECTOR* vOut, int iNumMVs);
 
+  MV_FORCEINLINE void GetMedoidVECTORxydadm(VECTOR* toMed, VECTOR* vOut, int iNumMVs);
+
   template<typename pixel_t>
   MV_FORCEINLINE void AreaModeSearchPos(WorkingArea& workarea, bool bRecalc);
 
