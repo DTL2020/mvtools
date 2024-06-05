@@ -107,6 +107,9 @@ private:
             template<typename pixel_t>
             MV_FORCEINLINE void GetModeVECTORxydadm(VECTOR* toMedian, VECTOR* vOut, int iNumMVs);
 
+            template<typename pixel_t>
+            MV_FORCEINLINE void GetLowestDM(VECTOR* toProc, VECTOR* vOut, int iNumMVs);
+
 };	// class MStoreVect
 
 MV_FORCEINLINE float fDiffAngleVect(int x1, int y1, int x2, int y2);

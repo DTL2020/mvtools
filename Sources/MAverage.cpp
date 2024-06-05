@@ -237,6 +237,10 @@ MAverage::MAverage(std::vector <::PClip> clip_arr, int _mode, IScriptEnvironment
           case 7:
             GetModeVECTORxydadm<uint8_t>(&vAMResults[0], &vOut, nbr_clips);
             break;
+
+          case 8:
+            GetLowestDM<uint8_t>(&vAMResults[0], &vOut, nbr_clips);
+            break;
         }
 
         *pBlocks = vOut;
@@ -685,5 +689,23 @@ MV_FORCEINLINE float fDiffAngleVect(int x1, int y1, int x2, int y2)
 
 }
 
+
+template<typename pixel_t>
+MV_FORCEINLINE void MAverage::GetLowestDM(VECTOR* toProc, VECTOR* vOut, int iNumMVs)
+{
+  vOut[0].sad = toProc[0].sad; // pick first for init
+  vOut[0].x = toProc[0].x;
+  vOut[0].y = toProc[0].y;
+
+  for (int i = 1; i < iNumMVs; i++)
+  {
+    if (toProc[i].sad < vOut[0].sad)
+    {
+      vOut[0].sad = toProc[i].sad;
+      vOut[0].x = toProc[i].x;
+      vOut[0].y = toProc[i].y;
+    }
+  }
+}
 
 /*\\\ EOF \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*/
