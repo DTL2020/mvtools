@@ -336,6 +336,10 @@ MVAnalyse::MVAnalyse(
     searchType = VSEARCH;
     nSearchParam = (stp < 1) ? 1 : stp;
     break;
+  case 8:
+    searchType = EXHAUSTIVE2;
+    nSearchParam = (stp < 1) ? 1 : stp;
+    break;
   case 2:
   default:
     searchType = LOGARITHMIC;

@@ -808,8 +808,6 @@ void PlaneOfBlocks::Refine(WorkingArea &workarea)
     }
     break;
   case EXHAUSTIVE: {
-
-    //		ExhaustiveSearch(nSearchParam);
     int mvx = workarea.bestMV.x;
     int mvy = workarea.bestMV.y;
     for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
@@ -817,12 +815,17 @@ void PlaneOfBlocks::Refine(WorkingArea &workarea)
       ExpandingSearch<pixel_t>(workarea, i, 1, mvx, mvy);
     }
   }
-                   break;
+    break;
 
-                   //	if ( searchType & SQUARE )
-                   //	{
-                   //		SquareSearch();
-                   //	}
+  case EXHAUSTIVE2: {
+    int mvx = workarea.bestMV.x;
+    int mvy = workarea.bestMV.y;
+    for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
+    {
+      ExpandingSearch2<pixel_t>(workarea, i, 1, mvx, mvy);
+    }
+  }
+     break;
   case HEX2SEARCH:
     Hex2Search<pixel_t>(workarea, nSearchParam);
     break;
@@ -1343,6 +1346,58 @@ void PlaneOfBlocks::ExpandingSearch(WorkingArea &workarea, int r, int s, int mvx
   CheckMV<pixel_t>(workarea, mvx + r, mvy + r);
 }
 
+template<typename pixel_t>
+void PlaneOfBlocks::ExpandingSearch2(WorkingArea& workarea, int r, int s, int mvx, int mvy) // diameter = 2*r + 1, step=s
+{ // part of true enhaustive search (thin expanding square) around mvx, mvy
+  int i, j;
+
+  // save penaltyNew
+  int savedPN = penaltyNew;
+  // disable pnew
+  penaltyNew = 0;
+
+  // save current bestMV
+  int bestvx = workarea.bestMV.x;
+  int bestvy = workarea.bestMV.y;
+  int bestCost = workarea.nMinCost;
+  int bestSAD = workarea.bestMV.sad;
+
+  //	VECTOR mv = workarea.bestMV; // bug: it was pointer assignent, not values, so iterative! - v2.1
+    // sides of square without corners
+  for (i = -r + s; i < r; i += s) // without corners! - v2.1
+  {
+    CheckMV<pixel_t>(workarea, mvx + i, mvy - r);
+    CheckMV<pixel_t>(workarea, mvx + i, mvy + r);
+  }
+
+  for (j = -r + s; j < r; j += s)
+  {
+    CheckMV<pixel_t>(workarea, mvx - r, mvy + j);
+    CheckMV<pixel_t>(workarea, mvx + r, mvy + j);
+  }
+
+  // then corners - they are more far from cenrer
+  CheckMV<pixel_t>(workarea, mvx - r, mvy - r);
+  CheckMV<pixel_t>(workarea, mvx - r, mvy + r);
+  CheckMV<pixel_t>(workarea, mvx + r, mvy - r);
+  CheckMV<pixel_t>(workarea, mvx + r, mvy + r);
+
+  // restore penaltyNew
+  penaltyNew = savedPN;
+
+  typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
+
+  // check new found for cost
+  sad_t cost = workarea.MotionDistorsion<pixel_t>(workarea.bestMV.x, workarea.bestMV.y) + workarea.bestMV.sad + ((penaltyNew * (safe_sad_t)workarea.bestMV.sad) >> 8);
+  if (cost >= bestCost)
+  {
+    // restore saved best
+    workarea.bestMV.x = bestvx;
+    workarea.bestMV.y = bestvy;
+    workarea.nMinCost = bestCost;
+    workarea.bestMV.sad = bestSAD;
+  }
+}
 
 
 /* (x-1)%6 */

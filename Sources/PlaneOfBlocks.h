@@ -353,6 +353,9 @@ private:
   void ExpandingSearch(WorkingArea &workarea, int radius, int step, int mvx, int mvy); // diameter = 2*radius + 1
 
   template<typename pixel_t>
+  void ExpandingSearch2(WorkingArea& workarea, int radius, int step, int mvx, int mvy); // diameter = 2*radius + 1
+
+  template<typename pixel_t>
   void Hex2Search(WorkingArea &workarea, int i_me_range);
   template<typename pixel_t>
   void CrossSearch(WorkingArea &workarea, int start, int x_max, int y_max, int mvx, int mvy);
