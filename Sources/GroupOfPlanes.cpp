@@ -148,7 +148,7 @@ void	GroupOfPlanes::SearchMVs(
   SearchType		searchTypeSmallest =
     (nLevelCount == 1 || searchType == HSEARCH || searchType == VSEARCH)
     ? searchType
-    : EXHAUSTIVE; // full search for smallest coarse plane
+    : EXHAUSTIVE2; // full search for smallest coarse plane
   int				nSearchParamSmallest =
     (nLevelCount == 1) ? nPelSearch : nSearchParam;
   DebugPrintf("SearchType %i", searchType);
@@ -191,7 +191,7 @@ void	GroupOfPlanes::SearchMVs(
     SearchType		searchTypeLevel =
       (i == 0 || searchType == HSEARCH || searchType == VSEARCH)
       ? searchType
-      : EXHAUSTIVE; // full search for coarse planes
+      : EXHAUSTIVE2; // full search for coarse planes
     int				nSearchParamLevel =
       (i == 0) ? nPelSearch : nSearchParam; // special case for finest level
 

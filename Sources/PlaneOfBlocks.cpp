@@ -3443,6 +3443,16 @@ void	PlaneOfBlocks::recalculate_mv_slice(Slicer::TaskData &td)
           }
         }
 
+        if (searchType & EXHAUSTIVE2)
+        {
+          int mvx = workarea.bestMV.x;
+          int mvy = workarea.bestMV.y;
+          for (int i = 1; i <= nSearchParam; i++)// region is same as exhaustive, but ordered by radius (from near to far)
+          {
+            ExpandingSearch2<pixel_t>(workarea, i, 1, mvx, mvy);
+          }
+        }
+
         if (searchType & HEX2SEARCH)
         {
           Hex2Search<pixel_t>(workarea, nSearchParam);
