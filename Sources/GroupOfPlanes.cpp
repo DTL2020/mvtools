@@ -31,8 +31,7 @@ GroupOfPlanes::GroupOfPlanes(
   int _nOverlapX, int _nOverlapY, int _nBlkX, int _nBlkY, int _xRatioUV, int _yRatioUV,
   int _divideExtra, int _pixelsize, int _bits_per_pixel,
   conc::ObjPool <DCTClass> *dct_pool_ptr,
-  bool mt_flag, int _chromaSADScale,
-  IScriptEnvironment* env
+  bool mt_flag, int _chromaSADScale, IScriptEnvironment* env
 )
   : nBlkSizeX(_nBlkSizeX)
   , nBlkSizeY(_nBlkSizeY)
@@ -112,7 +111,8 @@ void	GroupOfPlanes::SearchMVs(
   int    badrange,
   bool   meander,
   int *  vecPrev,
-  bool   tryMany)
+  bool   tryMany,
+  SearchType searchCoarseType)
 {
   nFlags |= flags;
 
@@ -148,7 +148,7 @@ void	GroupOfPlanes::SearchMVs(
   SearchType		searchTypeSmallest =
     (nLevelCount == 1 || searchType == HSEARCH || searchType == VSEARCH)
     ? searchType
-    : EXHAUSTIVE2; // full search for smallest coarse plane
+    : searchCoarseType; // full search for smallest coarse plane
   int				nSearchParamSmallest =
     (nLevelCount == 1) ? nPelSearch : nSearchParam;
   DebugPrintf("SearchType %i", searchType);
@@ -191,7 +191,7 @@ void	GroupOfPlanes::SearchMVs(
     SearchType		searchTypeLevel =
       (i == 0 || searchType == HSEARCH || searchType == VSEARCH)
       ? searchType
-      : EXHAUSTIVE2; // full search for coarse planes
+      : searchCoarseType; // full search for coarse planes
     int				nSearchParamLevel =
       (i == 0) ? nPelSearch : nSearchParam; // special case for finest level
 

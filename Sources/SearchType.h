@@ -33,7 +33,8 @@ enum SearchType
   UMHSEARCH   = 32,   // v.2
   HSEARCH     = 64,   // v.2.5.11
   VSEARCH     = 128,   // v.2.5.11
-  EXHAUSTIVE2 = 256
+  EXHAUSTIVE2 = 256,
+  EXHAUSTIVE3 = 512
 };
 
 

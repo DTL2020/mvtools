@@ -43,7 +43,7 @@ MVAnalyse::MVAnalyse(
   int _overlapx, int _overlapy, const char* _outfilename, int _dctmode,
   int _divide, int _sadx264, sad_t _badSAD, int _badrange, bool _isse,
   bool _meander, bool temporal_flag, bool _tryMany, bool multi_flag,
-  bool mt_flag, int _chromaSADScale, IScriptEnvironment* env
+  bool mt_flag, int _chromaSADScale, int stc, IScriptEnvironment* env
 )
   : ::GenericVideoFilter(_child)
   , _srd_arr(1)
@@ -340,11 +340,60 @@ MVAnalyse::MVAnalyse(
     searchType = EXHAUSTIVE2;
     nSearchParam = (stp < 1) ? 1 : stp;
     break;
+  case 9:
+    searchType = EXHAUSTIVE3;
+    nSearchParam = (stp < 1) ? 1 : stp;
+    break;
   case 2:
   default:
     searchType = LOGARITHMIC;
     nSearchParam = (stp < 1) ? 1 : stp;
   }
+
+  switch (stc)
+  {
+  case 0:
+    searchCoarseType = ONETIME;
+    nSearchParam = (stp < 1) ? 1 : stp;
+    break;
+  case 1:
+    searchCoarseType = NSTEP;
+    nSearchParam = (stp < 0) ? 0 : stp;
+    break;
+  case 3:
+    searchCoarseType = EXHAUSTIVE;
+    nSearchParam = (stp < 1) ? 1 : stp;
+    break;
+  case 4:
+    searchCoarseType = HEX2SEARCH;
+    nSearchParam = (stp < 1) ? 1 : stp;
+    break;
+  case 5:
+    searchCoarseType = UMHSEARCH;
+    nSearchParam = (stp < 1) ? 1 : stp; // really min is 4
+    break;
+  case 6:
+    searchCoarseType = HSEARCH;
+    nSearchParam = (stp < 1) ? 1 : stp;
+    break;
+  case 7:
+    searchCoarseType = VSEARCH;
+    nSearchParam = (stp < 1) ? 1 : stp;
+    break;
+  case 8:
+    searchCoarseType = EXHAUSTIVE2;
+    nSearchParam = (stp < 1) ? 1 : stp;
+    break;
+  case 9:
+    searchCoarseType = EXHAUSTIVE3;
+    nSearchParam = (stp < 1) ? 1 : stp;
+    break;
+  case 2:
+  default:
+    searchType = LOGARITHMIC;
+    nSearchParam = (stp < 1) ? 1 : stp;
+  }
+
 
   // not below value of 0 at finest level
   nPelSearch = (_pelSearch <= 0) ? analysisData.nPel : _pelSearch;
@@ -631,7 +680,7 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
       searchType, nSearchParam, nPelSearch, nLambda, lsad, pnew, plevel,
       global, srd._analysis_data.nFlags, reinterpret_cast<int*>(pDst),
       outfilebuf, fieldShift, pzero, pglobal, badSAD, badrange,
-      meander, pVecPrevOrNull, tryMany
+      meander, pVecPrevOrNull, tryMany, searchCoarseType
     );
 
     if (divideExtra)

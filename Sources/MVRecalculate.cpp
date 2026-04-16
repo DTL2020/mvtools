@@ -300,6 +300,10 @@ MVRecalculate::MVRecalculate(
     searchType = EXHAUSTIVE2;
     nSearchParam = (stp < 1) ? 1 : stp;
     break;
+  case 9:
+    searchType = EXHAUSTIVE3;
+    nSearchParam = (stp < 1) ? 1 : stp;
+    break;
   case 2:
   default:
     searchType = LOGARITHMIC;

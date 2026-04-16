@@ -51,7 +51,6 @@
 #define MAX_PREDICTOR (20)
 
 
-
 class DCTClass;
 class MVClip;
 class MVFrame;
@@ -356,6 +355,9 @@ private:
   void ExpandingSearch2(WorkingArea& workarea, int radius, int step, int mvx, int mvy); // diameter = 2*radius + 1
 
   template<typename pixel_t>
+  void ExpandingSearch3(WorkingArea& workarea, int radius, int mvx, int mvy); // diameter = 2*radius + 1, step always 1
+
+  template<typename pixel_t>
   void Hex2Search(WorkingArea &workarea, int i_me_range);
   template<typename pixel_t>
   void CrossSearch(WorkingArea &workarea, int start, int x_max, int y_max, int mvx, int mvy);
@@ -399,6 +401,8 @@ private:
   sad_t LumaSADx(WorkingArea &workarea, const unsigned char *pRef0);
   template<typename pixel_t>
   MV_FORCEINLINE sad_t LumaSAD(WorkingArea &workarea, const unsigned char *pRef0);
+  template<typename pixel_t>
+  MV_FORCEINLINE void CheckMV00(WorkingArea& workarea, int vx, int vy);
   template<typename pixel_t>
   MV_FORCEINLINE void CheckMV0(WorkingArea &workarea, int vx, int vy);
   template<typename pixel_t>
