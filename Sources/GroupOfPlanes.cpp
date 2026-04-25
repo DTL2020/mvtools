@@ -220,7 +220,7 @@ void	GroupOfPlanes::SearchMVs(
 
     fieldShiftCur = (i == 0) ? fieldShift : 0; // may be non zero for finest level only
 //		DebugPrintf("SearchMV level %i", i);
-    tryManyLevel = (tryMany && i > 0); // not for finest level to not decrease speed
+    tryManyLevel = (tryMany); // post_822 - enabled for all levels
     planes[i]->SearchMVs(
       pSrcGOF->GetFrame(i),
       pRefGOF->GetFrame(i),
