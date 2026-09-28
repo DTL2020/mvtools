@@ -1,4 +1,4 @@
-// Author: Manao
+﻿// Author: Manao
 // Copyright(c)2006 A.G.Balakhnin aka Fizick - global motion, overlap,  mode, refineMVs
 // See legal notice in Copying.txt for more information
 
@@ -3268,12 +3268,18 @@ void	PlaneOfBlocks::recalculate_mv_slice(Slicer::TaskData &td)
 
       typedef typename std::conditional < sizeof(pixel_t) == 1, sad_t, bigsad_t >::type safe_sad_t;
 
-      if (_smooth == 1) // interpolate
+      // make more global for reusage at smooth=3
+      VECTOR vectorOld1;
+      VECTOR vectorOld2;
+      VECTOR vectorOld3;
+      VECTOR vectorOld4;
+
+      if ((_smooth == 1) || (_smooth == 2)) // interpolate
       {
-        VECTOR vectorOld1 = _mv_clip_ptr->GetBlock(0, blkxold1 + blkyold1*nBlkXold).GetMV(); // 4 old nearest vectors (may coinside)
-        VECTOR vectorOld2 = _mv_clip_ptr->GetBlock(0, blkxold2 + blkyold1*nBlkXold).GetMV();
-        VECTOR vectorOld3 = _mv_clip_ptr->GetBlock(0, blkxold1 + blkyold2*nBlkXold).GetMV();
-        VECTOR vectorOld4 = _mv_clip_ptr->GetBlock(0, blkxold2 + blkyold2*nBlkXold).GetMV();
+        vectorOld1 = _mv_clip_ptr->GetBlock(0, blkxold1 + blkyold1*nBlkXold).GetMV(); // 4 old nearest vectors (may coinside)
+        vectorOld2 = _mv_clip_ptr->GetBlock(0, blkxold2 + blkyold1*nBlkXold).GetMV();
+        vectorOld3 = _mv_clip_ptr->GetBlock(0, blkxold1 + blkyold2*nBlkXold).GetMV();
+        vectorOld4 = _mv_clip_ptr->GetBlock(0, blkxold2 + blkyold2*nBlkXold).GetMV();
 
         // interpolate
         int vector1_x = vectorOld1.x*nStepXold + deltaX*(vectorOld2.x - vectorOld1.x); // scaled by nStepXold to skip slow division
@@ -3347,7 +3353,7 @@ void	PlaneOfBlocks::recalculate_mv_slice(Slicer::TaskData &td)
       workarea.bestMV.sad = sad;
       workarea.nMinCost = sad;
 
-      if (workarea.bestMV.sad > _thSAD)// if old interpolated vector is bad
+      if ((workarea.bestMV.sad > _thSAD) && ((_smooth == 1) || (_smooth == 0)) )// if old interpolated vector is bad
       {
         //				CheckMV(vectorOld1.x, vectorOld1.y);
         //				CheckMV(vectorOld2.x, vectorOld2.y);
@@ -3420,6 +3426,35 @@ void	PlaneOfBlocks::recalculate_mv_slice(Slicer::TaskData &td)
           }
         }
       }	// if bestMV.sad > thSAD
+
+      // if SAD bad - attempt for adaptive larger radius search
+      if ((workarea.bestMV.sad > _thSAD) && (_smooth == 2))
+      {
+        // calculate max search radius as half of max delta MV and limit to not very slow hardcoded RECALCULATE_ADAPTIVE_RADIUS_LIMIT
+        // Max dx and dy differences of the source 4 MVs
+        int max_dx = std::max({
+            std::abs(vectorOld2.x - vectorOld1.x),
+            std::abs(vectorOld4.x - vectorOld3.x),
+            std::abs(vectorOld3.x - vectorOld1.x),
+            std::abs(vectorOld4.x - vectorOld2.x)
+          });
+
+        int max_dy = std::max({
+            std::abs(vectorOld2.y - vectorOld1.y),
+            std::abs(vectorOld4.y - vectorOld3.y),
+            std::abs(vectorOld3.y - vectorOld1.y),
+            std::abs(vectorOld4.y - vectorOld2.y)
+          });
+
+        // Max Chebyshev delta between diff vectors, are we need to scale by nPel ?? 
+        int adaptiveSearchParam = std::max(max_dx, max_dy);
+
+        adaptiveSearchParam = std::clamp(adaptiveSearchParam, nSearchParam, RECALCULATE_ADAPTIVE_RADIUS_LIMIT);
+
+        // use fixed UMH search for better performance (need to be additional arguments like badsearchtype and badsearchlimit)
+        UMHSearch<pixel_t>(workarea, adaptiveSearchParam, workarea.bestMV.x, workarea.bestMV.y);
+
+      }
 
       // we store the result
       vectors[workarea.blkIdx].x = workarea.bestMV.x;

@@ -50,12 +50,11 @@
 // right now 5 should be enough (TSchniede)
 #define MAX_PREDICTOR (20)
 
-
+#define RECALCULATE_ADAPTIVE_RADIUS_LIMIT 100
 
 class DCTClass;
 class MVClip;
 class MVFrame;
-
 
 
 // v2.5.13.1: This class is currently a bit messy,
