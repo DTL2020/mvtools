@@ -3353,7 +3353,32 @@ void	PlaneOfBlocks::recalculate_mv_slice(Slicer::TaskData &td)
       workarea.bestMV.sad = sad;
       workarea.nMinCost = sad;
 
-      if ((workarea.bestMV.sad > _thSAD) && ((_smooth == 1) || (_smooth == 0)) )// if old interpolated vector is bad
+      // if SAD bad and smooth=2 - attempt for adaptive larger radius search
+      if ((workarea.bestMV.sad > _thSAD) && (_smooth == 2))
+      {
+        // calculate max search radius as half of max delta MV and limit to not very slow hardcoded RECALCULATE_ADAPTIVE_RADIUS_LIMIT
+        // Max dx and dy differences of the source 4 MVs
+        int max_dx = std::max({
+            std::abs(vectorOld2.x - vectorOld1.x),
+            std::abs(vectorOld4.x - vectorOld3.x),
+            std::abs(vectorOld3.x - vectorOld1.x),
+            std::abs(vectorOld4.x - vectorOld2.x)
+          });
+
+        int max_dy = std::max({
+            std::abs(vectorOld2.y - vectorOld1.y),
+            std::abs(vectorOld4.y - vectorOld3.y),
+            std::abs(vectorOld3.y - vectorOld1.y),
+            std::abs(vectorOld4.y - vectorOld2.y)
+          });
+
+        // Max Chebyshev delta between diff vectors, are we need to scale by nPel ?? 
+        int adaptiveSearchParam = std::max(max_dx, max_dy);
+
+        nSearchParam = std::clamp(adaptiveSearchParam, nSearchParam, RECALCULATE_ADAPTIVE_RADIUS_LIMIT);
+      }
+
+      if (workarea.bestMV.sad > _thSAD)// if old interpolated vector is bad
       {
         //				CheckMV(vectorOld1.x, vectorOld1.y);
         //				CheckMV(vectorOld2.x, vectorOld2.y);
@@ -3426,35 +3451,6 @@ void	PlaneOfBlocks::recalculate_mv_slice(Slicer::TaskData &td)
           }
         }
       }	// if bestMV.sad > thSAD
-
-      // if SAD bad - attempt for adaptive larger radius search
-      if ((workarea.bestMV.sad > _thSAD) && (_smooth == 2))
-      {
-        // calculate max search radius as half of max delta MV and limit to not very slow hardcoded RECALCULATE_ADAPTIVE_RADIUS_LIMIT
-        // Max dx and dy differences of the source 4 MVs
-        int max_dx = std::max({
-            std::abs(vectorOld2.x - vectorOld1.x),
-            std::abs(vectorOld4.x - vectorOld3.x),
-            std::abs(vectorOld3.x - vectorOld1.x),
-            std::abs(vectorOld4.x - vectorOld2.x)
-          });
-
-        int max_dy = std::max({
-            std::abs(vectorOld2.y - vectorOld1.y),
-            std::abs(vectorOld4.y - vectorOld3.y),
-            std::abs(vectorOld3.y - vectorOld1.y),
-            std::abs(vectorOld4.y - vectorOld2.y)
-          });
-
-        // Max Chebyshev delta between diff vectors, are we need to scale by nPel ?? 
-        int adaptiveSearchParam = std::max(max_dx, max_dy);
-
-        adaptiveSearchParam = std::clamp(adaptiveSearchParam, nSearchParam, RECALCULATE_ADAPTIVE_RADIUS_LIMIT);
-
-        // use fixed UMH search for better performance (need to be additional arguments like badsearchtype and badsearchlimit)
-        UMHSearch<pixel_t>(workarea, adaptiveSearchParam, workarea.bestMV.x, workarea.bestMV.y);
-
-      }
 
       // we store the result
       vectors[workarea.blkIdx].x = workarea.bestMV.x;
