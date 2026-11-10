@@ -126,7 +126,9 @@ public:
     int * meanLumaChange, int divideExtra,
     int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
     int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg, int _AMpt, SearchType _AMst, int _AMsp,
-    int _TMAvg, int _MDp, bool _bVScanDir, int _MPM);
+    int _TMAvg, int _MDp, bool _bVScanDir, int _MPM,
+    MVFrame *_pPrZeroFrame, int _SADadj_przero
+  );
 
 
   /* plane initialisation */
@@ -240,8 +242,10 @@ private:
     // Current frame
   MVFrame *pSrcFrame;
   MVFrame *pRefFrame;
+  MVFrame* pPrZeroFrame;  
   int nSrcPitch[3];
   int nRefPitch[3];
+  int nPrZeroPitch[3];
 #if (ALIGN_SOURCEBLOCK > 1)
   int nSrcPitch_plane[3];     // stores the pitch of the whole plane for easy access (nSrcPitch in non-aligned mode)
 #endif	// ALIGN_SOURCEBLOCK
@@ -310,6 +314,9 @@ private:
   int iAMsearchparam;
   VECTOR vAMResults[MAX_AREAMODE_STEPS];
 
+  // predictors clips params
+  int SADadj_przero;
+
   // Working area
   class WorkingArea
   {
@@ -338,6 +345,10 @@ private:
 
     // Current block
     const uint8_t* pSrc[3];     // the alignment of this array is important for speed for some reason (cacheline?)
+
+    // Current block of the predictor zero frame
+    const uint8_t* pPrZeroSrc[3];    
+
 
     VECTOR bestMV;              /* best vector found so far during the search */
     VECTOR bestMV_multi[MAX_MULTI_BLOCKS_8x8_AVX512]; // 2.7.46

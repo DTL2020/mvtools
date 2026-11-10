@@ -298,7 +298,8 @@ void PlaneOfBlocks::SearchMVs(
   short *outfilebuf, int fieldShift, sad_t * pmeanLumaChange,
   int divideExtra, int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
   int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg, int _AMpt, SearchType _AMst, int _AMsp,
-  int _TMAvg, int _MDp, bool _bVScanDir, int _MPM
+  int _TMAvg, int _MDp, bool _bVScanDir, int _MPM,
+  MVFrame* _pPrZeroFrame, int _SADadj_przero
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -332,6 +333,7 @@ void PlaneOfBlocks::SearchMVs(
 
   pSrcFrame = _pSrcFrame;
   pRefFrame = _pRefFrame;
+  pPrZeroFrame = _pPrZeroFrame;
 
   iAreaMode = _AreaMode;
   iAMstep = _AMstep;
@@ -389,6 +391,18 @@ void PlaneOfBlocks::SearchMVs(
     nSrcPitch[2] = pSrcFrame->GetPlane(VPLANE)->GetPitch();
   }
 #endif	// ALIGN_SOURCEBLOCK
+
+  // not align it for beginning - too rare usage may be ?
+  if (pPrZeroFrame != 0)
+  {
+    nPrZeroPitch[0] = pPrZeroFrame->GetPlane(YPLANE)->GetPitch();
+    if (chroma)
+    {
+      nPrZeroPitch[1] = pPrZeroFrame->GetPlane(UPLANE)->GetPitch();
+      nPrZeroPitch[2] = pPrZeroFrame->GetPlane(VPLANE)->GetPitch();
+    }
+  }
+
   nRefPitch[0] = pRefFrame->GetPlane(YPLANE)->GetPitch();
   if (chroma)
   {
@@ -2383,6 +2397,43 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
     Refine<pixel_t>(workarea);
     bestMVMany[0] = workarea.bestMV;    // save bestMV
     nMinCostMany[0] = workarea.nMinCost;
+  }
+
+  // if predictor zero super clip provided - check it too and select best metric
+  if (pPrZeroFrame != 0)
+  {
+    // replace Src Y and UV pointers in the workarea structure for predictor zero temporarily
+    const uint8_t* pSrc_tmp[3];
+    pSrc_tmp[0] = workarea.pSrc[0];
+    pSrc_tmp[1] = workarea.pSrc[1];
+    pSrc_tmp[2] = workarea.pSrc[2];
+
+    workarea.pSrc[0] = workarea.pPrZeroSrc[0];
+    workarea.pSrc[1] = workarea.pPrZeroSrc[1];
+    workarea.pSrc[2] = workarea.pPrZeroSrc[2];
+
+    sad_t sad_przero = GetDM<pixel_t>(workarea, 0, zeroMVfieldShifted.y) + SADadj_przero; // add temporal variance reduction compensation
+    // add same zero penalty
+    sad_t sad_przero_pen = sad_przero + ((penaltyZero * (safe_sad_t)sad_przero) >> 8);
+
+    if (sad_przero < workarea.bestMV.sad)
+    {
+      workarea.bestMV.sad = sad_przero;
+      workarea.nMinCost = sad_przero_pen;
+
+      if (tryMany)
+      {
+        //  refine around zero, refine to same records as zero mv
+        Refine<pixel_t>(workarea);
+        bestMVMany[0] = workarea.bestMV;    // save bestMV
+        nMinCostMany[0] = workarea.nMinCost;
+      }
+    }
+
+    // restore Src Y and UV in the workarea structure for main source
+    workarea.pSrc[0] = pSrc_tmp[0];
+    workarea.pSrc[1] = pSrc_tmp[1];
+    workarea.pSrc[2] = pSrc_tmp[2];
   }
 
   // Global MV predictor  - added by Fizick
@@ -5322,6 +5373,17 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
           workarea.pSrc[2] = pSrcFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
         }
 #endif	// ALIGN_SOURCEBLOCK
+
+        // update predictor zero src pointers (if present)
+        if (pPrZeroFrame != 0)
+        {
+          workarea.pPrZeroSrc[0] = pPrZeroFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
+          if (chroma)
+          {
+            workarea.pPrZeroSrc[1] = pPrZeroFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
+            workarea.pPrZeroSrc[2] = pPrZeroFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
+          }
+        }
 
         // fixme note:
         // MAnalyze mt-inconsistency reason #3

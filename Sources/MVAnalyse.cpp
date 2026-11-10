@@ -54,6 +54,7 @@ MVAnalyse::MVAnalyse(
   int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, int _AMpel, int _PTpel,
   int _AMflags, int _AMavg, int _AMpt, int _AMst, int _AMsp,
   int _TMavg, int _MDp, int _ScanDir, int _MPM,
+  PClip _sup_przero, int _Nframes_przero, int _SADadj_przero,
   IScriptEnvironment* env
 )
   : ::GenericVideoFilter(_child)
@@ -70,6 +71,7 @@ MVAnalyse::MVAnalyse(
   , scaleCSADfine(_scaleCSADfine)
   , iUseSubShift(_iUseSubShift)
   , child_cur(_child_cur)
+  , child_przero(_sup_przero)
   , iSearchDirMode(_iSearchDirMode)
   , DMFlags(_DMFlags)
   , iAreaMode(_AreaMode)
@@ -86,6 +88,8 @@ MVAnalyse::MVAnalyse(
   , iMDp(_MDp)
   , iScanDir(_ScanDir)
   , iMPM(_MPM)
+  , Nframes_przero(_Nframes_przero)
+  , SADadj_przero(_SADadj_przero)
 {
   has_at_least_v8 = true;
   try { env->CheckVersion(8); }
@@ -197,6 +201,26 @@ MVAnalyse::MVAnalyse(
       env->ThrowError("MAnalyse: super and super_current clips video format is different!");
   }
 
+  if (child_przero != 0)// ??
+  {
+    const ::VideoInfo& vi_super_przero = child_przero->GetVideoInfo();
+
+    if (vi_super_przero.height != vi.height)
+      env->ThrowError("MAnalyse: super and super_przero clips video format is different!");
+
+    if (vi_super_przero.image_type != vi.image_type)
+      env->ThrowError("MAnalyse: super and super_przero clips video format is different!");
+
+    if (vi_super_przero.num_frames != vi.num_frames)
+      env->ThrowError("MAnalyse: super and super_przero clips video format is different!");
+
+    if (!vi.IsSameColorspace(child_przero->GetVideoInfo()))
+      env->ThrowError("MAnalyse: super and super_przero clips video format is different!");
+
+    if (Nframes_przero == 0)
+      env->ThrowError("MAnalyse: Nframes_przero can not be <1 if super_przero clip provided!");
+  }
+
   if (nHeight <= 0
     || nSuperHPad < 0
     || nSuperHPad >= vi.width / 2 // PF: intentional /2
@@ -303,6 +327,18 @@ MVAnalyse::MVAnalyse(
       nSuperPel, nSuperHPad, nSuperVPad, nSuperModeYUV,
       _cpuFlags, analysisData.xRatioUV, analysisData.yRatioUV, pixelsize, bits_per_pixel, mt_flag
     );
+
+    if (child_przero != 0)
+    {
+      pPrZeroGOF = new MVGroupOfFrames(
+        nSuperLevels, analysisData.nWidth, analysisData.nHeight,
+        nSuperPel, nSuperHPad, nSuperVPad, nSuperModeYUV,
+        _cpuFlags, analysisData.xRatioUV, analysisData.yRatioUV, pixelsize, bits_per_pixel, mt_flag
+      );
+    }
+    else
+      pPrZeroGOF = 0;
+
   }
 /*  else - need to find why system going unstable in init pel=1 with pel=4 processing
   {
@@ -736,6 +772,12 @@ MVAnalyse::~MVAnalyse()
   pSrcGOF = 0;
   delete pRefGOF;
   pRefGOF = 0;
+  if (child_przero != 0)
+  {
+    delete pPrZeroGOF;
+    pPrZeroGOF = 0;
+  }
+
   _RPT1(0, "MAnalyze destroyed %d\n",_instance_id);
 #if defined _WIN32 && defined DX12_ME
 //  delete pNV12FrameData;
@@ -822,7 +864,15 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
     else
       src = child_cur->GetFrame(nsrc, env); // v2.7.46 - load different source super clip frame as current for search
 
-                                            // if(has_at_least_v8) env->copyFrameProps(src, dst); // frame property support
+    PVideoFrame	src_przero;
+    if (child_przero != 0)
+    {
+      src_przero = child_przero->GetFrame(nsrc, env);
+
+      load_src_frame(*pPrZeroGOF, src_przero, srd._analysis_data);
+    }
+
+    // if(has_at_least_v8) env->copyFrameProps(src, dst); // frame property support
     // The result clip is a special MV clip. It does not need to inherit the frame props of source
 
     ::PVideoFrame	ref = child->GetFrame(nref, env); // v2.0
@@ -1499,7 +1549,8 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         global, srd._analysis_data.nFlags, reinterpret_cast<int*>(pDst),
         outfilebuf, fieldShift, pzero, pglobal, badSAD, badrange,
         meander, pVecPrevOrNull, tryMany, optPredictorType, iPTpel, iAMflags, iAMavg, iAMpt, AMsearchType, iAMsp,
-        iTMAvg, iMDp, iScanDir, iMPM
+        iTMAvg, iMDp, iScanDir, iMPM,
+        pPrZeroGOF, Nframes_przero, SADadj_przero
       );
     }
 
