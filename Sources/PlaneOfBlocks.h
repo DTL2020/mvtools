@@ -732,6 +732,10 @@ private:
   template<typename pixel_t>
   MV_FORCEINLINE sad_t GetDM(WorkingArea& workarea, int vx, int vy); // Luma and Chroma
 
+  // thread safe version for intra frame MT
+  template<typename pixel_t>
+  MV_FORCEINLINE sad_t GetDM_P(WorkingArea& workarea, int iSrcPitch0, int iSrcPitch1, int iSrcPitch2, int vx, int vy); // Luma and Chroma
+
   template<typename pixel_t>
   MV_FORCEINLINE sad_t GetDMChroma(WorkingArea& workarea, int vx, int vy); // Chroma only
 

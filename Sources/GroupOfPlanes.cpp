@@ -335,7 +335,7 @@ void	GroupOfPlanes::SearchMVs(
 
     if (pPrZeroGOF != 0)
     {
-      pmvfPrZero = pPrZeroGOF->GetFrame(nLevelCount - 1);
+      pmvfPrZero = pPrZeroGOF->GetFrame(i);
     }
 
     // double SADadj_przero only at 1x and lower sized levels

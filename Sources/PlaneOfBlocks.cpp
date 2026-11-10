@@ -351,6 +351,8 @@ void PlaneOfBlocks::SearchMVs(
   bVScanDir = _bVScanDir; // true - top to botton, false - reverse
   iMPM = _MPM;
 
+  SADadj_przero = _SADadj_przero;
+
   if (iAreaMode > 0)
   {
     // iAreaMode - num steps around current block pos, each step = 4 positions in diagonal mode
@@ -2412,7 +2414,7 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
     workarea.pSrc[1] = workarea.pPrZeroSrc[1];
     workarea.pSrc[2] = workarea.pPrZeroSrc[2];
 
-    sad_t sad_przero = GetDM<pixel_t>(workarea, 0, zeroMVfieldShifted.y) + SADadj_przero; // add temporal variance reduction compensation
+    sad_t sad_przero = GetDM_P<pixel_t>(workarea, nPrZeroPitch[0], nPrZeroPitch[1], nPrZeroPitch[2], 0, zeroMVfieldShifted.y) + SADadj_przero; // add temporal variance reduction compensation
     // add same zero penalty
     sad_t sad_przero_pen = sad_przero + ((penaltyZero * (safe_sad_t)sad_przero) >> 8);
 
@@ -2424,7 +2426,7 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
       if (tryMany)
       {
         //  refine around zero, refine to same records as zero mv
-        Refine<pixel_t>(workarea);
+        Refine<pixel_t>(workarea); // only work with ALIGN_SOURCE_BLOCK of 0 ! to have working global pitches (intra frame MT friendly)
         bestMVMany[0] = workarea.bestMV;    // save bestMV
         nMinCostMany[0] = workarea.nMinCost;
       }
@@ -9661,6 +9663,42 @@ MV_FORCEINLINE sad_t PlaneOfBlocks::GetDM(WorkingArea& workarea, int vx, int vy)
 
   return sad + saduv;
 }
+
+template<typename pixel_t>
+MV_FORCEINLINE sad_t PlaneOfBlocks::GetDM_P(WorkingArea& workarea, int iSrcPitch0, int iSrcPitch1, int iSrcPitch2, int vx, int vy) // Luma and Chroma
+{
+  sad_t sad = 0;
+  sad_t saduv = 0;
+  int iRefPitchY = 0;
+  int iRefPitchU = 0;
+  int iRefPitchV = 0;
+
+  if (iUseSubShift == 0)
+  {
+    saduv = (chroma) ? ScaleSadChroma_f(DM_Chroma->GetDisMetric(workarea.pSrc[1], iSrcPitch1, GetRefBlockU(workarea, vx, vy), nRefPitch[1])
+      + DM_Chroma->GetDisMetric(workarea.pSrc[2], iSrcPitch2, GetRefBlockV(workarea, vx, vy), nRefPitch[2]), effective_chromaSADscale, scaleCSADfine) : 0;
+    sad = DM_Luma->GetDisMetric(workarea.pSrc[0], iSrcPitch0, GetRefBlock(workarea, vx, vy), nRefPitch[0]);;
+  }
+  else
+  {
+    if (chroma)
+    {
+      const unsigned char* ptrRefU = GetRefBlockUSubShifted(workarea, vx, vy, iRefPitchU);
+      const unsigned char* ptrRefV = GetRefBlockVSubShifted(workarea, vx, vy, iRefPitchV);
+      saduv = ScaleSadChroma_f(DM_Chroma->GetDisMetric(workarea.pSrc[1], iSrcPitch1, ptrRefU, iRefPitchU)
+        + DM_Chroma->GetDisMetric(workarea.pSrc[2], iSrcPitch2, ptrRefV, iRefPitchV), effective_chromaSADscale, scaleCSADfine);
+    }
+    else
+      saduv = 0;
+
+    const unsigned char* ptrRef = GetRefBlockSubShifted(workarea, vx, vy, iRefPitchY);
+    sad = DM_Luma->GetDisMetric(workarea.pSrc[0], iSrcPitch0, ptrRef, iRefPitchY); // not support DCT modes in UseSubShift mode now ?
+
+  }
+
+  return sad + saduv;
+}
+
 
 template<typename pixel_t>
 MV_FORCEINLINE sad_t PlaneOfBlocks::GetDMChroma(WorkingArea& workarea, int vx, int vy) // Luma and Chroma
