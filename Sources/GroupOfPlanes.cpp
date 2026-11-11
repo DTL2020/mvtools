@@ -137,7 +137,7 @@ void	GroupOfPlanes::SearchMVs(
   int    MPM,
   MVGroupOfFrames *pPrZeroGOF,
   int Nframes_przero, // for auto SADadj computing
-  int SADadj_przero
+  float SADadj_przero
 )
 {
   nFlags |= flags;
@@ -258,7 +258,7 @@ void	GroupOfPlanes::SearchMVs(
     bVScanDir,
     MPM,
     pmvfPrZero,
-    SADadj_przero
+    (int)SADadj_przero
   );
 
   out += planes[nLevelCount - 1]->GetArraySize(divideExtra);
@@ -266,6 +266,8 @@ void	GroupOfPlanes::SearchMVs(
   {
     vecPrev += planes[nLevelCount - 1]->GetArraySize(divideExtra);
   }
+
+  float fWorkingSADadj_przero = SADadj_przero;
 
   // Refining the search until we reach the highest detail interpolation.
   PlaneOfBlocks::Slicer	slicer_glob(_mt_flag);
@@ -339,15 +341,14 @@ void	GroupOfPlanes::SearchMVs(
     }
 
     // double SADadj_przero only at 1x and lower sized levels
-    if (!((i == 0) && (nPel == 2)))
-    {
-      SADadj_przero *= 2;
+    if ((i == 0) && (nPel == 2))
+    {     
     }
-
-    if (!(((i == 0) || (i == 1)) && (nPel == 4)))
-    {
-      SADadj_przero *= 2;
+    else if (((i == 0) || (i == 1)) && (nPel == 4))
+    {      
     }
+    else
+      fWorkingSADadj_przero *= 2;
 
     planes[i]->SearchMVs(
       pSrcGOF->GetFrame(i),
@@ -386,7 +387,7 @@ void	GroupOfPlanes::SearchMVs(
       bVScanDir,
       MPM,
       pmvfPrZero,
-      SADadj_przero
+      (int)fWorkingSADadj_przero
     );
 
 

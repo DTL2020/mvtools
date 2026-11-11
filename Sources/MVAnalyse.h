@@ -161,7 +161,7 @@ protected:
   int iMPM;
 
   int Nframes_przero;
-  int SADadj_przero;
+  float SADadj_przero;
 
 public:
 
@@ -178,7 +178,7 @@ public:
     int _AreaMode, int _AMDiffSAD, int _AMstep, int _AMoffset, int _AMpel,
     int _PTpel, int _AMflags, int _AMavg, int _AMpt, int _AMst, int _AMsp,
     int _TMavg, int _MDp, int _ScanDir, int _MPM,
-    PClip _sup_przero, int _Nframes_przero, int SADadj_przero,
+    PClip _sup_przero, int _Nframes_przero, float SADadj_przero,
     IScriptEnvironment* env);
   ~MVAnalyse();
 
