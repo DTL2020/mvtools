@@ -35,6 +35,7 @@
 // Whenever you need windows headers, start by including this file, then the rest.
 
 // WWUUT? We require XP now?
+// WWUUT? We require XP now?
 #if !defined(NTDDI_VERSION) && !defined(_WIN32_WINNT)
 
 #if defined _WIN32 && DX12_ME
@@ -47,9 +48,7 @@
 #endif
 
 #define WIN32_LEAN_AND_MEAN
-#ifndef STRICT
 #define STRICT
-#endif
 #if !defined(NOMINMAX)
     #define NOMINMAX
 #endif

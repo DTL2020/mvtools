@@ -23,6 +23,11 @@
 
 #include	"avisynth.h"
 #ifdef _WIN32
+// The Windows SDK's minwindef.h defines STRICT as 1, avs/win.h (external) defines
+// it as empty: drop the previous definition to avoid a redefinition warning.
+#ifdef STRICT
+#undef STRICT
+#endif
 #include "avs/win.h"
 #endif
 
@@ -187,6 +192,95 @@ sad_t	ClipFnc::interpolate_thsad (sad_t thsad1, sad_t thsad2, int d, int tr)
   }
 
   return (thsad);
+}
+
+
+
+bool	ClipFnc::is_ya (const ::VideoInfo &vi)
+{
+  // Y and A planes, no U/V. Not IsY(), but IsYUVA().
+  // V13 interface function; on older cores it is resolved to false (AVS_LinkIsMissing), where YA cannot exist anyway.
+  return vi.IsYA();
+}
+
+
+
+bool	ClipFnc::is_grey (const ::VideoInfo &vi)
+{
+  return vi.IsY() || is_ya(vi);
+}
+
+
+
+bool	ClipFnc::is_yuv_any (const ::VideoInfo &vi)
+{
+  return vi.IsYUV() || vi.IsYUVA();
+}
+
+
+
+bool	ClipFnc::has_alpha (const ::VideoInfo &vi)
+{
+  return vi.IsPlanar() && (vi.IsYUVA() || vi.IsPlanarRGBA());
+}
+
+
+
+int	ClipFnc::nbr_planes_processed (const ::VideoInfo &vi)
+{
+  if (vi.IsYUY2())
+    return 3;
+  if (is_grey(vi))
+    return 1;
+  return std::min(vi.NumComponents(), 3);
+}
+
+
+
+void	ClipFnc::copy_alpha (::PVideoFrame &dst, const ::PVideoFrame &src, const ::VideoInfo &vi, IScriptEnvironment *env)
+{
+  if (!has_alpha(vi))
+    return;
+  // common area only: src may be larger (e.g. a super clip frame with padding)
+  env->BitBlt(
+    dst->GetWritePtr(PLANAR_A), dst->GetPitch(PLANAR_A),
+    src->GetReadPtr(PLANAR_A), src->GetPitch(PLANAR_A),
+    std::min(dst->GetRowSize(PLANAR_A), src->GetRowSize(PLANAR_A)),
+    std::min(dst->GetHeight(PLANAR_A), src->GetHeight(PLANAR_A))
+  );
+}
+
+
+
+void	ClipFnc::fill_alpha_opaque (::PVideoFrame &dst, const ::VideoInfo &vi)
+{
+  if (!has_alpha(vi))
+    return;
+  uint8_t *p = dst->GetWritePtr(PLANAR_A);
+  const int pitch = dst->GetPitch(PLANAR_A);
+  const int width = dst->GetRowSize(PLANAR_A) / vi.ComponentSize();
+  const int height = dst->GetHeight(PLANAR_A);
+  const int bits = vi.BitsPerComponent();
+  for (int y = 0; y < height; y++)
+  {
+    if (bits == 8)
+      std::fill_n(p, width, uint8_t(255));
+    else if (bits <= 16)
+      std::fill_n(reinterpret_cast<uint16_t *>(p), width, uint16_t((1 << bits) - 1));
+    else
+      std::fill_n(reinterpret_cast<float *>(p), width, 1.0f);
+    p += pitch;
+  }
+}
+
+
+
+void	ClipFnc::copy_alpha_from (::PVideoFrame &dst, ::PClip &clip, int n, const ::VideoInfo &vi, IScriptEnvironment *env)
+{
+  if (!has_alpha(vi))
+    return;
+  ::PVideoFrame src = clip->GetFrame(n, env);
+  copy_alpha(dst, src, vi, env);
 }
 
 

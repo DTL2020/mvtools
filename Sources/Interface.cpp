@@ -87,7 +87,7 @@ AVSValue __cdecl Create_MVShow(AVSValue args, void* user_data, IScriptEnvironmen
     args[7].AsInt(MV_DEFAULT_SCD1),
     args[8].AsInt(MV_DEFAULT_SCD2),
     args[9].AsBool(true),
-    args[10].AsBool(false), // planar
+//    args[10].AsBool(false), // planar
     env
   );
 }

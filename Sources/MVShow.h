@@ -22,12 +22,17 @@
 
 #include "MVClip.h"
 #include "MVFilter.h"
-#include "yuy2planes.h"
 
 #ifdef _WIN32
+#ifndef NOGDI
 #define NOGDI
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include "windows.h"
 #endif
 #include	"avisynth.h"
@@ -63,14 +68,12 @@ private:
 //	inline static double BDABS(double x)
 //		{ return ( x < 0 ) ? -x : x; }
 
-  YUY2Planes * DstPlanes;
   //bool isse;
   int cpuFlags;
-  bool planar;
 
 public:
   MVShow(PClip _child, PClip vectors, int _scale, int _plane, int _tol, bool _showsad, int number,
-          sad_t nSCD1, int nSCD2, bool isse, bool _planar, IScriptEnvironment* env);
+          sad_t nSCD1, int nSCD2, bool isse, IScriptEnvironment* env);
   ~MVShow();
   PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env) override;
 
