@@ -127,7 +127,7 @@ public:
     int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
     int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg, int _AMpt, SearchType _AMst, int _AMsp,
     int _TMAvg, int _MDp, bool _bVScanDir, int _MPM,
-    MVFrame *_pPrZeroFrame, int _SADadj_przero
+    MVFrame *_pPrZeroFrame, float _SADadj_przero
   );
 
 
@@ -315,7 +315,7 @@ private:
   VECTOR vAMResults[MAX_AREAMODE_STEPS];
 
   // predictors clips params
-  int SADadj_przero;
+  float SADadj_przero;
 
   // Working area
   class WorkingArea

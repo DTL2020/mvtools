@@ -299,7 +299,7 @@ void PlaneOfBlocks::SearchMVs(
   int divideExtra, int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
   int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg, int _AMpt, SearchType _AMst, int _AMsp,
   int _TMAvg, int _MDp, bool _bVScanDir, int _MPM,
-  MVFrame* _pPrZeroFrame, int _SADadj_przero
+  MVFrame* _pPrZeroFrame, float _SADadj_przero
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -2414,21 +2414,48 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
     workarea.pSrc[1] = workarea.pPrZeroSrc[1];
     workarea.pSrc[2] = workarea.pPrZeroSrc[2];
 
-    sad_t sad_przero = GetDM_P<pixel_t>(workarea, nPrZeroPitch[0], nPrZeroPitch[1], nPrZeroPitch[2], 0, zeroMVfieldShifted.y) + SADadj_przero; // add temporal variance reduction compensation
+    sad_t sad_przero = GetDM_P<pixel_t>(workarea, nPrZeroPitch[0], nPrZeroPitch[1], nPrZeroPitch[2], 0, zeroMVfieldShifted.y); // not yet adjusted for temporal variance reduction compensation
+    sad_t sad_przero_adj = (sad_t)(sad_przero * SADadj_przero);
     // add same zero penalty
     sad_t sad_przero_pen = sad_przero + ((penaltyZero * (safe_sad_t)sad_przero) >> 8);
 
-    if (sad_przero < workarea.bestMV.sad)
+    if (sad_przero_adj < workarea.bestMV.sad) // check with adjusted value
     {
-      workarea.bestMV.sad = sad_przero;
-      workarea.nMinCost = sad_przero_pen;
-
       if (tryMany)
       {
+        // Before Refine: use raw (unadjusted) SAD so center (0,0) and neighbors in pPrZeroSrc share the same scale
+        workarea.bestMV.sad = sad_przero;
+        workarea.nMinCost = sad_przero + ((penaltyZero * (safe_sad_t)sad_przero) >> 8);
+
         //  refine around zero, refine to same records as zero mv
         Refine<pixel_t>(workarea); // only work with ALIGN_SOURCE_BLOCK of 0 ! to have working global pitches (intra frame MT friendly)
+
+        // adjust best sad and cost if SADadj_przero > 1.0f
+        if (SADadj_przero != 1.0f)
+        {
+          sad_t old_sad = workarea.bestMV.sad;
+          sad_t new_sad = (sad_t)(old_sad * SADadj_przero);
+          workarea.bestMV.sad = new_sad;
+
+          if (workarea.bestMV.x == zeroMVfieldShifted.x && workarea.bestMV.y == zeroMVfieldShifted.y)
+          {
+            // Vector stayed at zero: recalculate proportional penaltyZero from adjusted SAD
+            workarea.nMinCost = new_sad + ((penaltyZero * (safe_sad_t)new_sad) >> 8);
+          }
+          else
+          {
+            // Vector moved away from zero: keep Refine's motion penalties intact, only scale SAD
+            workarea.nMinCost += (new_sad - old_sad);
+          }
+        }
+
         bestMVMany[0] = workarea.bestMV;    // save bestMV
         nMinCostMany[0] = workarea.nMinCost;
+      }
+      else
+      {
+        workarea.bestMV.sad = sad_przero_adj; // if no Refine - store adjusted values
+        workarea.nMinCost = sad_przero_adj + ((penaltyZero * (safe_sad_t)sad_przero_adj) >> 8);
       }
     }
 

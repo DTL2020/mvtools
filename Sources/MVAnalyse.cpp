@@ -218,7 +218,27 @@ MVAnalyse::MVAnalyse(
       env->ThrowError("MAnalyse: super and super_przero clips video format is different!");
 
     if (Nframes_przero == 0)
-      env->ThrowError("MAnalyse: Nframes_przero can not be <1 if super_przero clip provided!");
+      env->ThrowError("MAnalyse: Nframes_przero can not be in -1..1 range if super_przero clip provided!");
+
+    // process auto or manual SADadj_przero (multiplicative correction only depends on N frames averaged and not depends on noise level ?)
+    if (SADadj_przero <= 0.0f) // process as auto SADadj_przero
+    {
+      if (Nframes_przero > 1) // current frame not included in the temporal averaging (recommended mode)
+      {
+        float N = (float)Nframes_przero;
+        SADadj_przero = std::sqrt(2.0f * N / (N + 1.0f));
+      }
+      else if (Nframes_przero < -1) // current frame is included in the temporal averaging (not recommended but possible mode)
+      {        
+        float N = (float)(-Nframes_przero);
+        SADadj_przero = std::sqrt(2.0f * N / (N - 1.0f));
+      }
+      else
+      {
+        // for N -1 0 1 - not set safe fallback
+        SADadj_przero = 1.0f;
+      }
+    }
   }
 
   if (nHeight <= 0

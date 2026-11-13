@@ -224,8 +224,8 @@ AVSValue __cdecl Create_MVAnalyse(AVSValue args, void* user_data, IScriptEnviron
     args[54].AsInt(1), // scandir - direction of search in the frame, 1 - lines scan top to bottom, 2 - lines bottom to top
     args[55].AsInt(0), // mpm - median predictor mode: 0 - median of 3, 1 - copy of MD predictor
     args[56].AsClip(), // super_przero - super clip of the temporally filtered source with predictor zero
-    args[57].AsInt(0), // Nframes_przero - number of frames in the temporal averaging for predictor zero must be provided if super_przero is not NULL
-    args[58].AsFloat(-1.0f), // SAD correction for temporally filtered predictor zero superclip. -1.0f= auto.
+    args[57].AsInt(0), // Nframes_przero - number of frames in the temporal averaging for predictor zero must be provided if super_przero is not NULL, positive - current frame NOT included in averaging (recommended mode, negative - current frame NOT included in averaging (not recommended mode)
+    args[58].AsFloat(0.0f), // SAD multiplicative correction for temporally filtered predictor zero superclip. 0.0f= auto.
     env
   );
 }
