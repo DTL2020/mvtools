@@ -2402,10 +2402,16 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
   }
 
   // if predictor zero super clip provided - check it too and select best metric
+
+  // remember best values for predictor zero clip for trymany=false mode
+  sad_t sad_przero_raw = 0;
+  sad_t cost_przero_raw = 0;
+  sad_t cost_przero_adj = verybigSAD;
+  const uint8_t* pSrc_tmp[3];
+
   if (pPrZeroFrame != 0)
   {
     // replace Src Y and UV pointers in the workarea structure for predictor zero temporarily
-    const uint8_t* pSrc_tmp[3];
     pSrc_tmp[0] = workarea.pSrc[0];
     pSrc_tmp[1] = workarea.pSrc[1];
     pSrc_tmp[2] = workarea.pSrc[2];
@@ -2454,8 +2460,12 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
       }
       else
       {
+        sad_przero_raw = sad_przero;
+        cost_przero_raw = sad_przero_pen;
+
         workarea.bestMV.sad = sad_przero_adj; // if no Refine - store adjusted values
         workarea.nMinCost = sad_przero_adj + ((penaltyZero * (safe_sad_t)sad_przero_adj) >> 8);
+        cost_przero_adj = workarea.nMinCost;
       }
     }
 
@@ -2623,7 +2633,53 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
   else
   {
     // then, we refine, according to the search type
-    Refine<pixel_t>(workarea);
+//    Refine<pixel_t>(workarea);
+    if (pPrZeroFrame != 0 &&
+      workarea.nMinCost == cost_przero_adj &&
+      workarea.bestMV.x == zeroMVfieldShifted.x &&
+      workarea.bestMV.y == zeroMVfieldShifted.y)
+    {
+      // 1. Restore RAW SAD and Cost before SADadj_przero before Refine 
+      workarea.bestMV.sad = sad_przero_raw;
+      workarea.nMinCost = cost_przero_raw;
+
+      // 2. Replace pointers workarea.pSrc ?? pPrZeroFrame      
+      pSrc_tmp[0] = workarea.pSrc[0];
+      pSrc_tmp[1] = workarea.pSrc[1];
+      pSrc_tmp[2] = workarea.pSrc[2];
+
+      workarea.pSrc[0] = workarea.pPrZeroSrc[0];
+      workarea.pSrc[1] = workarea.pPrZeroSrc[1];
+      workarea.pSrc[2] = workarea.pPrZeroSrc[2];
+
+      Refine<pixel_t>(workarea);
+      
+      // restore Src Y and UV in the workarea structure for main source
+      workarea.pSrc[0] = pSrc_tmp[0];
+      workarea.pSrc[1] = pSrc_tmp[1];
+      workarea.pSrc[2] = pSrc_tmp[2];
+
+      // 4. Apply SADadj_przero to the Refine result
+      if (SADadj_przero != 1.0f)
+      {
+        sad_t old_sad = workarea.bestMV.sad;
+        sad_t new_sad = (sad_t)(old_sad * SADadj_przero);
+        workarea.bestMV.sad = new_sad;
+
+        if (workarea.bestMV.x == zeroMVfieldShifted.x && workarea.bestMV.y == zeroMVfieldShifted.y)
+        {
+          workarea.nMinCost = new_sad + ((penaltyZero * (safe_sad_t)new_sad) >> 8);
+        }
+        else
+        {
+          workarea.nMinCost += (new_sad - old_sad);
+        }
+      }
+    }
+    else
+    {
+      Refine<pixel_t>(workarea);
+    }
   }
   sad_t foundSAD = workarea.bestMV.sad;
 
