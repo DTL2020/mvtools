@@ -2443,6 +2443,8 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
     // add same zero penalty
     sad_t sad_przero_pen = sad_przero + ((penaltyZero * (safe_sad_t)sad_przero) >> 8);
 
+    // sad_t cost_przero_adj = sad_przero_adj + ((penaltyZero * (safe_sad_t)sad_przero_adj) >> 8); 
+    // to check:     if (cost_przero_adj < workarea.nMinCost) // may be better to compare with cost (same as with global predictor) ?
     if (sad_przero_adj < workarea.bestMV.sad) // check with adjusted value
     {
       if (tryMany)
@@ -2514,73 +2516,7 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
       Refine<pixel_t>(workarea);    // reset bestMV
       bestMVMany[1] = workarea.bestMV;    // save bestMV
       nMinCostMany[1] = workarea.nMinCost;
-    }
-
-    if (pPrGlobalFrame != 0)
-    {
-      // replace Src Y and UV pointers in the workarea structure for predictor global temporarily
-      pSrc_tmp[0] = workarea.pSrc[0];
-      pSrc_tmp[1] = workarea.pSrc[1];
-      pSrc_tmp[2] = workarea.pSrc[2];
-
-      workarea.pSrc[0] = workarea.pPrGlobalSrc[0];
-      workarea.pSrc[1] = workarea.pPrGlobalSrc[1];
-      workarea.pSrc[2] = workarea.pPrGlobalSrc[2];
-
-      sad_t sad_prglobal = GetDM_P<pixel_t>(workarea, nPrGlobalPitch[0], nPrGlobalPitch[1], nPrGlobalPitch[2], 0, zeroMVfieldShifted.y); // not yet adjusted for temporal variance reduction compensation
-      sad_t sad_prglobal_adj = (sad_t)(sad_prglobal * SADadj_prglobal);
-      // add same global penalty
-      sad_t sad_prglobal_pen = sad_prglobal + ((pglobal * (safe_sad_t)sad_prglobal) >> 8);
-
-      if (sad_prglobal_adj < workarea.bestMV.sad) // check with adjusted value
-      {
-        if (tryMany)
-        {
-          // Before Refine: use raw (unadjusted) SAD so center (0,0) and neighbors in pPrGlobalSrc share the same scale
-          workarea.bestMV.sad = sad_prglobal;
-          workarea.nMinCost = sad_prglobal + ((pglobal * (safe_sad_t)sad_prglobal) >> 8);
-
-          //  refine around global, refine to same records as global mv
-          Refine<pixel_t>(workarea); // only work with ALIGN_SOURCE_BLOCK of 0 ! to have working global pitches (intra frame MT friendly)
-
-          // adjust best sad and cost if SADadj_prglobal > 1.0f
-          if (SADadj_prglobal != 1.0f)
-          {
-            sad_t old_sad = workarea.bestMV.sad;
-            sad_t new_sad = (sad_t)(old_sad * SADadj_prglobal);
-            workarea.bestMV.sad = new_sad;
-
-            if (workarea.bestMV.x == workarea.globalMVPredictor.x && workarea.bestMV.y == workarea.globalMVPredictor.y)
-            {
-              // Vector stayed at global: recalculate proportional penaltyGlobal from adjusted SAD
-              workarea.nMinCost = new_sad + ((pglobal * (safe_sad_t)new_sad) >> 8);
-            }
-            else
-            {
-              // Vector moved away from global: keep Refine's motion penalties intact, only scale SAD
-              workarea.nMinCost += (new_sad - old_sad);
-            }
-          }
-
-          bestMVMany[1] = workarea.bestMV;    // save bestMV
-          nMinCostMany[1] = workarea.nMinCost;
-        }
-        else
-        {
-          sad_prglobal_raw = sad_prglobal;
-          cost_prglobal_raw = sad_prglobal_pen;
-
-          workarea.bestMV.sad = sad_prglobal_adj; // if no Refine - store adjusted values
-          workarea.nMinCost = sad_prglobal_adj + ((pglobal * (safe_sad_t)sad_prglobal_adj) >> 8);
-          cost_prglobal_adj = workarea.nMinCost;
-        }
-      }
-
-      // restore Src Y and UV in the workarea structure for main source
-      workarea.pSrc[0] = pSrc_tmp[0];
-      workarea.pSrc[1] = pSrc_tmp[1];
-      workarea.pSrc[2] = pSrc_tmp[2];
-    }
+    }    
 
   }
   else
@@ -2588,6 +2524,80 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
     {
       bestMVMany[1] = workarea.globalMVPredictor;  // to check: is it correct with predictor global clip provided ?
     }
+
+  // check global predictor clip always (it is checked with different src block so may be different (better) in metric)
+  if (pPrGlobalFrame != 0)
+  {
+    // replace Src Y and UV pointers in the workarea structure for predictor global temporarily
+    pSrc_tmp[0] = workarea.pSrc[0];
+    pSrc_tmp[1] = workarea.pSrc[1];
+    pSrc_tmp[2] = workarea.pSrc[2];
+
+    workarea.pSrc[0] = workarea.pPrGlobalSrc[0];
+    workarea.pSrc[1] = workarea.pPrGlobalSrc[1];
+    workarea.pSrc[2] = workarea.pPrGlobalSrc[2];
+
+    sad_t sad_prglobal = GetDM_P<pixel_t>(workarea, nPrGlobalPitch[0], nPrGlobalPitch[1], nPrGlobalPitch[2], workarea.globalMVPredictor.x, workarea.globalMVPredictor.y); // not yet adjusted for temporal variance reduction compensation
+    sad_t sad_prglobal_adj = (sad_t)(sad_prglobal * SADadj_prglobal);
+    // add same global penalty
+    sad_t sad_prglobal_pen = sad_prglobal + ((pglobal * (safe_sad_t)sad_prglobal) >> 8);
+
+    sad_t cost_prglobal_adj = sad_prglobal_adj + ((pglobal * (safe_sad_t)sad_prglobal_adj) >> 8);
+
+//    if (sad_prglobal_adj < workarea.bestMV.sad) // check with adjusted value
+    if (cost_prglobal_adj < workarea.nMinCost) // may be better ?
+    {
+      // set current best MV in the workarea to global predictor
+      workarea.bestMV.x = workarea.globalMVPredictor.x;
+      workarea.bestMV.y = workarea.globalMVPredictor.y;
+
+      if (tryMany)
+      {
+        // Before Refine: use raw (unadjusted) SAD so center (0,0) and neighbors in pPrGlobalSrc share the same scale
+        workarea.bestMV.sad = sad_prglobal;
+        workarea.nMinCost = sad_prglobal + ((pglobal * (safe_sad_t)sad_prglobal) >> 8);
+
+        //  refine around global, refine to same records as global mv
+        Refine<pixel_t>(workarea); // only work with ALIGN_SOURCE_BLOCK of 0 ! to have working global pitches (intra frame MT friendly)
+
+        // adjust best sad and cost if SADadj_prglobal > 1.0f
+        if (SADadj_prglobal != 1.0f)
+        {
+          sad_t old_sad = workarea.bestMV.sad;
+          sad_t new_sad = (sad_t)(old_sad * SADadj_prglobal);
+          workarea.bestMV.sad = new_sad;
+
+          if (workarea.bestMV.x == workarea.globalMVPredictor.x && workarea.bestMV.y == workarea.globalMVPredictor.y)
+          {
+            // Vector stayed at global: recalculate proportional penaltyGlobal from adjusted SAD
+            workarea.nMinCost = new_sad + ((pglobal * (safe_sad_t)new_sad) >> 8);
+          }
+          else
+          {
+            // Vector moved away from global: keep Refine's motion penalties intact, only scale SAD
+            workarea.nMinCost += (new_sad - old_sad);
+          }
+        }
+
+        bestMVMany[1] = workarea.bestMV;    // save bestMV
+        nMinCostMany[1] = workarea.nMinCost;
+      }
+      else
+      {
+        sad_prglobal_raw = sad_prglobal;
+        cost_prglobal_raw = sad_prglobal_pen;
+
+        workarea.bestMV.sad = sad_prglobal_adj; // if no Refine - store adjusted values
+        workarea.nMinCost = sad_prglobal_adj + ((pglobal * (safe_sad_t)sad_prglobal_adj) >> 8);
+        cost_prglobal_adj = workarea.nMinCost;
+      }
+    }
+
+    // restore Src Y and UV in the workarea structure for main source
+    workarea.pSrc[0] = pSrc_tmp[0];
+    workarea.pSrc[1] = pSrc_tmp[1];
+    workarea.pSrc[2] = pSrc_tmp[2];
+  }
 
   if (!IsVectorChecked((uint64_t)workarea.predictor.x | ((uint64_t)workarea.predictor.y << 32)))
   {

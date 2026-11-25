@@ -244,7 +244,7 @@ void	GroupOfPlanes::SearchMVs(
     &meanLumaChange,
     divideExtra,
     pzero,
-    pglobal,
+    (pglobal < -256 && nLevelCount > 1) ? 0 : pglobal,//    pglobal, if provided pglobal < -256 - the global predictor search mode activated but for coarse levels pglobal must be 0.
     badSAD,
     badrange,
     meander,
@@ -369,7 +369,7 @@ void	GroupOfPlanes::SearchMVs(
       &meanLumaChange,
       divideExtra,
       pzero,
-      pglobal,
+      (pglobal < -256 && i > 0) ? 0 : pglobal,//      pglobal, if pglobal < -256 - global predictor search mode activated, pass -1000 only at finest 0 level.
       badSAD,
       badrange,
       meander,
