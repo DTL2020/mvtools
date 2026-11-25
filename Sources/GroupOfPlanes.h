@@ -74,7 +74,9 @@ public :
     int badrange, bool meander, int *vecPrev, bool tryMany, int optPredictorType, int PTpel,
     int AMflags, int AMavg, int AMpt, SearchType AMst, int AMsp,
     int TMAvg, int MDp, int ScanDir, int MPM,
-    MVGroupOfFrames *pPrZeroGOF, int Nframes_przero, float SADadj_przero);
+    MVGroupOfFrames *pPrZeroGOF, float SADadj_przero,
+    MVGroupOfFrames *pPrGlobalGOF, float SADadj_prglobal
+  );
   void           WriteDefaultToArray (int *array);
   int            GetArraySize ();
   void           ExtraDivide (int *out, int flags);

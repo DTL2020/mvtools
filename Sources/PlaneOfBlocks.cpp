@@ -299,7 +299,8 @@ void PlaneOfBlocks::SearchMVs(
   int divideExtra, int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
   int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg, int _AMpt, SearchType _AMst, int _AMsp,
   int _TMAvg, int _MDp, bool _bVScanDir, int _MPM,
-  MVFrame* _pPrZeroFrame, float _SADadj_przero
+  MVFrame *_pPrZeroFrame, float _SADadj_przero,
+  MVFrame *_pPrGlobalFrame, float _SADadj_prglobal
 )
 {
   // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
@@ -334,6 +335,7 @@ void PlaneOfBlocks::SearchMVs(
   pSrcFrame = _pSrcFrame;
   pRefFrame = _pRefFrame;
   pPrZeroFrame = _pPrZeroFrame;
+  pPrGlobalFrame = _pPrGlobalFrame;
 
   iAreaMode = _AreaMode;
   iAMstep = _AMstep;
@@ -352,6 +354,7 @@ void PlaneOfBlocks::SearchMVs(
   iMPM = _MPM;
 
   SADadj_przero = _SADadj_przero;
+  SADadj_prglobal = _SADadj_prglobal;
 
   if (iAreaMode > 0)
   {
@@ -402,6 +405,16 @@ void PlaneOfBlocks::SearchMVs(
     {
       nPrZeroPitch[1] = pPrZeroFrame->GetPlane(UPLANE)->GetPitch();
       nPrZeroPitch[2] = pPrZeroFrame->GetPlane(VPLANE)->GetPitch();
+    }
+  }
+
+  if (pPrGlobalFrame != 0)
+  {
+    nPrGlobalPitch[0] = pPrGlobalFrame->GetPlane(YPLANE)->GetPitch();
+    if (chroma)
+    {
+      nPrGlobalPitch[1] = pPrGlobalFrame->GetPlane(UPLANE)->GetPitch();
+      nPrGlobalPitch[2] = pPrGlobalFrame->GetPlane(VPLANE)->GetPitch();
     }
   }
 
@@ -2402,12 +2415,17 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
   }
 
   // if predictor zero super clip provided - check it too and select best metric
+  const uint8_t* pSrc_tmp[3];
 
   // remember best values for predictor zero clip for trymany=false mode
   sad_t sad_przero_raw = 0;
   sad_t cost_przero_raw = 0;
   sad_t cost_przero_adj = verybigSAD;
-  const uint8_t* pSrc_tmp[3];
+
+  // remember best values for predictor global clip for trymany=false mode
+  sad_t sad_prglobal_raw = 0;
+  sad_t cost_prglobal_raw = 0;
+  sad_t cost_prglobal_adj = verybigSAD;
 
   if (pPrZeroFrame != 0)
   {
@@ -2497,11 +2515,78 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
       bestMVMany[1] = workarea.bestMV;    // save bestMV
       nMinCostMany[1] = workarea.nMinCost;
     }
+
+    if (pPrGlobalFrame != 0)
+    {
+      // replace Src Y and UV pointers in the workarea structure for predictor global temporarily
+      pSrc_tmp[0] = workarea.pSrc[0];
+      pSrc_tmp[1] = workarea.pSrc[1];
+      pSrc_tmp[2] = workarea.pSrc[2];
+
+      workarea.pSrc[0] = workarea.pPrGlobalSrc[0];
+      workarea.pSrc[1] = workarea.pPrGlobalSrc[1];
+      workarea.pSrc[2] = workarea.pPrGlobalSrc[2];
+
+      sad_t sad_prglobal = GetDM_P<pixel_t>(workarea, nPrGlobalPitch[0], nPrGlobalPitch[1], nPrGlobalPitch[2], 0, zeroMVfieldShifted.y); // not yet adjusted for temporal variance reduction compensation
+      sad_t sad_prglobal_adj = (sad_t)(sad_prglobal * SADadj_prglobal);
+      // add same global penalty
+      sad_t sad_prglobal_pen = sad_prglobal + ((pglobal * (safe_sad_t)sad_prglobal) >> 8);
+
+      if (sad_prglobal_adj < workarea.bestMV.sad) // check with adjusted value
+      {
+        if (tryMany)
+        {
+          // Before Refine: use raw (unadjusted) SAD so center (0,0) and neighbors in pPrGlobalSrc share the same scale
+          workarea.bestMV.sad = sad_prglobal;
+          workarea.nMinCost = sad_prglobal + ((pglobal * (safe_sad_t)sad_prglobal) >> 8);
+
+          //  refine around global, refine to same records as global mv
+          Refine<pixel_t>(workarea); // only work with ALIGN_SOURCE_BLOCK of 0 ! to have working global pitches (intra frame MT friendly)
+
+          // adjust best sad and cost if SADadj_prglobal > 1.0f
+          if (SADadj_prglobal != 1.0f)
+          {
+            sad_t old_sad = workarea.bestMV.sad;
+            sad_t new_sad = (sad_t)(old_sad * SADadj_prglobal);
+            workarea.bestMV.sad = new_sad;
+
+            if (workarea.bestMV.x == workarea.globalMVPredictor.x && workarea.bestMV.y == workarea.globalMVPredictor.y)
+            {
+              // Vector stayed at global: recalculate proportional penaltyGlobal from adjusted SAD
+              workarea.nMinCost = new_sad + ((pglobal * (safe_sad_t)new_sad) >> 8);
+            }
+            else
+            {
+              // Vector moved away from global: keep Refine's motion penalties intact, only scale SAD
+              workarea.nMinCost += (new_sad - old_sad);
+            }
+          }
+
+          bestMVMany[1] = workarea.bestMV;    // save bestMV
+          nMinCostMany[1] = workarea.nMinCost;
+        }
+        else
+        {
+          sad_prglobal_raw = sad_prglobal;
+          cost_prglobal_raw = sad_prglobal_pen;
+
+          workarea.bestMV.sad = sad_prglobal_adj; // if no Refine - store adjusted values
+          workarea.nMinCost = sad_prglobal_adj + ((pglobal * (safe_sad_t)sad_prglobal_adj) >> 8);
+          cost_prglobal_adj = workarea.nMinCost;
+        }
+      }
+
+      // restore Src Y and UV in the workarea structure for main source
+      workarea.pSrc[0] = pSrc_tmp[0];
+      workarea.pSrc[1] = pSrc_tmp[1];
+      workarea.pSrc[2] = pSrc_tmp[2];
+    }
+
   }
   else
     if (tryMany)
     {
-      bestMVMany[1] = workarea.globalMVPredictor; 
+      bestMVMany[1] = workarea.globalMVPredictor;  // to check: is it correct with predictor global clip provided ?
     }
 
   if (!IsVectorChecked((uint64_t)workarea.predictor.x | ((uint64_t)workarea.predictor.y << 32)))
@@ -2669,6 +2754,48 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
         if (workarea.bestMV.x == zeroMVfieldShifted.x && workarea.bestMV.y == zeroMVfieldShifted.y)
         {
           workarea.nMinCost = new_sad + ((penaltyZero * (safe_sad_t)new_sad) >> 8);
+        }
+        else
+        {
+          workarea.nMinCost += (new_sad - old_sad);
+        }
+      }
+    }
+    else if (pPrGlobalFrame != 0 &&
+      workarea.nMinCost == cost_prglobal_adj &&
+      workarea.bestMV.x == workarea.globalMVPredictor.x &&
+      workarea.bestMV.y == workarea.globalMVPredictor.y)
+    {
+      // 1. Restore RAW SAD and Cost before SADadj_prglobal before Refine 
+      workarea.bestMV.sad = sad_prglobal_raw;
+      workarea.nMinCost = cost_prglobal_raw;
+
+      // 2. Replace pointers workarea.pSrc ?? pPrGlobalFrame      
+      pSrc_tmp[0] = workarea.pSrc[0];
+      pSrc_tmp[1] = workarea.pSrc[1];
+      pSrc_tmp[2] = workarea.pSrc[2];
+
+      workarea.pSrc[0] = workarea.pPrGlobalSrc[0];
+      workarea.pSrc[1] = workarea.pPrGlobalSrc[1];
+      workarea.pSrc[2] = workarea.pPrGlobalSrc[2];
+
+      Refine<pixel_t>(workarea);
+
+      // restore Src Y and UV in the workarea structure for main source
+      workarea.pSrc[0] = pSrc_tmp[0];
+      workarea.pSrc[1] = pSrc_tmp[1];
+      workarea.pSrc[2] = pSrc_tmp[2];
+
+      // 4. Apply SADadj_prglobal to the Refine result
+      if (SADadj_prglobal != 1.0f)
+      {
+        sad_t old_sad = workarea.bestMV.sad;
+        sad_t new_sad = (sad_t)(old_sad * SADadj_prglobal);
+        workarea.bestMV.sad = new_sad;
+
+        if (workarea.bestMV.x == workarea.globalMVPredictor.x && workarea.bestMV.y == workarea.globalMVPredictor.y)
+        {
+          workarea.nMinCost = new_sad + ((pglobal * (safe_sad_t)new_sad) >> 8);
         }
         else
         {

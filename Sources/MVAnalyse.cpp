@@ -55,6 +55,7 @@ MVAnalyse::MVAnalyse(
   int _AMflags, int _AMavg, int _AMpt, int _AMst, int _AMsp,
   int _TMavg, int _MDp, int _ScanDir, int _MPM,
   PClip _sup_przero, int _Nframes_przero, float _SADadj_przero,
+  PClip _sup_prglobal, int _Nframes_prglobal, float _SADadj_prglobal,
   IScriptEnvironment* env
 )
   : ::GenericVideoFilter(_child)
@@ -72,6 +73,7 @@ MVAnalyse::MVAnalyse(
   , iUseSubShift(_iUseSubShift)
   , child_cur(_child_cur)
   , child_przero(_sup_przero)
+  , child_prglobal(_sup_prglobal)
   , iSearchDirMode(_iSearchDirMode)
   , DMFlags(_DMFlags)
   , iAreaMode(_AreaMode)
@@ -90,6 +92,9 @@ MVAnalyse::MVAnalyse(
   , iMPM(_MPM)
   , Nframes_przero(_Nframes_przero)
   , SADadj_przero(_SADadj_przero)
+  , Nframes_prglobal(_Nframes_prglobal)
+  , SADadj_prglobal(_SADadj_prglobal)
+
 {
   has_at_least_v8 = true;
   try { env->CheckVersion(8); }
@@ -201,7 +206,7 @@ MVAnalyse::MVAnalyse(
       env->ThrowError("MAnalyse: super and super_current clips video format is different!");
   }
 
-  if (child_przero != 0)// ??
+  if (child_przero != 0)
   {
     const ::VideoInfo& vi_super_przero = child_przero->GetVideoInfo();
 
@@ -217,7 +222,7 @@ MVAnalyse::MVAnalyse(
     if (!vi.IsSameColorspace(child_przero->GetVideoInfo()))
       env->ThrowError("MAnalyse: super and super_przero clips video format is different!");
 
-    if (Nframes_przero == 0)
+    if ((Nframes_przero >= -1) && (Nframes_przero <= 1))
       env->ThrowError("MAnalyse: Nframes_przero can not be in -1..1 range if super_przero clip provided!");
 
     // process auto or manual SADadj_przero (multiplicative correction only depends on N frames averaged and not depends on noise level ?)
@@ -237,6 +242,46 @@ MVAnalyse::MVAnalyse(
       {
         // for N -1 0 1 - not set safe fallback
         SADadj_przero = 1.0f;
+      }
+    }
+  }
+
+  if (child_prglobal != 0)
+  {
+    const ::VideoInfo& vi_super_prglobal = child_prglobal->GetVideoInfo();
+
+    if (vi_super_prglobal.height != vi.height)
+      env->ThrowError("MAnalyse: super and super_prglobal clips video format is different!");
+
+    if (vi_super_prglobal.image_type != vi.image_type)
+      env->ThrowError("MAnalyse: super and super_prglobal clips video format is different!");
+
+    if (vi_super_prglobal.num_frames != vi.num_frames)
+      env->ThrowError("MAnalyse: super and super_prglobal clips video format is different!");
+
+    if (!vi.IsSameColorspace(child_prglobal->GetVideoInfo()))
+      env->ThrowError("MAnalyse: super and super_prglobal clips video format is different!");
+
+    if ((Nframes_prglobal >= -1) && (Nframes_prglobal <= 1))
+      env->ThrowError("MAnalyse: Nframes_prglobal can not be in -1..1 range if super_prglobal clip provided!");
+
+    // process auto or manual SADadj_prglobal (multiplicative correction only depends on N frames averaged and not depends on noise level ?)
+    if (SADadj_prglobal <= 0.0f) // process as auto SADadj_prglobal
+    {
+      if (Nframes_prglobal > 1) // ref frame not included in the temporal averaging (recommended mode)
+      {
+        float N = (float)Nframes_prglobal;
+        SADadj_prglobal = std::sqrt(2.0f * N / (N + 1.0f));
+      }
+      else if (Nframes_prglobal < -1) // ref frame is included in the temporal averaging (not recommended but possible mode)
+      {
+        float N = (float)(-Nframes_prglobal);
+        SADadj_prglobal = std::sqrt(2.0f * N / (N - 1.0f));
+      }
+      else
+      {
+        // for N -1 0 1 - not set safe fallback
+        SADadj_prglobal = 1.0f;
       }
     }
   }
@@ -358,6 +403,17 @@ MVAnalyse::MVAnalyse(
     }
     else
       pPrZeroGOF = 0;
+
+    if (child_prglobal != 0)
+    {
+      pPrGlobalGOF = new MVGroupOfFrames(
+        nSuperLevels, analysisData.nWidth, analysisData.nHeight,
+        nSuperPel, nSuperHPad, nSuperVPad, nSuperModeYUV,
+        _cpuFlags, analysisData.xRatioUV, analysisData.yRatioUV, pixelsize, bits_per_pixel, mt_flag
+      );
+    }
+    else
+      pPrGlobalGOF = 0;
 
   }
 /*  else - need to find why system going unstable in init pel=1 with pel=4 processing
@@ -798,6 +854,12 @@ MVAnalyse::~MVAnalyse()
     pPrZeroGOF = 0;
   }
 
+  if (child_prglobal != 0)
+  {
+    delete pPrGlobalGOF;
+    pPrGlobalGOF = 0;
+  }
+
   _RPT1(0, "MAnalyze destroyed %d\n",_instance_id);
 #if defined _WIN32 && defined DX12_ME
 //  delete pNV12FrameData;
@@ -891,6 +953,15 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
 
       load_src_frame(*pPrZeroGOF, src_przero, srd._analysis_data);
     }
+
+    PVideoFrame	src_prglobal;
+    if (child_prglobal != 0)
+    {
+      src_prglobal = child_prglobal->GetFrame(nsrc, env);
+
+      load_src_frame(*pPrGlobalGOF, src_prglobal, srd._analysis_data);
+    }
+
 
     // if(has_at_least_v8) env->copyFrameProps(src, dst); // frame property support
     // The result clip is a special MV clip. It does not need to inherit the frame props of source
@@ -1570,7 +1641,8 @@ PVideoFrame __stdcall MVAnalyse::GetFrame(int n, IScriptEnvironment* env)
         outfilebuf, fieldShift, pzero, pglobal, badSAD, badrange,
         meander, pVecPrevOrNull, tryMany, optPredictorType, iPTpel, iAMflags, iAMavg, iAMpt, AMsearchType, iAMsp,
         iTMAvg, iMDp, iScanDir, iMPM,
-        pPrZeroGOF, Nframes_przero, SADadj_przero
+        pPrZeroGOF, SADadj_przero,
+        pPrGlobalGOF, SADadj_prglobal
       );
     }
 

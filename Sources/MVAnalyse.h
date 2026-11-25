@@ -137,6 +137,7 @@ protected:
 
   MVGroupOfFrames *pSrcGOF, *pRefGOF; //v2.0. Temporary data, structure initialised once.
   MVGroupOfFrames *pPrZeroGOF;
+  MVGroupOfFrames *pPrGlobalGOF;
 
   int nModeYUV;
 
@@ -162,6 +163,8 @@ protected:
 
   int Nframes_przero;
   float SADadj_przero;
+  int Nframes_prglobal;
+  float SADadj_prglobal;
 
 public:
 
@@ -179,6 +182,7 @@ public:
     int _PTpel, int _AMflags, int _AMavg, int _AMpt, int _AMst, int _AMsp,
     int _TMavg, int _MDp, int _ScanDir, int _MPM,
     PClip _sup_przero, int _Nframes_przero, float SADadj_przero,
+    PClip _sup_prglobal, int _Nframes_prglobal, float SADadj_prglobal,
     IScriptEnvironment* env);
   ~MVAnalyse();
 
@@ -196,6 +200,7 @@ private:
 
   PClip child_cur;
   PClip child_przero;
+  PClip child_prglobal;
 
 #if defined _WIN32 && defined DX12_ME
 

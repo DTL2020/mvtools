@@ -127,7 +127,8 @@ public:
     int _pzero, int _pglobal, sad_t _badSAD, int _badrange, bool meander, int *vecPrev, bool _tryMany,
     int optPredictorType, int _AreaMode, int _AMstep, int _AMoffset, int _AMflags, int _AMavg, int _AMpt, SearchType _AMst, int _AMsp,
     int _TMAvg, int _MDp, bool _bVScanDir, int _MPM,
-    MVFrame *_pPrZeroFrame, float _SADadj_przero
+    MVFrame *_pPrZeroFrame, float _SADadj_przero,
+    MVFrame *_pPrGlobalFrame, float _SADadj_prglobal
   );
 
 
@@ -242,10 +243,12 @@ private:
     // Current frame
   MVFrame *pSrcFrame;
   MVFrame *pRefFrame;
-  MVFrame* pPrZeroFrame;  
+  MVFrame *pPrZeroFrame;
+  MVFrame *pPrGlobalFrame;
   int nSrcPitch[3];
   int nRefPitch[3];
   int nPrZeroPitch[3];
+  int nPrGlobalPitch[3];
 #if (ALIGN_SOURCEBLOCK > 1)
   int nSrcPitch_plane[3];     // stores the pitch of the whole plane for easy access (nSrcPitch in non-aligned mode)
 #endif	// ALIGN_SOURCEBLOCK
@@ -316,6 +319,7 @@ private:
 
   // predictors clips params
   float SADadj_przero;
+  float SADadj_prglobal;
 
   // Working area
   class WorkingArea
@@ -349,6 +353,8 @@ private:
     // Current block of the predictor zero frame
     const uint8_t* pPrZeroSrc[3];    
 
+    // Current block of the predictor global frame
+    const uint8_t* pPrGlobalSrc[3];
 
     VECTOR bestMV;              /* best vector found so far during the search */
     VECTOR bestMV_multi[MAX_MULTI_BLOCKS_8x8_AVX512]; // 2.7.46

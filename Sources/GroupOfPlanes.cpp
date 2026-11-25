@@ -136,8 +136,9 @@ void	GroupOfPlanes::SearchMVs(
   int    ScanDir,
   int    MPM,
   MVGroupOfFrames *pPrZeroGOF,
-  int Nframes_przero, // for auto SADadj computing
-  float SADadj_przero
+  float SADadj_przero,
+  MVGroupOfFrames* pPrGlobalGOF,
+  float SADadj_prglobal
 )
 {
   nFlags |= flags;
@@ -220,6 +221,11 @@ void	GroupOfPlanes::SearchMVs(
     pmvfPrZero = pPrZeroGOF->GetFrame(nLevelCount - 1);
   }
   
+  MVFrame* pmvfPrGlobal = 0;
+  if (pPrGlobalGOF != 0)
+  {
+    pmvfPrGlobal = pPrGlobalGOF->GetFrame(nLevelCount - 1);
+  }
 
   planes[nLevelCount - 1]->SearchMVs(
     pSrcGOF->GetFrame(nLevelCount - 1),
@@ -258,7 +264,9 @@ void	GroupOfPlanes::SearchMVs(
     bVScanDir,
     MPM,
     pmvfPrZero,
-    SADadj_przero
+    SADadj_przero,
+    pmvfPrGlobal,
+    SADadj_prglobal
   );
 
   out += planes[nLevelCount - 1]->GetArraySize(divideExtra);
@@ -338,6 +346,12 @@ void	GroupOfPlanes::SearchMVs(
       pmvfPrZero = pPrZeroGOF->GetFrame(i);
     }
 
+    if (pPrGlobalGOF != 0)
+    {
+      pmvfPrGlobal = pPrGlobalGOF->GetFrame(i);
+    }
+
+
     planes[i]->SearchMVs(
       pSrcGOF->GetFrame(i),
       pRefGOF->GetFrame(i),
@@ -375,9 +389,10 @@ void	GroupOfPlanes::SearchMVs(
       bVScanDir,
       MPM,
       pmvfPrZero,
-      SADadj_przero
+      SADadj_przero,
+      pmvfPrGlobal,
+      SADadj_prglobal
     );
-
 
     out += planes[i]->GetArraySize(divideExtra);
     if (vecPrev)
