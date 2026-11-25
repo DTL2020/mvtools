@@ -5597,6 +5597,17 @@ void	PlaneOfBlocks::search_mv_slice(Slicer::TaskData &td)
           }
         }
 
+        // update predictor global src pointers (if present)
+        if (pPrGlobalFrame != 0)
+        {
+          workarea.pPrGlobalSrc[0] = pPrGlobalFrame->GetPlane(YPLANE)->GetAbsolutePelPointer(workarea.x[0], workarea.y[0]);
+          if (chroma)
+          {
+            workarea.pPrGlobalSrc[1] = pPrGlobalFrame->GetPlane(UPLANE)->GetAbsolutePelPointer(workarea.x[1], workarea.y[1]);
+            workarea.pPrGlobalSrc[2] = pPrGlobalFrame->GetPlane(VPLANE)->GetAbsolutePelPointer(workarea.x[2], workarea.y[2]);
+          }
+        }
+
         // fixme note:
         // MAnalyze mt-inconsistency reason #3
         // this is _not_ internal mt friendly
