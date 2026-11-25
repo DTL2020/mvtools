@@ -784,7 +784,7 @@ MDegrainN::MDegrainN(
   int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, PClip _dnmask,
   float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm, int _MVF_fm,
   int _MGR, int _MGR_sr, int _MGR_st, int _MGR_pm,
-  int _LtComp, int _NEW_DMFlags,
+  int _LtComp, int _NEW_DMFlags, int _SkipFrame,
   IScriptEnvironment* env_ptr
 )
   : GenericVideoFilter(child)
@@ -876,6 +876,7 @@ MDegrainN::MDegrainN(
   , iMGR_pm(_MGR_pm)
   , iLtComp(_LtComp)
   , iNEW_DMFlags(_NEW_DMFlags)
+  , iSkipFrame(_SkipFrame)
   , veryBigSAD(3 * nBlkSizeX * nBlkSizeY * (pixelsize == 4 ? 1 : (1 << bits_per_pixel))) // * 256, pixelsize==2 -> 65536. Float:1
 {
   has_at_least_v8 = true;
@@ -2310,13 +2311,16 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
 
       for (int k = 0; k < _trad * 2; ++k)
       {
+        bool bSkipFrame = (((k & 1) ? 1 : -1) * (1 + (k >> 1))) != iSkipFrame;
+        // for k (0,1,2,3...) pointing to -1, +1,... ref frames and iSkipFrame of -N... +N  bSkipFrame=false if k points to iSkipFrame
+
         if (!bMVsAddProc)
         {
           (this->*use_block_y_func)(
             ref_data_ptr_arr[k],
             pitch_arr[k],
             weight_arr[k + 1],
-            _usable_flag_arr[k],
+            _usable_flag_arr[k] && bSkipFrame,
             _mv_clip_arr[k],
             i,
             _planes_ptr[k][0],
@@ -2335,7 +2339,7 @@ void	MDegrainN::process_luma_normal_slice(Slicer::TaskData &td)
             ref_data_ptr_arr[k],
             pitch_arr[k],
             weight_arr[k + 1],
-            _usable_flag_arr[k],
+            _usable_flag_arr[k] && bSkipFrame,
             _mv_clip_arr[k],
             i,
             _planes_ptr[k][0],
@@ -2603,13 +2607,16 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
 
       for (int k = 0; k < _trad * 2; ++k)
       {
+        bool bSkipFrame = (((k & 1) ? 1 : -1) * (1 + (k >> 1))) != iSkipFrame;
+        // for k (0,1,2,3...) pointing to -1, +1,... ref frames and iSkipFrame of -N... +N  bSkipFrame=false if k points to iSkipFrame
+
         if (!bMVsAddProc)
         {
           (this->*use_block_y_func)(
             ref_data_ptr_arr[k],
             pitch_arr[k],
             weight_arr[k + 1],
-            _usable_flag_arr[k],
+            _usable_flag_arr[k] && bSkipFrame,
             _mv_clip_arr[k],
             i,
             _planes_ptr[k][0],
@@ -2628,7 +2635,7 @@ void	MDegrainN::process_luma_overlap_slice(int y_beg, int y_end)
             ref_data_ptr_arr[k],
             pitch_arr[k],
             weight_arr[k + 1],
-            _usable_flag_arr[k],
+            _usable_flag_arr[k] && bSkipFrame,
             _mv_clip_arr[k],
             i,
             _planes_ptr[k][0],
@@ -3315,13 +3322,16 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
 
       for (int k = 0; k < _trad * 2; ++k)
       {
+        bool bSkipFrame = (((k & 1) ? 1 : -1) * (1 + (k >> 1))) != iSkipFrame;
+        // for k (0,1,2,3...) pointing to -1, +1,... ref frames and iSkipFrame of -N... +N  bSkipFrame=false if k points to iSkipFrame
+
         if (!bMVsAddProc)
         {
           (this->*use_block_uv_func)(
             ref_data_ptr_arr[k],
             pitch_arr[k],
             weight_arr[k + 1],
-            _usable_flag_arr[k],
+            _usable_flag_arr[k] && bSkipFrame,
             _mv_clip_arr[k],
             i,
             _planes_ptr[k][P],
@@ -3341,7 +3351,7 @@ void	MDegrainN::process_chroma_normal_slice(Slicer::TaskData &td)
             ref_data_ptr_arr[k],
             pitch_arr[k],
             weight_arr[k + 1],
-            _usable_flag_arr[k],
+            _usable_flag_arr[k] && bSkipFrame,
             _mv_clip_arr[k],
             i,
             _planes_ptr[k][P],
@@ -3549,13 +3559,16 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
 
       for (int k = 0; k < _trad * 2; ++k)
       {
+        bool bSkipFrame = (((k & 1) ? 1 : -1) * (1 + (k >> 1))) != iSkipFrame;
+        // for k (0,1,2,3...) pointing to -1, +1,... ref frames and iSkipFrame of -N... +N  bSkipFrame=false if k points to iSkipFrame
+
         if (!bMVsAddProc)
         {
           (this->*use_block_uv_func)(
             ref_data_ptr_arr[k],
             pitch_arr[k],
             weight_arr[k + 1],
-            _usable_flag_arr[k],
+            _usable_flag_arr[k] && bSkipFrame,
             _mv_clip_arr[k],
             i,
             _planes_ptr[k][P],
@@ -3575,7 +3588,7 @@ void	MDegrainN::process_chroma_overlap_slice(int y_beg, int y_end)
             ref_data_ptr_arr[k],
             pitch_arr[k],
             weight_arr[k + 1],
-            _usable_flag_arr[k],
+            _usable_flag_arr[k] && bSkipFrame,
             _mv_clip_arr[k],
             i,
             _planes_ptr[k][P],
@@ -7032,6 +7045,9 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
 
     for (int k = 0; k < _trad * 2; ++k)
     {
+      bool bSkipFrame = (((k & 1) ? 1 : -1) * (1 + (k >> 1))) != iSkipFrame;
+      // for k (0,1,2,3...) pointing to -1, +1,... ref frames and iSkipFrame of -N... +N  bSkipFrame=false if k points to iSkipFrame
+
       use_block_yuv_mel(
         ref_data_ptr_arr[k],
         pitch_arr[k],
@@ -7039,7 +7055,7 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
         pitch_arrUV1[k],
         ref_data_ptr_arrUV2[k],
         pitch_arrUV2[k],
-        _usable_flag_arr[k],
+        _usable_flag_arr[k] && bSkipFrame,
         _mv_clip_arr[k],
         iBlkNum,
         _planes_ptr[k][0],
@@ -7063,6 +7079,9 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
   {
     for (int k = 0; k < _trad * 2; ++k)
     {
+      bool bSkipFrame = (((k & 1) ? 1 : -1) * (1 + (k >> 1))) != iSkipFrame;
+      // for k (0,1,2,3...) pointing to -1, +1,... ref frames and iSkipFrame of -N... +N  bSkipFrame=false if k points to iSkipFrame
+
       use_block_yuv_mel(
         ref_data_ptr_arr[k],
         pitch_arr[k],
@@ -7070,7 +7089,7 @@ MV_FORCEINLINE void MDegrainN::MEL_LC(
         pitch_arrUV1[k],
         ref_data_ptr_arrUV2[k],
         pitch_arrUV2[k],
-        _usable_flag_arr[k],
+        _usable_flag_arr[k] && bSkipFrame,
         _mv_clip_arr[k],
         iBlkNum,
         _planes_ptr[k][0],
@@ -7504,6 +7523,9 @@ MV_FORCEINLINE void MDegrainN::DegrainBlendBlock_LC(
 
     for (int k = 0; k < _trad * 2; ++k)
     {
+      bool bSkipFrame = (((k & 1) ? 1 : -1) * (1 + (k >> 1))) != iSkipFrame;
+      // for k (0,1,2,3...) pointing to -1, +1,... ref frames and iSkipFrame of -N... +N  bSkipFrame=false if k points to iSkipFrame
+
       use_block_yuv(
         ref_data_ptr_arr[k],
         pitch_arr[k],
@@ -7513,7 +7535,7 @@ MV_FORCEINLINE void MDegrainN::DegrainBlendBlock_LC(
         pitch_arrUV2[k],
         weight_arr[k + 1],
         weight_arrUV[k + 1],
-        _usable_flag_arr[k],
+        _usable_flag_arr[k] && bSkipFrame,
         _mv_clip_arr[k],
         iBlkNum,
         _planes_ptr[k][0],
@@ -7537,6 +7559,9 @@ MV_FORCEINLINE void MDegrainN::DegrainBlendBlock_LC(
   {
     for (int k = 0; k < _trad * 2; ++k)
     {
+      bool bSkipFrame = (((k & 1) ? 1 : -1) * (1 + (k >> 1))) != iSkipFrame;
+      // for k (0,1,2,3...) pointing to -1, +1,... ref frames and iSkipFrame of -N... +N  bSkipFrame=false if k points to iSkipFrame
+
       use_block_yuv(
         ref_data_ptr_arr[k],
         pitch_arr[k],
@@ -7546,7 +7571,7 @@ MV_FORCEINLINE void MDegrainN::DegrainBlendBlock_LC(
         pitch_arrUV2[k],
         weight_arr[k + 1],
         weight_arrUV[k + 1],
-        _usable_flag_arr[k],
+        _usable_flag_arr[k] && bSkipFrame,
         _mv_clip_arr[k],
         iBlkNum,
         _planes_ptr[k][0],

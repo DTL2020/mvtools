@@ -68,7 +68,7 @@ public:
     int _MPB_MVlth, int _pmode, int _TTH_DMFlags, int _TTH_thUPD, int _TTH_BAS, bool _TTH_chroma, ::PClip _dnmask,
     float _thSADA_a, float _thSADA_b, int _MVMedF, int _MVMedF_em, int _MVMedF_cm, int _MVF_fm,
     int _MGR, int _MGR_sr, int _MGR_st, int _MGR_pm,
-    int _LtComp, int _NEW_DMFlags,
+    int _LtComp, int _NEW_DMFlags, int _SkipFrame,
     ::IScriptEnvironment* env_ptr
   );
   ~MDegrainN();
@@ -267,6 +267,8 @@ private:
   SADFunction* SADCHROMA;
   int iNEW_DMFlags;
 
+  // temporal predictor generation mode
+  int iSkipFrame;
 
   // Multi-generation MVs refining
   int iMGR; // multi-generation MVs refining processing. Integer number of additional refining generations. 0 - disabled.
