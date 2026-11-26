@@ -222,10 +222,6 @@ void	GroupOfPlanes::SearchMVs(
   }
   
   MVFrame* pmvfPrGlobal = 0;
-  if (pPrGlobalGOF != 0)
-  {
-    pmvfPrGlobal = pPrGlobalGOF->GetFrame(nLevelCount - 1);
-  }
 
   planes[nLevelCount - 1]->SearchMVs(
     pSrcGOF->GetFrame(nLevelCount - 1),
@@ -265,7 +261,7 @@ void	GroupOfPlanes::SearchMVs(
     MPM,
     pmvfPrZero,
     SADadj_przero,
-    pmvfPrGlobal,
+    pmvfPrGlobal, // = 0, not applicable at the starting level
     SADadj_prglobal
   );
 
@@ -348,9 +344,17 @@ void	GroupOfPlanes::SearchMVs(
 
     if (pPrGlobalGOF != 0)
     {
-      pmvfPrGlobal = pPrGlobalGOF->GetFrame(i);
+      // If globalMV equal to zeroMV (with fieldShiftCur) and pPrZeroGOF exist,
+      // then global predictor equal to zero and global predictor frames processing may be skipped (temporal averaging by global predictor may be less reliable in this case ?).
+      if (pPrZeroGOF != 0 && globalMV.x == 0 && globalMV.y == fieldShiftCur)
+      {
+        pmvfPrGlobal = 0;
+      }
+      else
+      {
+        pmvfPrGlobal = pPrGlobalGOF->GetFrame(i);
+      }
     }
-
 
     planes[i]->SearchMVs(
       pSrcGOF->GetFrame(i),
