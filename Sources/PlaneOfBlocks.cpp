@@ -2397,6 +2397,7 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
 
   workarea.bestMV.sad = sad;
   workarea.nMinCost = sad + ((penaltyZero * (safe_sad_t)sad) >> 8); // v.1.11.0.2
+  sad_t nMinCost_zero = workarea.nMinCost; // save cost of clean zeroMV (before Refine in the case trymany=true)
 
   checked_mv_vectors[iNumCheckedVectors] = 0;
   iNumCheckedVectors++;
@@ -2443,15 +2444,19 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
     // add same zero penalty
     sad_t sad_przero_pen = sad_przero + ((penaltyZero * (safe_sad_t)sad_przero) >> 8);
 
-    // sad_t cost_przero_adj = sad_przero_adj + ((penaltyZero * (safe_sad_t)sad_przero_adj) >> 8); 
-    // to check:     if (cost_przero_adj < workarea.nMinCost) // may be better to compare with cost (same as with global predictor) ?
-    if (sad_przero_adj < workarea.bestMV.sad) // check with adjusted value
+    //    if (sad_przero_adj < workarea.bestMV.sad) - not good in case trymany=true because of Refine before
+    cost_przero_adj = sad_przero_adj + ((penaltyZero * (safe_sad_t)sad_przero_adj) >> 8); 
+    if (cost_przero_adj < nMinCost_zero)
     {
       if (tryMany)
       {
         // Before Refine: use raw (unadjusted) SAD so center (0,0) and neighbors in pPrZeroSrc share the same scale
+        
+        // reset current best to zero (if it was shifted by Refine before)
+        workarea.bestMV.x = zeroMVfieldShifted.x;
+        workarea.bestMV.y = zeroMVfieldShifted.y;
         workarea.bestMV.sad = sad_przero;
-        workarea.nMinCost = sad_przero + ((penaltyZero * (safe_sad_t)sad_przero) >> 8);
+        workarea.nMinCost = sad_przero_pen;
 
         //  refine around zero, refine to same records as zero mv
         Refine<pixel_t>(workarea); // only work with ALIGN_SOURCE_BLOCK of 0 ! to have working global pitches (intra frame MT friendly)
@@ -2475,8 +2480,11 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
           }
         }
 
-        bestMVMany[0] = workarea.bestMV;    // save bestMV
-        nMinCostMany[0] = workarea.nMinCost;
+        if (workarea.nMinCost < nMinCostMany[0])
+        {
+          bestMVMany[0] = workarea.bestMV;
+          nMinCostMany[0] = workarea.nMinCost;
+        }
       }
       else
       {
@@ -2498,10 +2506,13 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
   // Global MV predictor  - added by Fizick
   workarea.globalMVPredictor = ClipMV(workarea, workarea.globalMVPredictor);
 
+  sad_t nMinCost_global = verybigSAD;
+
   if (!IsVectorChecked((uint64_t)workarea.globalMVPredictor.x | ((uint64_t)workarea.globalMVPredictor.y << 32)))
   {
     sad = GetDM<pixel_t>(workarea, workarea.globalMVPredictor.x, workarea.globalMVPredictor.y);
     cost = sad + ((pglobal * (safe_sad_t)sad) >> 8);
+    nMinCost_global = cost; // save cost of clean globalMV (before Refine in the case trymany=true)
 
     if (cost < workarea.nMinCost || tryMany)
     {
@@ -2542,10 +2553,12 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
     // add same global penalty
     sad_t sad_prglobal_pen = sad_prglobal + ((pglobal * (safe_sad_t)sad_prglobal) >> 8);
 
-    sad_t cost_prglobal_adj = sad_prglobal_adj + ((pglobal * (safe_sad_t)sad_prglobal_adj) >> 8);
+    cost_prglobal_adj = sad_prglobal_adj + ((pglobal * (safe_sad_t)sad_prglobal_adj) >> 8);
 
-//    if (sad_prglobal_adj < workarea.bestMV.sad) // check with adjusted value
-    if (cost_prglobal_adj < workarea.nMinCost) // may be better ?
+    //    if (sad_prglobal_adj < workarea.bestMV.sad) // check with adjusted value
+    //    if (cost_prglobal_adj < workarea.nMinCost) // may 
+    sad_t target_cost = (tryMany) ? nMinCost_global : std::min(nMinCost_global, workarea.nMinCost);
+    if (cost_prglobal_adj < target_cost)
     {
       // set current best MV in the workarea to global predictor
       workarea.bestMV.x = workarea.globalMVPredictor.x;
@@ -2579,8 +2592,11 @@ void PlaneOfBlocks::PseudoEPZSearch(WorkingArea& workarea)
           }
         }
 
-        bestMVMany[1] = workarea.bestMV;    // save bestMV
-        nMinCostMany[1] = workarea.nMinCost;
+        if (workarea.nMinCost < nMinCostMany[1])
+        {
+          bestMVMany[1] = workarea.bestMV;
+          nMinCostMany[1] = workarea.nMinCost;
+        }
       }
       else
       {
